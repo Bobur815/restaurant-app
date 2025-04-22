@@ -1,0 +1,69 @@
+body {
+  user-select: none;
+  margin: 0;
+  font-family: Arial, sans-serif;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;  /* Header ustida joylashishi uchun */
+}
+.content-wrapper {
+  display: flex;       /* Sidebar va Main-content yonma-yon */
+  flex: 1;
+  height: 100%;
+}
+  
+  .sidebar {
+    width: 220px;
+    background-color: #343a40;
+    color: white;
+    padding-top: 20px;
+  }
+  
+  .sidebar ul {
+    list-style: none;
+    padding: 0;
+  }
+  
+  .sidebar li {
+    font-size: 25px;
+    padding: 15px 20px;
+    cursor: pointer;
+  }
+  .sidebar li.active {
+    background-color: #f8f9fa;   /* Main-content fon rangi */
+    color: #343a40;              /* Matn rangi (optional) */
+    font-weight: bold;           /* Tanlangan bo‘limni ajratib ko‘rsatish */
+  }
+  
+  .sidebar li:hover {
+    background-color: #495057;
+  }
+  
+  .main-content {
+    flex-grow: 1;
+    padding: 20px;
+    background: #f8f9fa;
+    overflow-y: auto;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: #ffffff;
+    border-bottom: 1px solid #ddd;
+    font-family: Arial, sans-serif;
+  }
+  
+  .logo {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+  }
+  
+  .date {
+    font-size: 14px;
+    color: #666;
+  }
+  

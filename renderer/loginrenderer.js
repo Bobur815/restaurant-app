@@ -1,49 +1,59 @@
 window.addEventListener('DOMContentLoaded', () => {
-  const information = document.getElementById('info');
+
+  const loginForm = document.querySelector('#login-form');   // 🔹 Formani olish
   const usernameInput = document.getElementById('username');
   const passwordInput = document.getElementById('password');
-  const loginBtn = document.querySelector(".submit-btn");
+  const messageBox = document.getElementById('message');
   const toggle = document.querySelector("#toggle-password");
+  messageBox.classList.remove('d-none');
 
   toggle.addEventListener("click", () => {
     const isHidden = passwordInput.type === "password";
     passwordInput.type = isHidden ? "text" : "password";
     toggle.textContent = isHidden ? "🙈" : "👁️";
-  })
+  });
 
-  loginBtn.addEventListener('click', (e) => {
-    e.preventDefault(); // prevents form from refreshing the page
-    let username = usernameInput.value.trim()
-    let password = passwordInput.value.trim()
+  // ⭐ ENTER va BUTTON uchun umumiy submit hodisa
+  loginForm.addEventListener('submit', (e) => {
+    e.preventDefault();  
 
-    if (!username || !password) {
+    let username = usernameInput.value.trim();
+    let password = passwordInput.value.trim();
+
+    usernameInput.classList.remove('input-error');
+    passwordInput.classList.remove('input-error');
+
+    if (!username) {
+      messageBox.className = "alert alert-danger";
+      messageBox.textContent = "Username maydoni bo'sh!";
+      usernameInput.classList.add('input-error');
+
+      usernameInput.focus();
       return;
     }
 
-    // Send login data to main process
+    if (!password) {
+      messageBox.className = "alert alert-danger";
+      messageBox.textContent = "Password maydoni bo'sh!";
+      passwordInput.classList.add('input-error');
+
+      passwordInput.focus();
+      return;
+    }
+
     window.electronAPI.sendLogin({ username, password });
   });
 
-
   window.electronAPI.receiveLoginResult((result) => {
-    const messageBox = document.getElementById('message');
-  
     if (result.success) {
-      messageBox.style.color = 'green';
+      messageBox.className = "alert alert-success";
       messageBox.textContent = "✅ Muvaffaqqiyatli!";
-      // Keyingi UI jarayonlarini shu yerda bajaramiz
     } else {
-      messageBox.style.color = 'red';
+      messageBox.className = "alert alert-danger";
       messageBox.textContent = "❌ Username yoki parol noto'g'ri!";
-      
-      // Inputlarni tozalash (xohlasang)
-      usernameInput.value = "";
-      passwordInput.value = "";
-      
-      // Fokus qayta inputga tushsin
-      usernameInput.focus();
+      usernameInput.classList.add('input-error');
+      passwordInput.classList.add('input-error');
     }
   });
-  
 
 });

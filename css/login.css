@@ -17,8 +17,8 @@
     padding: 30px;
     border-radius: 12px;
     box-shadow: 0 0 20px rgba(0,0,0,0.1);
-    width: 300px;
-  }
+    width: 340px;  
+}
 
   .login-container h2 {
     text-align: center;
@@ -99,6 +99,9 @@
     padding: 0;
     margin: 0;
     line-height: 1;
+  }
+  .input-error {
+    border: 1px solid red !important;
   }
 
   #info {

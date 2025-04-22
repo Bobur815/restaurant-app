@@ -9,8 +9,8 @@ const __dirname = dirname(__filename);
 
 export function createLoginWindow() {
   const loginWin = new BrowserWindow({
-    width: 400,
-    height: 550,
+    width: 450,
+    height: 600,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -19,8 +19,8 @@ export function createLoginWindow() {
   });
 
   loginWin.setMenuBarVisibility(false);
-  loginWin.loadFile(join(__dirname, 'login.html'));
-  loginWin.webContents.openDevTools();
+  loginWin.loadFile(join(__dirname, './html/login.html'));
+  // loginWin.webContents.openDevTools();
 
   // Login jarayoni shu yerda
   ipcMain.on("attempt-login", async (event, { username, password }) => {

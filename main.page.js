@@ -2,8 +2,11 @@ import { BrowserWindow } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+
 
 export function createMainWindow() {
   const mainWindow = new BrowserWindow({
@@ -16,6 +19,6 @@ export function createMainWindow() {
 
   mainWindow.maximize();
   mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(join(__dirname, 'index.html'));
+  mainWindow.loadFile(join(__dirname, '/html/index.html'));
   mainWindow.webContents.openDevTools();
 }
