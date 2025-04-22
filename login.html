@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login</title>
+  <link rel="stylesheet" href="login.css" />
+</head>
+<body>
+  <div class="login-container">
+    <h1>Xush kelibsiz!</h1>
+    <h2>Login</h2>
+    <form>
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required />
+      </div>
+
+      <div class="form-group password-group">
+        <label for="password">Password</label>
+        <div class="input-wrapper">
+          <input type="password" id="password" name="password" required />
+          <button type="button" id="toggle-password" title="Show/Hide Password">👁️</button>
+        </div>
+      </div>
+      <div id="message" style="color: red; margin-top: 10px;"></div>
+      <button type="button" class="submit-btn">Login</button>
+    </form>
+
+    <div id="info"></div>
+  </div>
+
+  <!-- ✅ Load renderer.js here -->
+  <script src="./renderer/loginrenderer.js"></script>
+</body>
+</html>

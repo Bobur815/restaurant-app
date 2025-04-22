@@ -1,0 +1,62 @@
+# Dependency directories
+node_modules/
+
+# Build output
+dist/
+out/
+build/
+
+# Compiled files
+*.log
+*.tsbuildinfo
+
+# Electron specific
+*.asar
+*.pid
+*.seed
+*.pid.lock
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Env variables and config
+.env
+.env.*.local
+
+# VS Code
+.vscode/
+.history/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Optional cache folders
+.cache/
+.nyc_output/
+coverage/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.Trash-*
+
+# IDEs
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Electron-updater cache
+**/pending/
+
+# Others
+electron-builder.yml
