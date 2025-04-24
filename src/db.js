@@ -1,8 +1,9 @@
 
 import mysql from 'mysql2/promise';
 import dotenv from "dotenv"
+import path from 'path';
 
-dotenv.config()
+dotenv.config({ path: path.resolve('C:/Users/user/Desktop/restaurant-app/.env') })
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -13,5 +14,4 @@ const pool = mysql.createPool({
   connectionLimit: 10,
   queueLimit: 0
 });
-
 export default pool;

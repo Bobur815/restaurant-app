@@ -1,0 +1,302 @@
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 1px;
+    font-size: 20px;
+}
+.add-btn {
+    padding: 8px 16px;
+    font-size: 30px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+    padding: 20px;
+}
+.card {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    position: relative;
+}
+.card img {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+}
+.card-buttons {
+    margin-top: 10px;
+}
+.card-buttons img {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+}
+.card-buttons button {
+    margin: 0 5px;
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.edit-btn {
+    background-color: #f1f3f5;
+    color: white;
+    padding: 4px 6px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;   /* Icon va text orasidagi masofa */
+}
+
+.delete-btn {
+    background-color: #fcfafa;
+    color: white;
+    padding: 4px 6px;
+    font-size: 12px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.edit-btn:hover {
+    background-color: #0056b3;
+}
+
+.delete-btn:hover {
+    background-color: #c82333;
+}
+
+/* Qo'shimcha effektlar */
+.add-btn:hover,
+.edit-btn:hover,
+.delete-btn:hover {
+    opacity: 0.9;
+}
+
+/* Bosilganda effekt */
+.add-btn:active,
+.edit-btn:active,
+.delete-btn:active {
+    transform: scale(0.95);
+    box-shadow: none;
+}
+.add-btn {
+    padding: 8px 16px;
+    font-size: 30px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.1s ease-in-out;
+}
+
+.add-btn:hover {
+    background-color: #218838;
+}
+
+.add-btn:active {
+    transform: scale(0.95);
+    box-shadow: none;
+}
+.edit-btn, .delete-btn {
+    transition: all 0.1s ease-in-out;
+}
+
+.edit-btn:active,
+.delete-btn:active {
+    transform: scale(0.95);
+}
+button {
+    transition: all 0.1s ease-in-out;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+.modal {
+    position: fixed;
+    top: 0; left: 0;
+    width: 120%; height: 100%;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.modal-content {
+    background: #fff;
+    padding: 30px;
+    border-radius: 12px;
+    width: 450px;
+    max-width: 90%;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    text-align: left;
+    animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.modal-content h2 {
+    margin-bottom: 20px;
+    font-size: 24px;
+    color: #333;
+}
+
+.modal-content input,
+.modal-content textarea {
+    width: 90%;
+    padding: 10px 15px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+    transition: border-color 0.2s;
+}
+
+.modal-content input:focus,
+.modal-content textarea:focus {
+    border-color: #28a745;
+    outline: none;
+}
+
+.modal-content button {
+    padding: 10px 20px;
+    margin: 5px;
+    border: none;
+    border-radius: 6px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+#saveProduct {
+    background-color: #28a745;
+    color: white;
+}
+
+#saveProduct:hover {
+    background-color: #218838;
+}
+
+#closeModal {
+    background-color: #dc3545;
+    color: white;
+}
+
+#closeModal:hover {
+    background-color: #c82333;
+}
+
+/* Modalni yashirish uchun */
+.hidden {
+    display: none;
+}
+
+.number-input input,
+.number-input button {
+    height: 45px;    /* Bir xil balandlik */
+    box-sizing: border-box;
+}
+
+.number-input input[type="text"] {
+    flex: 2;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.number-input input[type="number"] {
+    width: 100px;
+    text-align: center;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+}
+
+.number-input button {
+    padding: 0 15px;   /* Yuqori-pastga padding olib tashlandi */
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 18px;
+}
+
+
+
+
+.image-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    width: 90%;
+}
+
+.image-upload input[type="text"] {
+    flex: 1;
+    height: 45px;
+    padding: 0 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+.image-upload button {
+    height: 45px;
+    padding: 0 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 0.2s;
+    font-size: 16px;
+    line-height: 1;            /* Default line-height ni kamaytiramiz */
+}
+
+.image-upload button:hover {
+    background-color: #0056b3;
+}
+
+/* Fayl yuklash inputini yashirish */
+.hidden-file-input {
+    display: none;
+}
