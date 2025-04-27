@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../css/buyutma.css">
+</head>
+<body>
+    <h1 class="header">🛒 Buyurtma</h1>
+    <div class="container">
+        <!-- Chapdagi Mahsulotlar -->
+        <div class="table-wrapper">
+            
+            <h2>Stollar</h2>
+
+            <div class="table-grid" id="tableGrid">
+                <!-- Dinamik stollar shu yerda -->
+            </div>
+
+        </div>
+
+        <!-- O'rtadagi Jadval -->
+        <div class="selected-products">
+            <h2>Tanlangan Mahsulotlar</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Rasm</th>
+                        <th>Nomi</th>
+                        <th>Narxi</th>
+                        <th>Soni</th>
+                        <th>Jami</th>
+                        <th>O'chirish</th>
+                    </tr>
+                </thead>
+                <tbody id="orderTableBody">
+                    <!-- JS orqali tanlangan mahsulotlar qo'shiladi -->
+                </tbody>
+            </table>
+            <h2 class="total-wrapper">
+                Jami: <span id="grandTotal">0</span>
+             </h2>
+             
+        </div>
+
+        <!-- O'ng Panel (Sidebar) -->
+        <div class="order-sidebar" id="sidebar">
+            <h3>📋 Menu</h3>
+            <select id="productCategory">
+                <option value="Ovqatlar">Ovqatlar</option>
+                <option value="Salatlar">Salatlar</option>
+                <option value="Ichimliklar">Ichimliklar</option>
+                <option value="Non mahsulotlari">Non mahsulotlari</option>
+                <option value="Desertlar">Desertlar</option>
+            </select>
+            <ul id="menuList">
+                <!-- Mahsulotlar ro'yxati -->
+            </ul>
+        </div>
+        
+    </div>
+    
+</body>
+
+</html>

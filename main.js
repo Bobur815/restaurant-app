@@ -19,7 +19,6 @@ if (process.env.NODE_ENV !== 'production') {
 import { app } from 'electron';
 import { createLoginWindow } from './login.page.js';
 import { createMainWindow } from './main.page.js';
-
 app.whenReady().then(() => {
   // createLoginWindow();
   createMainWindow(); 
@@ -34,5 +33,6 @@ app.on('activate', () => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+
 
 

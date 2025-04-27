@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../css/template.css">
+</head>
+<body>
+    <div class="header">
+        <h1>🍽️ Menu</h1>
+        <button class="add-btn">+ Qo'shish</button>
+    </div>
+    <div id="menuGrid">
+    
+    </div>
+    <!-- Modal Forma -->
+<div id="addModal" class="modal hidden">
+    <div class="modal-content">
+        <h2 id="modalTitle">Yangi Mahsulot Qo'shish</h2>
+
+        <div class="number-input">
+            <input type="text" id="productName" placeholder="Mahsulot nomi">
+            <button class="decrement">-</button>
+            <input type="number" id="productPrice" value="0" placeholder="Narxi" min="0">
+            <button class="increment">+</button>
+        </div>           
+
+        <div class="image-upload">
+            <input type="text" id="productImage" placeholder="Rasm yuklash" readonly>
+            <button type="button" id="uploadBtn">Yuklash</button>
+            <input type="file" id="realFileInput" accept="image/*" class="hidden-file-input">
+        </div>
+
+        <!-- Yangi qo'shilgan kategoriya select -->
+        <select id="productCategory">
+            <option value="" disabled selected hidden>Turini tanlang...</option>
+            <option value="Ovqatlar">Ovqatlar</option>
+            <option value="Salatlar">Salatlar</option>
+            <option value="Ichimliklar">Ichimliklar</option>
+            <option value="Non mahsulotlari">Non mahsulotlari</option>
+            <option value="Desertlar">Desertlar</option>
+        </select>
+        <br><br>
+
+        <textarea id="productDesc" placeholder="Tavsif"></textarea><br>
+        <button id="saveProduct">Saqlash</button>
+        <button id="closeModal">Bekor qilish</button>
+    </div>
+</div>
+
+
+</body>
+</html>

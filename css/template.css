@@ -2,24 +2,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin: 1px;
-    font-size: 20px;
+    margin: 10px 20px;   
+    padding: 5px 10px;  
+    font-size: 10px;    
 }
-.add-btn {
-    padding: 8px 16px;
-    font-size: 30px;
-    background-color: #28a745;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-}
-.grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 20px;
-    padding: 20px;
-}
+
+
+
 .card {
     border: 1px solid #ccc;
     border-radius: 8px;
@@ -97,7 +86,7 @@
 }
 .add-btn {
     padding: 8px 16px;
-    font-size: 30px;
+    font-size: 20px;
     background-color: #28a745;
     color: white;
     border: none;
@@ -156,7 +145,7 @@ button:active {
     padding: 30px;
     border-radius: 12px;
     width: 450px;
-    max-width: 90%;
+    max-width: 95%;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
     text-align: left;
     animation: slideDown 0.3s ease;
@@ -175,7 +164,7 @@ button:active {
 
 .modal-content input,
 .modal-content textarea {
-    width: 90%;
+    width: 100%;
     padding: 10px 15px;
     margin-bottom: 15px;
     border: 1px solid #ccc;
@@ -198,6 +187,31 @@ button:active {
     font-size: 16px;
     cursor: pointer;
     transition: background-color 0.2s, transform 0.1s;
+}
+
+#productCategory {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: #fff;
+    font-size: 16px;
+    color: #333;
+    margin-top: 10px;
+    box-sizing: border-box;
+    appearance: none;  /* Brauzer default styleni olib tashlash */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%204%205%27%3E%3Cpath%20fill%3D%27%23333%27%20d%3D%27M2%200L0%202h4L2%200zM2%205L0%203h4L2%205z%27/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 10px;
+    cursor: pointer;
+}
+
+#productCategory:focus {
+    border-color: #007bff;
+    outline: none;
 }
 
 #saveProduct {
@@ -263,9 +277,9 @@ button:active {
 .image-upload {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 15px;
-    width: 90%;
+    gap: 8px;
+    margin-bottom: 10px;
+    width: 100%;
 }
 
 .image-upload input[type="text"] {
@@ -289,14 +303,49 @@ button:active {
     white-space: nowrap;
     transition: background-color 0.2s;
     font-size: 16px;
-    line-height: 1;            /* Default line-height ni kamaytiramiz */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
 }
 
 .image-upload button:hover {
     background-color: #0056b3;
+}
+.image-upload input[type="text"],
+.image-upload button {
+    box-sizing: border-box;
 }
 
 /* Fayl yuklash inputini yashirish */
 .hidden-file-input {
     display: none;
 }
+
+#productDesc {
+    width: 93%;     /* Agar kerak bo'lsa, lekin allaqachon bor */
+    resize: none;    /* O'lchamini o'zgartirishni bloklash */
+}
+/* Kategoriya bloklari orasida joy tashlash */
+.category-section {
+    margin-bottom: 40px;
+}
+
+/* Kategoriya nomi */
+.category-title {
+    font-size: 24px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+/* Mahsulotlar uchun grid */
+.category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+
+
+
+
