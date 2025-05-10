@@ -1,54 +1,101 @@
--- 4.task:
-select employees.first_name as employee_name, count(orders.order_id) as orders_count from employees 
-left join orders on orders.employee_id = employees.employee_id 
-group by employees.employee_id, employees.first_name;
+CREATE DATABASE IF NOT EXISTS vazifa_16_dars;
 
--- 5.task:
-select products.product_name, sum(order_details.unit_price * order_details.quantity) as umumiy_savdo from products 
-left join order_details on order_details.product_id=products.product_id 
-group by products.product_name, order_details.product_id;
+USE vazifa_16_dars;
 
--- 6.task:
- select customers.city, count(*) as customer_count from customers group by city order by customer_count desc;
+CREATE TABLE IF NOT EXISTS employees(
+    id INT auto_increment primary key,
+    name varchar(20) not null,
+    salary int not null,
+    departments varchar(20) not null
+);
 
---  7.task:
-select categories.category_name, sum(order_details.unit_price * order_details.quantity) as umumiy_savdo from products 
-left join categories on products.category_id=categories.category_id 
-join order_details on order_details.product_id=products.product_id 
-group by categories.category_name order by umumiy_savdo desc;
+CREATE TABLE if NOT EXISTS log_actions(
+    id INT auto_increment primary key,
+    employee_id int,
+    log_action varchar(20),
+    log_time datetime
+);
 
--- 8.task:
-select customers.company_name, sum(order_details.unit_price * order_details.quantity) as umumiy_savdo from customers left join
-orders on orders.customer_id = customers.customer_id inner join order_details on order_details.order_id=orders.order_id 
-group by customers.company_name order by umumiy_savdo desc;
+delimiter $$
+create trigger before_log_employee_update
+before insert on employees
+for each row
+begin
+    if new.salary > 1000 then
+        set new.salary=1000;
+    end if;
+end $$
 
--- 9.task:
+delimiter ;
+create trigger log_employee_update
+after update on employees
+for each row
+begin
+    insert into log_actions (employee_id,log_action,log_time)
+    values(NEW.id,"Update",now());
+end $$
 
-select employees.first_name, sum(order_details.unit_price * order_details.quantity) AS umumiy_savdo
-from employees left join orders on orders.employee_id= employees.employee_id
-inner join order_details on orders.order_id=order_details.order_id
-group by employees.first_name
-order by umumiy_savdo desc;
+delimiter $$
+create trigger log_employee_insert
+after insert on employees
+for each row
+begin
+    insert into log_actions (employee_id,log_action,log_time)
+    values(NEW.id,"Insert",now());
+end $$
 
--- 10.task:
-select products.product_name, avg(products.unit_price) as "o'rtacha narx" from products 
-group by products.product_name order by "o'rtacha narx" desc;
+create trigger log_employee_delete
+after delete on employees
+for each row
+begin
+    insert into log_actions (employee_id,log_action,log_time)
+    values(OLD.id,"Delete",now());
+end $$
+delimiter ;
 
--- 11.task:
+INSERT INTO employees (name, salary, departments) values
+('Ali',2000,'IT'),
+('Dildora',2500,'HR'),
+('Vali',1800,'Marketing'),
+('Karim',5000,'Sales'),
+('Bobur',4500,'IT'),
+('Sobir',3400,'HR');
 
-select o.ship_city, sum(od.unit_price * od.quantity) as umumiy_savdo from orders as o left join order_details as od on o.order_id=od.order_id
-    -> group by o.ship_city;
+delimiter $$
 
-    -- 12.task:
-select s.company_name as yetkazib_beruvchi, AVG(p.unit_price) as ortacha_nar from suppliers as s
-join products as p on s.supplier_id = p.supplier_id
-group by s.company_name
-group byortacha_narx desc;
+create function hasBonus(e_id int)
+returns varchar(10)
+deterministic
+begin
+    if (select salary from employees e where e.id=e_id) > (select avg(salary) from employees) then
+        return '20 %';
+    else 
+        return '0 %';
+    end if;
+end$$
 
--- 13.task:
-select p.product_name, sum(od.quantity) AS umumiy_buyurtma_miqdori
-from products AS p
-JOIN order_details AS od ON p.product_id = od.product_id
-GROUP BY p.product_name
-ORDER BY umumiy_buyurtma_miqdori DESC;
 
+create function calcBonus(e_id int)
+returns int
+deterministic
+begin
+    declare new_salary int;
+    
+    select salary into new_salary from employees where id = e_id;
+    
+    if hasBonus(e_id) = '20 %' then
+        return new_salary * 1.2;
+    else
+        return new_salary;
+    end if;
+end$$
+delimiter ;
+
+
+SELECT *, hasBonus(id) as Bonus, calcBonus(id) as Salary_after_bonus from employees;
+
+
+DROP function calcBonus;
+DROP function hasBonus;
+drop TABLE employees;
+DROP DATABASE vazifa_16_dars;

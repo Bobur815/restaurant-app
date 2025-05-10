@@ -13,17 +13,23 @@
     <div id="menuGrid">
     
     </div>
+      
     <!-- Modal Forma -->
 <div id="addModal" class="modal hidden">
     <div class="modal-content">
         <h2 id="modalTitle">Yangi Mahsulot Qo'shish</h2>
 
+        <input type="text" id="productName" placeholder="Mahsulot nomi">
         <div class="number-input">
-            <input type="text" id="productName" placeholder="Mahsulot nomi">
             <button class="decrement">-</button>
             <input type="number" id="productPrice" value="0" placeholder="Narxi" min="0">
             <button class="increment">+</button>
-        </div>           
+            <div class="portion-options">
+                <label><input type="radio" name="portion" id="porsiyali"> Porsiyali</label>
+                <label><input type="radio" name="portion" id="porsiyasiz" checked> Porsiyasiz</label>
+            </div>
+        </div>
+          
 
         <div class="image-upload">
             <input type="text" id="productImage" placeholder="Rasm yuklash" readonly>
@@ -48,6 +54,9 @@
     </div>
 </div>
 
-
+<div id="alert-placeholder"></div>
+<div id="alert-placeholder"></div>
+  <script type="module" src="../renderer/loadAlert.js"></script>
+  <script type="module" src="../renderer/alert.js"></script>
 </body>
 </html>

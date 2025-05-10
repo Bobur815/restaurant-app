@@ -30,7 +30,6 @@
     vertical-align: middle;
 }
 .card-buttons button {
-    margin: 0 5px;
     padding: 5px 10px;
     border: none;
     border-radius: 4px;
@@ -126,14 +125,15 @@ button:active {
 .modal {
     position: fixed;
     top: 0; left: 0;
-    width: 120%; height: 100%;
-    background: rgba(0, 0, 0, 0.4);
+    width: 100%;     /* ✅ was 120% — fixed */
+    height: 100%;
+    background: rgba(0,0,0,0.3);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
-    animation: fadeIn 0.3s ease;
-}
+    z-index: 999;
+  }
+  
 
 @keyframes fadeIn {
     from { opacity: 0; }
@@ -144,6 +144,7 @@ button:active {
     background: #fff;
     padding: 30px;
     border-radius: 12px;
+    pointer-events: auto;
     width: 450px;
     max-width: 95%;
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
@@ -189,6 +190,17 @@ button:active {
     transition: background-color 0.2s, transform 0.1s;
 }
 
+#productName{
+    width: 90%;
+    margin: 5px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 16px;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+
+  
 #productCategory {
     width: 100%;
     padding: 10px;
@@ -236,7 +248,11 @@ button:active {
 .hidden {
     display: none;
 }
-
+.number-input {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Elementlar orasidagi masofa */
+}
 .number-input input,
 .number-input button {
     height: 45px;    /* Bir xil balandlik */
@@ -269,6 +285,45 @@ button:active {
     cursor: pointer;
     transition: background-color 0.2s;
     font-size: 18px;
+}
+.portions {
+    font-weight: bold; 
+    margin-top: 10px;
+}
+.portions span.active {
+    background-color: #565558;
+    color: white;
+    padding: 3px 7px;
+    border-radius: 4px;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(40, 167, 69, 0.8); /* Yashil soya */
+    transform: scale(1.1); /* Biroz kattalashadi */
+    font-weight: bold; /* Qalinroq bo'ladi */
+}
+
+.portions span {
+    cursor: pointer;
+    transition: all 0.2s ease; /* Aktiv bo‘lganda silliq o‘tadi */
+}
+
+.portion-options {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    margin-top: 0;  /* pastga tushishini oldini olish uchun */
+}
+
+.portion-options label {
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    display: flex;
+    align-items: center;
+    gap: 3px; /* radio va text orasidagi masofa */
+}
+
+.portion-options input[type="radio"] {
+    transform: scale(1.2); /* sal kichikroq radio */
 }
 
 

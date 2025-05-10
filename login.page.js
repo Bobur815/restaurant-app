@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import pool from './src/db.js';  // DB ni shu yerda ishlatamiz
+import pool from './backend/config/Database.js';  // DB ni shu yerda ishlatamiz
 import { createMainWindow } from './main.page.js';  // Main oynani shu fayldan chaqiramiz
 
 const __filename = fileURLToPath(import.meta.url);

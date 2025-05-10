@@ -1,4 +1,5 @@
-
+import { PORTIONS } from './config_porsiya.js';
+import { showAlert, showConfirm } from "./alert.js";
 
 window.addEventListener('DOMContentLoaded', () => {
 
@@ -107,15 +108,36 @@ export function loadMenuData() {
 
                     // Add cards
                     categoryItems.forEach(dish => {
-                        const imgPath = `file:///C:/Users/user/Desktop/restaurant-app/img/${dish.image_url}`;
+                        let imgPath;
+                        if (dish.image_url) {
+                        imgPath = `file:///C:/Users/user/Desktop/restaurant-app/img/${dish.image_url}`;
+                        } else {
+                        // fallback if image is missing
+                        imgPath = `file:///C:/Users/user/Desktop/restaurant-app/img/placeholder.png`;
+                        }
+
                         const card = document.createElement('div');
                             card.classList.add('card');
+                            
+                            let portionHTML = '';
+                            if (dish.portions === 1) {
+                                portionHTML = '<div class="portions"><small>Porsiya: </small>';
+                                PORTIONS.forEach((p,index) => {
+                                    portionHTML += `<span class="${p.value === 1.0 ? 'active' : ''}">${p.value.toString()}</span> `;
+                                    if (index !== PORTIONS.length - 1) {
+                                        portionHTML += ' | ';
+                                    }
+                                });
+                                portionHTML += '</div>';
+                            }                            
+                            
 
                             card.innerHTML = `
                                 <img src="${imgPath}" alt="${dish.name}">
                                 <h3>${dish.name}</h3>
                                 <p>${dish.description}</p>
                                 <strong>${dish.price} UZS</strong>
+                                ${portionHTML}
                                 <div class="card-buttons">
                                     <button class="edit-btn">
                                         <img src="../img/edit-icon.png">
@@ -125,6 +147,33 @@ export function loadMenuData() {
                                     </button>
                                 </div>
                             `;
+                            card.setAttribute('data-original-price', dish.price);
+                            document.addEventListener('click', function(e) {
+                                if (e.target.matches('.portions span')) {
+                            
+                                    // Avvalgi activelarni olib tashlaymiz
+                                    const spans = e.target.parentElement.querySelectorAll('span');
+                                    spans.forEach(span => span.classList.remove('active'));
+                            
+                                    // Bosilgan span'ga active class qo'shamiz
+                                    e.target.classList.add('active');
+                            
+                                    // >>> Narxni o'zgartirish
+                                    const portionValue = parseFloat(e.target.textContent); // tanlangan porsiya qiymati (masalan: 0.7)
+                            
+                                    // Narx yozilgan elementni topamiz
+                                    const priceElement = e.target.closest('.card').querySelector('strong');
+                            
+                                    // Asl narxni olish uchun (hozirgi narxdan emas, original dan olish kerak => dish.price)
+                                    // Dish.price ni saqlash kerak, shuning uchun kartaga atribut qo'shamiz
+                                    const originalPrice = parseFloat(e.target.closest('.card').getAttribute('data-original-price'));
+                                
+                                    // Hisoblab yozamiz
+                                    const newPrice = Math.round(originalPrice * portionValue);
+                            
+                                    priceElement.textContent = `${newPrice} UZS`;
+                                }
+                            });
 
                             // Attach event listeners
                             const editBtn = card.querySelector('.edit-btn');
@@ -163,7 +212,9 @@ export function openModal(mode, dish = null) {
         saveBtn.textContent = "Saqlash";
 
         // Inputlarni tozalash
-        document.getElementById('productName').value = '';
+        let productName = document.getElementById('productName');
+        productName.value = '';
+        productName.focus()
         document.getElementById('productPrice').value = 0;
         document.getElementById('productImage').value = '';
         document.getElementById('productCategory').selectedIndex = 0;
@@ -187,7 +238,7 @@ export function openModal(mode, dish = null) {
 
     // Modalni yopish
     document.getElementById('closeModal').onclick = () => {
-        modal.style.display = '';
+        modal.style.display = 'none';
         modal.classList.add('hidden');
     };
 }
@@ -204,23 +255,28 @@ function editDish(dish_id){
     .catch(err => console.error(err));
 }
 
-function deleteDish(dish_id){
-    if(!confirm("Shu mahsulotni o'chirib yuborishni tasdiqlaysimi?")){
-        return;
-    }
+async function deleteDish(dish_id){
+
+    const confirmed = await showConfirm("Shu mahsulotni o'chirib yuborishni tasdiqlaysimi?");
+    
+    if (!confirmed) return;
+
     fetch(`http://localhost:3000/api/menu/${dish_id}`, {
         method: 'DELETE'
     })
+
     .then(response => {
         if (!response.ok) {
             throw new Error("Mahsulotni o'chirishda xatoli yuz berdi!");
         }
-        alert("✅ Mahsulot muvaffaqqiyatli o'chirildi!");
+        showAlert("✅ Mahsulot muvaffaqqiyatli o'chirildi!");
+        
+            
         loadMenuData(); 
     })
     .catch(error => {
         console.error("Error:", error);
-        alert("Mahsulotni o'chirishda xatoli yuz berdi!");
+        showAlert("Mahsulotni o'chirishda xatoli yuz berdi!");
     });
 }
 

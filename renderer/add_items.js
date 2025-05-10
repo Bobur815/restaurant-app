@@ -1,4 +1,5 @@
 import { loadMenuData,openModal } from "./mainrenderer.js";
+import { showAlert } from "./alert.js";
 
 export function loadMenuPage() {
     loadMenuData();
@@ -28,13 +29,19 @@ export function loadMenuPage() {
         document.getElementById('productImage').value = fileName;
     });
 }
+
 const saveBtn = document.getElementById('saveProduct');
+
 document.getElementById('saveProduct').addEventListener('click', async () => {
     let nameInput = document.getElementById('productName');
     let priceInput = document.getElementById('productPrice');
     let image_url = document.getElementById('productImage').value;
     let category = document.getElementById('productCategory').value;
     let description = document.getElementById('productDesc').value.trim();
+    let selectedPortion = document.querySelector('input[name="portion"]:checked');
+    let portions;
+
+    selectedPortion.id === 'porsiyali' ? portions=1 : portions=0;
     const dishId = saveBtn.dataset.dishId;
 
     let url = 'http://localhost:3000/api/menu';
@@ -79,7 +86,8 @@ document.getElementById('saveProduct').addEventListener('click', async () => {
         price,
         image_url,
         description,
-        category
+        category,
+        portions
     };
 
     try {
@@ -92,7 +100,7 @@ document.getElementById('saveProduct').addEventListener('click', async () => {
         });
 
         const data = await response.json();
-        alert("✅ Qo'shildi");
+        showAlert("✅ Mahsulot qo'shildi");
         document.getElementById('addModal').style.display = 'none';
         loadMenuData()
         nameInput.value = '';
