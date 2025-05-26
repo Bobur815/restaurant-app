@@ -30,6 +30,7 @@ const GET_BY_CATEGORY = async (req, res) => {
     }
 }
 
+
 // POST method - yangi mahsulot qo'shish
 const POST = async (req, res) => {
     try {
