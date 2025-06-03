@@ -1,14 +1,14 @@
 import { Router } from "express";
-import controller from "../controller/controller.js";
+import menuController from "../controller/Menu.controller.js";
 
-let router = Router()
+let menuRouter = Router()
 
-router
-    .get("/api/menu",controller.GET)
-    .get("/api/menu/:dish_id",controller.GET_BY_ID)
-    .get("/api/menu/category/:category",controller.GET_BY_CATEGORY)
-    .post("/api/menu",controller.POST)
-    .delete("/api/menu/:dish_id",controller.DELETE)
-    .put("/api/menu/:dish_id", controller.PUT)
+menuRouter
+    .get("/all",menuController.getAllItems)
+    .get("/:dish_id",menuController.GET_BY_ID)
+    .get("/category/:category",menuController.GET_BY_CATEGORY)
+    .post("/create",menuController.createItem)
+    .delete("/delete/:dish_id",menuController.deleteItem)
+    .put("/update/:dish_id", menuController.updateItem)
 
-export default router
+export default menuRouter

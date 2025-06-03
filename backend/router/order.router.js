@@ -1,12 +1,12 @@
 import { Router } from "express";
-import controller from "../controller/controller.js";
+import orderController from "../controller/Order.controller.js";
 
-let router = Router()
+let orderRouter = Router()
 
-router
-    .get("/api/orders/:table_number",controller.GET_ORDERS_OF_TABLE)
-    .post("/api/orders",controller.POST_ORDER)
-    .put("/api/orders",controller.UPDATE_ORDER)
-    .delete("/api/orders/:table_number",controller.CANCEL_ORDER)
+orderRouter
+    .get("/:table_number",orderController.getOrders)
+    .post("/",orderController.addOrder)
+    .put("/",orderController.changeOrder)
+    .delete("/:table_number",orderController.deleteOrder)
 
-export default router
+export default orderRouter
