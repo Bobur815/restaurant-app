@@ -8,6 +8,7 @@ const menuSchema = new Schema({
     maxlength: 20,
     trim: true
   },
+  
   price: {
     type: Number,
     required: true

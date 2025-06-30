@@ -1,19 +1,28 @@
 import { loadMenuData,openModal } from "./mainrenderer.js";
-import { showAlert } from "./alert.js";
+import { showAlert } from "../utils/alert.js";
+
+const clickSound = new Audio('../sounds/mixkit.wav');
+clickSound.preload = 'auto';
 
 export function loadMenuPage() {
     loadMenuData();
 
     document.querySelector('.add-btn').addEventListener('click', () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         openModal('add');
     });
 
     document.querySelector('.increment').addEventListener('click', () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         let input = document.getElementById('productPrice');
         input.value = parseInt(input.value) + 1000;  
     });
 
     document.querySelector('.decrement').addEventListener('click', () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         let input = document.getElementById('productPrice');
         if (parseInt(input.value) > 0) {
             input.value = parseInt(input.value) - 1000;
@@ -21,10 +30,14 @@ export function loadMenuPage() {
     });
 
     document.getElementById('uploadBtn').addEventListener('click', () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         document.getElementById('realFileInput').click();
     });
 
     document.getElementById('realFileInput').addEventListener('change', function() {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         const fileName = this.files[0] ? this.files[0].name : '';
         document.getElementById('productImage').value = fileName;
     });
@@ -33,6 +46,8 @@ export function loadMenuPage() {
 const saveBtn = document.getElementById('saveProduct');
 
 document.getElementById('saveProduct').addEventListener('click', async () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(()=>{/*ignore*/});
     let nameInput = document.getElementById('productName');
     let priceInput = document.getElementById('productPrice');
     let image_url = document.getElementById('productImage').value;
@@ -41,14 +56,14 @@ document.getElementById('saveProduct').addEventListener('click', async () => {
     let selectedPortion = document.querySelector('input[name="portion"]:checked');
     let portions;
 
-    selectedPortion.id === 'porsiyali' ? portions=1 : portions=0;
+    selectedPortion.id === 'porsiyali' ? portions=true : portions=false;
     const dishId = saveBtn.dataset.dishId;
 
-    let url = 'http://localhost:3000/api/menu';
+    let url = 'http://localhost:3000/api/menu/create';
     let method = 'POST';
 
     if (dishId) {
-        url = `http://localhost:3000/api/menu/${dishId}`;
+        url = `http://localhost:3000/api/menu/update/${dishId}`;
         method = 'PUT';
     }
 

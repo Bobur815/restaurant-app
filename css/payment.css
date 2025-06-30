@@ -1,0 +1,30 @@
+/* === payment.css === */
+
+body {
+    font-family: sans-serif;
+    padding: 20px;
+  }
+  
+  #checkPreview {
+    border: 1px dashed #ccc;
+    padding: 10px;
+    margin-bottom: 10px;
+  }
+  
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+  
+    #checkPreview,
+    #checkPreview * {
+      visibility: visible;
+    }
+  
+    #checkPreview {
+      position: absolute;
+      left: 0;
+      top: 0;
+    }
+  }
+  

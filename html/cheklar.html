@@ -1,17 +1,106 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../css/template.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="../css/checklar.css">
+  <title>Cheklar</title>
 </head>
 <body>
-    <h1>🧾 Cheklar</h1>
-    <div class="grid" id="menuGrid">
-        
-    </div>
 
-    <div id="alert-placeholder"></div>
+  <div class="filter">
+    <h1>🧾 Cheklar</h1>
+    <input type="date" id="startDate">
+    <input type="date" id="endDate">
+    <select id="stol">
+      <option value="all">🪑 Hammasi</option>
+    </select>
+    <select id="pay-method">
+      <option value="all">💳 Hammasi</option>
+      <option value="cash">💵 Naqd</option>
+      <option value="card">💳 Karta</option>
+      <option value="click">💳 Klik</option>
+      <option value="debt">⏳ Nasiya</option>
+    </select>
+    <select id="status">
+      <option value="all">✅ Hammasi</option>
+      <option value="paid">✅ To'landi</option>
+      <option value="pending">🕒 Nasiya</option>
+      <option value="refunded">🔄 Qaytarildi</option>
+    </select>
+    <button id="filterBtn">🔍 Qidirish</button>
+    <button id="refreshBtn">🔁 Yangilash</button>
+  </div>
+
+  <div class="table-wrapper">
+    <table class="check-table">
+      <thead>
+        <tr>
+          <th>№</th>
+          <th>Buyurtma ID</th>
+          <th>📆 Sana</th>
+          <th>🪑 Stol</th>
+          <th>💰 Summa</th>
+          <th>💳 To‘lov turi</th>
+          <th>✅ Holati</th>
+          <th>Tahrirlash</th>
+          <th>O'chirish</th>
+          <th>Chop etish</th>
+        </tr>
+      </thead>
+      <tbody id="checkList">
+        <!-- dynamic rows will be inserted here -->
+      </tbody>
+      <tfoot>
+        <tr>
+          <td></td>
+          <td colspan="3"><strong>Jami:</strong></td>
+          <td id="totalAmount"><strong>0 so'm</strong></td>
+          <td colspan="5"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <!-- Modal for Delete Confirmation -->
+  <div id="confirmDeleteModal" class="modal hidden">
+    <div class="modal-content">
+      <p>🗑️ Bu checkni o‘chirishni istaysizmi?</p>
+      <div class="modal-actions">
+        <button id="confirmDeleteYes">✅ Ha</button>
+        <button id="confirmDeleteNo">❌ Yo‘q</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Edit -->
+<div id="editModal" class="modal hidden">
+  <div class="modal-content">
+    <!-- 1a) Close “X” -->
+    <button id="editCloseBtn" class="close-btn" aria-label="Close"><img src="../img/delete-icon.png"></button>
+
+    <h2>Check tahrirlash</h2>
+    <div class="filter">
+      <label>
+        💳 To'lov turi:
+        <select id="edit-payment-method"></select>
+      </label>
+      <label>
+        ✅ Holati:
+        <select id="edit-status"></select>
+      </label>
+      <div>
+        <button id="editSaveBtn">Saqlash</button>
+        <button id="editCancelBtn">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+  <div id="alert-placeholder"></div>
   <script type="module" src="../renderer/loadAlert.js"></script>
+  <script type="module" src="../renderer/checks.js"></script>
+  <script type="module" src="../renderer/editCheck.js"></script>
 </body>
 </html>

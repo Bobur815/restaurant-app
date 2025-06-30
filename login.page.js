@@ -1,8 +1,9 @@
 import { BrowserWindow, ipcMain } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import pool from './backend/config/Database.js';  // DB ni shu yerda ishlatamiz
+// import connectDB from './backend/config/Database.js';  // DB ni shu yerda ishlatamiz 
 import { createMainWindow } from './main.page.js';  // Main oynani shu fayldan chaqiramiz
+import UsersModel from './backend/models/Users.model.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,7 +26,8 @@ export function createLoginWindow() {
   // Login jarayoni shu yerda
   ipcMain.on("attempt-login", async (event, { username, password }) => {
     try {
-      const [rows] = await pool.query("SELECT * FROM users WHERE name = ? AND password = ?", [username, password]);
+      const rows = await UsersModel.findOne({username,password})
+      console.log(rows);
       if (rows.length > 0) {
         event.sender.send("login-result", { success: true });
         loginWin.close();

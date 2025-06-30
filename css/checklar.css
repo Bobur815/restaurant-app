@@ -1,0 +1,246 @@
+
+/* ─── Page Title ─────────────────────────────────────────────────────────── */
+/* Remove the old standalone h1 rule */
+ /* .main-content h1 { … }  ← delete this */
+
+/* Filter container now holds the title + inputs/buttons */
+.main-content .filter {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+/* Title spans the full row */
+.main-content .filter h1 {
+  flex: 1 1 100%;
+  margin: 10px 0;                /* vertical spacing */
+  font-size: 24px;               /* adjust as you like */
+  text-align: left;
+}
+
+/* Date pickers & buttons */
+.main-content .filter input[type="date"],
+.main-content .filter button {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+.main-content .filter button {
+  background-color: #28a745;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.main-content .filter button:hover {
+  background-color: #218838;
+}
+
+
+/* ─── Scrollable Table Container ─────────────────────────────────────────── */
+.main-content .table-wrapper {
+  flex: 1 1 auto;
+  position: relative;
+  overflow-y: auto;    /* ← now *this* scrolls */
+  padding: 0 10px;
+}
+
+/* ─── Checks Table ───────────────────────────────────────────────────────── */
+.main-content .check-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin-top: 20px;
+}
+
+.main-content .check-table th,
+.main-content .check-table td {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: center;
+}
+
+/* sticky header cells */
+.main-content .check-table th {
+  position: sticky;
+  top: 0;
+  background: #f9f9f9;
+  z-index: 2;
+}
+
+/* sticky footer cells */
+.main-content .check-table tfoot td {
+  position: sticky;
+  bottom: 0;
+  background: #f9f9f9;
+  z-index: 2;
+}
+
+
+/* ─── Action Buttons in Table ────────────────────────────────────────────── */
+.table-action-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.1s ease, box-shadow 0.2s ease, background-color 0.2s;
+}
+.table-action-btn img {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.edit-btn:hover   { background-color: #f7d05e; }
+.delete-btn:hover { background-color: #bd2130; }
+.print-btn:hover  { background-color: #138496; }
+.table-action-btn:active {
+  transform: scale(0.95);
+  box-shadow: none;
+}
+
+/* ─── Modal Dialog ───────────────────────────────────────────────────────── */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+.modal-content {
+  background: #fff;
+  padding: 20px 30px;
+  border-radius: 8px;
+  text-align: center;
+}
+.modal-actions button {
+  margin: 10px;
+  padding: 8px 16px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.hidden {
+  display: none;
+}
+
+/* ─── Filter Container Adjustments ───────────────────────────────────────── */
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 10px;
+  align-items: flex-start;
+}
+
+/* Title stays full-width */
+.filter h1 {
+  flex: 1 1 100%;
+  margin: 10px 0;
+  font-size: 24px;
+  text-align: left;
+}
+
+/* Make every label stack its text above the control */
+.filter label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  margin: 0;               /* adjust as you like */
+}
+
+/* Style your date-inputs, selects and buttons identically */
+.filter input[type="date"],
+.filter select,
+.filter button {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+/* Button hover state */
+.filter button {
+  background-color: #28a745;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.filter button:hover {
+  background-color: #218838;
+}
+
+/* ─── Edit Modal Specific Styles ─────────────────────────────────────────── */
+#editModal .modal-content {
+  position: relative;
+  width: 320px;
+  max-width: 90%;
+}
+
+/* Stack inputs & labels */
+#editModal .filter {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#editModal .filter label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+}
+
+/* Shared button styling */
+#editModal button:not(.close-btn) {
+  margin: 5px 0;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+#editModal button:not(.close-btn):hover {
+  background-color: #198a24;
+}
+
+/* ─── Image-based Close Button ─────────────────────────────────────────── */
+#editModal .close-btn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+  z-index: 10;
+}
+
+#editModal .close-btn img {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+#editModal .close-btn:hover {
+  background-color: rgba(239, 110, 110, 0.1);
+}

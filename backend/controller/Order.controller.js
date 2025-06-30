@@ -12,6 +12,15 @@ class OrderController{
         }
     }
 
+    async getOneOrder(req,res,next){
+        try {
+            const order = await orderService.getOrder(req.query)
+            res.status(200).json(order)
+        } catch (error) {
+            next(error)
+        }
+    }
+
     async addOrder(req,res,next){
         try {
             const result = await orderService.createOrder(req.body)

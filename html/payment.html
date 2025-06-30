@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <title>To‘lov oynasi</title>
+  <link rel="stylesheet" href="../css/payment.css">
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 20px;
+      background-color: #f9f9f9;
+      color: #333;
+    }
+
+    #checkPreview {
+      background: #fff;
+      padding: 20px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      max-width: 500px;
+      margin: 0 auto;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    #checkPreview p, #checkPreview h3 {
+      margin: 8px 0;
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px dashed #aaa;
+      margin: 12px 0;
+    }
+
+    .payment-options {
+      max-width: 500px;
+      margin: 20px auto;
+      padding: 15px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+
+    .payment-options label {
+      margin-right: 20px;
+      font-weight: 500;
+    }
+
+    #confirmPayment {
+      display: block;
+      margin: 20px auto;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #28a745;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    #confirmPayment:hover {
+      background-color: #218838;
+    }
+  </style>
+  <script type="module" src="../renderer/confirmPayment.js"></script>
+</head>
+<body>
+
+  <h2 style="text-align:center;">🧾 Buyurtma Tafsilotlari</h2>
+
+  <div id="checkPreview">
+    <h3 style="text-align:center;">🍽️ Shoxona Milliy taomlar</h3>
+    <p style="text-align:center;">📍 Arabmozor, Toshloq, Farg'ona<br>📞 +998 90 123 45 67</p>
+    <hr>
+  </div>
+
+  <div class="payment-options">
+    <h4>To‘lov usuli:</h4>
+    <label><input type="radio" name="payment" id="cash" checked value="cash"> Naqd</label>
+    <label><input type="radio" name="payment" id="card" value="card"> Karta</label>
+    <label><input type="radio" name="payment" id="klik" value="click"> Klik</label>
+    <label><input type="radio" name="payment" id="nasiya" value="debt"> Nasiya</label>
+    <br><br>
+    <label><input type="checkbox" id="printCheck"> Checkni chop etish</label>
+  </div>
+
+  <button id="confirmPayment">💵 To‘lovni tasdiqlash</button>
+
+  <script type="module">
+    import confirmPayment from "../renderer/confirmPayment.js";
+
+    window.electronAPI.onLoadOrder((orderData) => {
+      const preview = document.getElementById("checkPreview");
+      const checkBox = document.getElementById("printCheck");
+      const confirmBtn = document.getElementById("confirmPayment");
+
+      let total = 0;
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0'); // months are 0-based
+      const year = now.getFullYear();
+
+      const formattedDate = `${day}.${month}.${year}`;
+
+      let headers = `
+        <p><strong>Stol:</strong> ${orderData.table_number} &nbsp;&nbsp;&nbsp; <strong>Buyurtma:</strong> #${orderData.orderId}</p>
+        <p><strong>Sana:</strong> ${formattedDate} &nbsp;&nbsp; <strong>Soat:</strong> ${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false })}</p>
+        <hr>
+      `;
+      preview.innerHTML += headers;
+
+      orderData.items.forEach(item => {
+        const portion = item.portions || 1;
+        const subtotal = item.quantity * item.price * portion;
+        total += subtotal;
+
+        const maxLineLength = 30;
+        const namePortion = `${item.quantity} × ${item.name}`;
+        const dots = '.'.repeat(Math.max(3, maxLineLength - namePortion.length - item.price.toString().length));
+        const line = `${namePortion} ${dots} ${item.price} × ${portion}`;
+
+        preview.innerHTML += `
+        <p>${line} = <strong>${subtotal.toLocaleString()} so'm</strong></p>
+        `;
+
+      });
+
+      preview.innerHTML += `<hr><p style="text-align:right;"><strong>Jami: ${total.toLocaleString()} UZS</strong></p>`;
+
+      confirmBtn.addEventListener("click", async () => {
+        const checkedRadio = document.querySelector('input[name="payment"]:checked');
+        const paymentMethod = checkedRadio.value
+        
+        await confirmPayment(orderData,paymentMethod)
+        if (checkBox.checked) window.print();
+
+        window.electronAPI.confirmPayment(); // ✅
+
+        window.close();
+      });
+    });
+  </script>
+
+</body>
+</html>

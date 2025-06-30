@@ -2,14 +2,20 @@ import { getOrdersOfTable } from "./ordersOfTable.js";
 
 async function submitOrder(order) {
     try {
+        document.querySelector('.pay-btn').disabled = true;
+        document.querySelector('.cancel-order').disabled = true;
+        
         const method = await handleOrderMethod(order.table_number);
         const url = 'http://localhost:3000/api/orders';
-
         const response = await fetch(url, {
             method,
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(order)
         });
+
+        if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+        }
 
         const result = await response.json();
 

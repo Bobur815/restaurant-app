@@ -38,8 +38,7 @@ class OrderService {
       { $unwind: "$menu" },
       {
         $project: {
-          _id: 0,
-          menu_id: "$menu._id",
+          _id: "$menu._id",
           name: "$menu.name",
           image_url: "$menu.image_url",
           price: "$price",
@@ -49,6 +48,11 @@ class OrderService {
       }
     ]);
     return orders;
+  }
+
+  async getOrder(query){
+    const order = await OrdersModel.find(query)
+    return order
   }
 
   async createOrder(data){
@@ -74,6 +78,17 @@ class OrderService {
 
     await OrderItemModel.insertMany(orderItems);
     return "✅ Ordersga item qo'shildi!"
+  }
+
+  async changeStatusofOrder(order_id,status){
+    const order = await OrdersModel.findById(order_id)
+    if(!order){
+      throw new CustomError("❌ Buyurtma topilmadi!",404,"NotFoundError");
+    }
+
+    order.status = status;
+    await order.save()
+    return "✅ Buyurtma muvaffaqqiyatli yangilandi!"
   }
 
   async updateOrder(data){
@@ -112,7 +127,7 @@ class OrderService {
     const order = await OrdersModel.findOne({ table_number, status: "pending" });
 
     if (!order) {
-      return res.status(404).json({ message: "❌ Bekor qilinadigan buyurtma topilmadi." });
+      throw new CustomError("❌ Bekor qilinadigan buyurtma topilmadi.",404, "NotFoundError");
     }
 
     const order_id = order._id;

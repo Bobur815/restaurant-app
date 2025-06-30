@@ -1,3 +1,5 @@
+import { showAlert } from "../utils/alert.js";
+
 async function cancelOrder(table_number) {
     try {
         const response = await fetch(`http://localhost:3000/api/orders/${table_number}`, {
@@ -5,11 +7,10 @@ async function cancelOrder(table_number) {
         });
 
         const result = await response.json();
-
         if (response.ok) {
-            alert("❌ Buyurtma bekor qilindi.");
+            showAlert("❌ Buyurtma bekor qilindi.");
         } else {
-            alert("⚠️ Buyurtmani bekor qilib bo'lmadi: " + result.message);
+            showAlert("⚠️ Buyurtmani bekor qilib bo'lmadi: " + result.message);
         }
     } catch (error) {
         console.error("Server xatosi:", error);

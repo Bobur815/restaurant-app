@@ -1,71 +1,81 @@
-body {
-  user-select: none;
+html, body {
   margin: 0;
-  font-family: Arial, sans-serif;
+  padding: 0;
   height: 100vh;
+  overflow: hidden; /* ❌ Prevent whole-page scroll */
+  font-family: Arial, sans-serif;
+  user-select: none;
+}
+
+body {
   display: flex;
-  flex-direction: column;  /* Header ustida joylashishi uchun */
+  flex-direction: column;
 }
+
 .content-wrapper {
-  display: flex;       /* Sidebar va Main-content yonma-yon */
+  display: flex;
   flex: 1;
-  height: 100%;
+  min-height: 0;          /* ✅ muhim */
+  overflow: hidden; 
 }
-  
-  .sidebar {
-    width: 220px;
-    background-color: #343a40;
-    color: white;
-    padding-top: 20px;
-  }
-  
-  .sidebar ul {
-    list-style: none;
-    padding: 0;
-  }
-  
-  .sidebar li {
-    font-size: 25px;
-    padding: 15px 20px;
-    cursor: pointer;
-  }
-  .sidebar li.active {
-    background-color: #f8f9fa;   /* Main-content fon rangi */
-    color: #343a40;              /* Matn rangi (optional) */
-    font-weight: bold;           /* Tanlangan bo‘limni ajratib ko‘rsatish */
-  }
-  
-  .sidebar li:hover {
-    background-color: #495057;
-  }
-  
-  .main-content {
-    flex-grow: 1;
-    padding: 20px;
-    background: #f8f9fa;
-    overflow-y: auto;
-  }
 
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 20px;
-    background-color: #ffffff;
-    border-bottom: 1px solid #ddd;
-    font-family: Arial, sans-serif;
-  }
-  
-  .logo {
-    font-size: 20px;
-    font-weight: bold;
-    color: #333;
-  }
-  
-  .date {
-    font-size: 14px;
-    color: #666;
-  }
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 20px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #ddd;
+}
 
-  
-  
+.logo {
+  font-size: 20px;
+  font-weight: bold;
+  color: #333;
+}
+
+.date {
+  font-size: 14px;
+  color: #666;
+}
+
+.sidebar {
+  width: 220px;
+  background-color: #343a40;
+  color: white;
+  padding-top: 20px;
+  overflow-y: auto;       /* ✅ Scroll only here */
+  height: 100%;           /* ✅ Required for scroll to activate */
+}
+
+.sidebar ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar li {
+  font-size: 25px;
+  padding: 15px 20px;
+  cursor: pointer;
+}
+
+.sidebar li.active {
+  background-color: #f8f9fa;
+  color: #343a40;
+  font-weight: bold;
+}
+
+.sidebar li:hover {
+  background-color: #495057;
+}
+
+.main-content {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  padding: 20px;
+  background: #f8f9fa;
+  overflow: auto;    /* only our inner .table-wrapper scrolls */
+  min-height: 0;       /* allow flex-child to shrink */
+}

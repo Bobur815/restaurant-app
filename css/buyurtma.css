@@ -389,6 +389,6 @@ html, body {
 }
 
 .delete-btn:hover {
-    color: #a71d2a; /* To'qroq qizil */
+    color: #f1ebeb; /* To'qroq qizil */
     transform: scale(1.2);
 }

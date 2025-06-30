@@ -1,20 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../css/template.css">
-</head>
-<body>
-    <div class="header">
-        <h1>🍽️ Menu</h1>
-        <button class="add-btn">+ Qo'shish</button>
-    </div>
-    <div id="menuGrid">
-    
-    </div>
-      
-    <!-- Modal Forma -->
+<div class="header">
+    <h1>🍽️ Menu</h1>
+    <button class="add-btn">+ Qo'shish</button>
+</div>
+
+<div id="menuGrid">
+    <!-- Mahsulotlar shu yerga yuklanadi -->
+</div>
+
+<!-- Modal Forma -->
 <div id="addModal" class="modal hidden">
     <div class="modal-content">
         <h2 id="modalTitle">Yangi Mahsulot Qo'shish</h2>
@@ -29,7 +22,6 @@
                 <label><input type="radio" name="portion" id="porsiyasiz" checked> Porsiyasiz</label>
             </div>
         </div>
-          
 
         <div class="image-upload">
             <input type="text" id="productImage" placeholder="Rasm yuklash" readonly>
@@ -37,7 +29,6 @@
             <input type="file" id="realFileInput" accept="image/*" class="hidden-file-input">
         </div>
 
-        <!-- Yangi qo'shilgan kategoriya select -->
         <select id="productCategory">
             <option value="" disabled selected hidden>Turini tanlang...</option>
             <option value="Ovqatlar">Ovqatlar</option>
@@ -55,8 +46,5 @@
 </div>
 
 <div id="alert-placeholder"></div>
-<div id="alert-placeholder"></div>
-  <script type="module" src="../renderer/loadAlert.js"></script>
-  <script type="module" src="../renderer/alert.js"></script>
-</body>
-</html>
+
+<!-- JS scriptlar loadTemplate orqali import qilinadi -->

@@ -1,5 +1,7 @@
-import { PORTIONS } from './config_porsiya.js';
-import { showAlert, showConfirm } from "./alert.js";
+import { PORTIONS } from '../utils/config_porsiya.js';
+import { showAlert, showConfirm } from "../utils/alert.js";
+const clickSound = new Audio('../sounds/mixkit.wav');
+clickSound.preload = 'auto';
 
 window.addEventListener('DOMContentLoaded', () => {
 
@@ -15,9 +17,9 @@ window.addEventListener('DOMContentLoaded', () => {
     const maincontent = document.querySelector(".main-content");
     
     let date = document.querySelector("#current-date");
-
-
+    
     async function loadTemplate(page) {
+        let table_count = parseInt(localStorage.getItem('table_count'), 10) || 10;
         sidebarItems.forEach(li => li.classList.remove('active'));
         document.getElementById(page).classList.add('active');
         try {
@@ -31,10 +33,10 @@ window.addEventListener('DOMContentLoaded', () => {
                     import('./add_items.js').then(module => module.loadMenuPage());
                     break;
                 case 'buyurtma':
-                    import('./order_items.js').then(module => module.loadOrderPage());
+                    import('./order_items.js').then(module => module.loadOrderPage(table_count));
                     break;
                 case 'cheklar':
-                    import('./cheklar.js').then(module => module.loadCheklarPage());
+                    import('./checks.js').then(module => module.loadCheklarPage(table_count));
                     break;
                 case 'hisobotlar':
                     import('./reports.js').then(module => module.loadReportsPage());
@@ -52,29 +54,41 @@ window.addEventListener('DOMContentLoaded', () => {
 
     date.textContent = getUzbekFormattedDate()
     document.getElementById("asosiy").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('asosiy');
     });
 
     document.getElementById("menu").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('menu');
     });
 
     document.getElementById("buyurtma").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('buyurtma');
     });
     
     document.getElementById("cheklar").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('cheklar');
     });
     document.getElementById("hisobotlar").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('hisobotlar');
     });
     document.getElementById("settings").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('settings');
     });
@@ -84,11 +98,10 @@ window.addEventListener('DOMContentLoaded', () => {
 export function loadMenuData() {
     const grid = document.getElementById('menuGrid');
 
-    fetch('http://localhost:3000/api/menu')
+    fetch('http://localhost:3000/api/menu/all')
         .then(res => res.json())
         .then(data => {
             grid.innerHTML = '';
-
             const categories = ['Ovqatlar', 'Salatlar', 'Ichimliklar', 'Desertlar','Non mahsulotlari'];
 
             categories.forEach(category => {
@@ -149,6 +162,7 @@ export function loadMenuData() {
                             `;
                             card.setAttribute('data-original-price', dish.price);
                             document.addEventListener('click', function(e) {
+
                                 if (e.target.matches('.portions span')) {
                             
                                     // Avvalgi activelarni olib tashlaymiz
@@ -177,10 +191,17 @@ export function loadMenuData() {
 
                             // Attach event listeners
                             const editBtn = card.querySelector('.edit-btn');
-                            editBtn.addEventListener('click', () => editDish(dish.id));
+                            editBtn.addEventListener('click', () => {
+                                clickSound.currentTime = 0;
+                                clickSound.play().catch(()=>{/*ignore*/});
+                                editDish(dish._id);
+                            })
 
                             const deleteBtn = card.querySelector('.delete-btn');
-                            deleteBtn.addEventListener('click', () => deleteDish(dish.id));
+                            deleteBtn.addEventListener('click', () => {
+                                clickSound.currentTime = 0;
+                                clickSound.play().catch(()=>{/*ignore*/});
+                                deleteDish(dish._id)});
 
                             catGrid.appendChild(card);
 
@@ -233,7 +254,7 @@ export function openModal(mode, dish = null) {
         document.getElementById('productDesc').value = dish.description;
 
         // Qo'shimcha: Tahrirlashda dish_id ni saqlab qo'yish
-        saveBtn.dataset.dishId = dish.id;
+        saveBtn.dataset.dishId = dish._id;
     }
 
     // Modalni yopish
@@ -246,7 +267,6 @@ export function openModal(mode, dish = null) {
 
 
 function editDish(dish_id){
-
     fetch(`http://localhost:3000/api/menu/${dish_id}`)
     .then(res => res.json())
     .then(dish => {
@@ -261,7 +281,7 @@ async function deleteDish(dish_id){
     
     if (!confirmed) return;
 
-    fetch(`http://localhost:3000/api/menu/${dish_id}`, {
+    fetch(`http://localhost:3000/api/menu/delete/${dish_id}`, {
         method: 'DELETE'
     })
 
