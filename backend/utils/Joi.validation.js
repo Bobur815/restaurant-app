@@ -12,7 +12,7 @@ const objectId = () =>
     .message("Invalid ObjectId");
 
 export class Validators {
-  constructor() {}
+  constructor() { }
 
   static menuValidator = Joi.object({
     name: Joi.string()
@@ -33,9 +33,7 @@ export class Validators {
       .optional()
       .allow(null, ""),
 
-    category: Joi.string()
-      .max(20)
-      .trim()
+    categoryId: Joi.string()
       .required(),
 
     portions: Joi.boolean()
@@ -106,9 +104,9 @@ export class Validators {
       .required(),
 
     username: Joi.string()
-        .min(3)
-        .max(16)
-        .required(),
+      .min(3)
+      .max(16)
+      .required(),
 
     password: Joi.string()
       .min(4)
@@ -117,6 +115,41 @@ export class Validators {
 
     role: Joi.string()
       .valid("admin", "kassir", "ofitsant")
+      .optional()
+  });
+
+  static categoryValidator = Joi.object({
+    name: Joi.string()
+      .required()
+  });
+
+  static sessionValidator = Joi.object({
+    items: Joi.array()
+      .min(1)
+      .items(
+        Joi.object({
+          menu_id: Joi.string()
+            .pattern(/^[0-9a-fA-F]{24}$/)
+            .required()
+            .messages({
+              "string.pattern.base": `"menu_id" must be a valid 24-hexadecimal ObjectId`,
+            }),
+          initialQuantity: Joi.number()
+            .integer()
+            .min(0)
+            .required(),
+          soldQuantity: Joi.number()
+            .integer()
+            .min(0)
+            .optional()
+        })
+      )
+      .required(),
+    status: Joi.string()
+      .valid("open", "closed")
+      .optional(),
+    closedAt: Joi.date()
+      .iso()
       .optional()
   });
 }

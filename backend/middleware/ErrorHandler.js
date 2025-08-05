@@ -1,7 +1,7 @@
 import logger from "../utils/logger.js";
 
 export default function ErrorHandler(err, req, res, next) {
-    const statusCode = err.status || 500;
+    const statusCode = err.statusCode || 500;
     const errorName = err.name || "ServerError";
     const errorMessage = err.message || "Internal Server Error";
     const errorStack = err.stack.split("\n").slice(0,2).join("\n");

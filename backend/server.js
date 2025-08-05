@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
-import path from "path";
 
-dotenv.config({ path: path.resolve(process.cwd(), "../.env") });
+dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
@@ -9,7 +8,7 @@ import { connectDB } from "./config/Database.js";
 import routes from './router/index.routers.js';
 import ErrorHandler from './middleware/ErrorHandler.js';
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 3000;
 
 const app = express();
 app.use(express.json());

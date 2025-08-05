@@ -21,6 +21,9 @@ export function loadCheklarPage(table_count=10) {
     const deleteModal = document.getElementById("confirmDeleteModal");
     const confirmDeleteYes = document.getElementById("confirmDeleteYes");
     const confirmDeleteNo = document.getElementById("confirmDeleteNo");
+    const orderByType = document.getElementById('orderByType')
+    const orderDirection = document.getElementById('orderDirection')
+    const checkTable = document.querySelector('.check-table')
 
     let deleteTargetOrderNumber = null;
     table_count = parseInt(localStorage.getItem('table_count'), 10) || 10;
@@ -42,7 +45,7 @@ export function loadCheklarPage(table_count=10) {
         stol.value = 'all'
         pay_method.value = 'all'
         status.value = 'all'
-        loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value);
+        loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
     });
 
     filterBtn.addEventListener("click", () => {
@@ -53,7 +56,7 @@ export function loadCheklarPage(table_count=10) {
             showAlert("Sanani to'g'ri kiriting!");
             return;
         }
-        loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value);
+        loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
     });
 
     checkList.addEventListener('click',(e) => {
@@ -90,7 +93,7 @@ export function loadCheklarPage(table_count=10) {
             });
             if (res.ok) {
                 showAlert("✅ Muvaffaqiyatli o‘chirildi");
-                loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value);
+                loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
             } else {
                 showAlert("❌ O‘chirishda xatolik");
             }
@@ -109,22 +112,33 @@ export function loadCheklarPage(table_count=10) {
         deleteModal.classList.add("hidden");
         deleteTargetOrderNumber = null;
     });
-    
     // first load
-    loadChecks(today, today, stol.value, pay_method.value, status.value);
+    loadChecks(today, today, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
     
 }
 
-export async function loadChecks(start, end, stol, payment_method, status) {
+export async function loadChecks(start, end, stol, payment_method, status, orderByType, orderDirection) {
+    
+    const checkList = document.querySelector("#checkList");
     checkList.innerHTML = `<tr><td colspan="10">⏳ Yuklanmoqda...</td></tr>`;
     
+    const orderTypeColumnColor = {
+        'table_number':'col-table',
+        'payment_date':'col-date',
+        'amount':'col-amount'
+    }
+
+    columnColorByOrderType(orderTypeColumnColor[orderByType])
+
     try {
         let allParams = {
             startDate: start, 
             endDate: end,
             table_number: stol,
             payment_method,
-            status
+            status,
+            orderByType,
+            orderDirection
         }
         const queryObj = Object.fromEntries(
             Object.entries(allParams)
@@ -165,6 +179,8 @@ export async function loadChecks(start, end, stol, payment_method, status) {
                 tr.dataset.paymentMethod  = check.payment_method;
                 tr.dataset.status         = check.status;
                 checkList.appendChild(tr);
+                
+                
             });
 
             totalAmount.innerHTML = `<strong>${total.toLocaleString()} so'm</strong>`;
@@ -176,6 +192,38 @@ export async function loadChecks(start, end, stol, payment_method, status) {
         checkList.innerHTML = `<tr><td colspan="9">🚫 Server bilan bog‘lanishda muammo</td></tr>`;
     }
 }
+
+// Bu funksiya global scope’ga emas, loadChecks ichida ham bo’lishi mumkin
+function columnColorByOrderType(orderClass){
+  const table = document.querySelector('.check-table');
+  if (!table) return;
+
+  // 1) Qachonki biron bir ustun avvalgi qachon bo‘yoqlangan bo‘lsa, uni tozalaymiz
+  const allClasses = ['col-date','col-table','col-amount'];
+  const indexMap  = { 'col-date':3, 'col-table':4, 'col-amount':5 };
+
+  allClasses.forEach(cls => {
+    const idx = indexMap[cls];
+    // header va body dagi teglarni topib klassini olib tashlaymiz
+    table.querySelectorAll(`thead th:nth-child(${idx}), tbody td:nth-child(${idx})`)
+         .forEach(el => el.classList.remove(cls));
+  });
+
+  // 2) So‘ngra yangi orderClass bo‘lsa, uning index’ini olib, o‘sha ustunga qo‘shamiz
+  if (!orderClass) return;
+  const colIdx = indexMap[orderClass];
+  if (!colIdx) return;
+
+  // header ustuniga
+  const th = table.querySelector(`thead th:nth-child(${colIdx})`);
+  if (th) th.classList.add(orderClass);
+  
+  // har bir row’dagi tegishli td ustuniga
+  table.querySelectorAll(`tbody td:nth-child(${colIdx})`)
+       .forEach(td => td.classList.add(orderClass));
+}
+
+
 function formatDateTime(isoString) {
     const date = new Date(isoString);
     const day = String(date.getDate()).padStart(2, '0');
@@ -186,4 +234,4 @@ function formatDateTime(isoString) {
     const seconds = String(date.getSeconds()).padStart(2, '0');
     return `${day}-${month}-${year} | ${hours}:${minutes}:${seconds}`;
 }
-  
+

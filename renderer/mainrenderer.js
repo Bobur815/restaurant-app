@@ -1,13 +1,16 @@
 import { PORTIONS } from '../utils/config_porsiya.js';
 import { showAlert, showConfirm } from "../utils/alert.js";
+import { loadAllCategories } from './add-load-category.js';
+import { loadSessionsPage } from './sessions/render.sessions.js';
+
 const clickSound = new Audio('../sounds/mixkit.wav');
 clickSound.preload = 'auto';
 
 window.addEventListener('DOMContentLoaded', () => {
 
-
-    const asosiy = document.querySelector("#asosiy")
+    // const asosiy = document.querySelector("#asosiy")
     const menu = document.querySelector("#menu")
+    const session = document.getElementById('session')
     const buyurtma = document.querySelector("#buyurtma")
     const cheklar = document.querySelector("#cheklar")
     const hisobotlar = document.querySelector("#hisobotlar")
@@ -30,7 +33,19 @@ window.addEventListener('DOMContentLoaded', () => {
             // Dynamic import asosida modul yuklash
             switch(page) {
                 case 'menu':
-                    import('./add_items.js').then(module => module.loadMenuPage());
+                    loadMenuData();
+
+                    const addBtn = document.querySelector('.add-btn');
+                        if (addBtn) {
+                            addBtn.addEventListener('click', () => {
+                                clickSound.currentTime = 0;
+                                clickSound.play().catch(() => {});
+                                window.electronAPI.openAddWindow();
+                        });
+                    }
+                    break;
+                case 'session':
+                    loadSessionsPage()
                     break;
                 case 'buyurtma':
                     import('./order_items.js').then(module => module.loadOrderPage(table_count));
@@ -51,20 +66,31 @@ window.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-
-    date.textContent = getUzbekFormattedDate()
-    document.getElementById("asosiy").addEventListener("click", e => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        e.preventDefault();
-        loadTemplate('asosiy');
+    loadTemplate('menu').then(() => {
+    // loadTemplate ichida ham bor, lekin aynan shu joyda
+        const menuLi = document.querySelector('.sidebar li#menu');
+        if (menuLi) menuLi.classList.add('active');
     });
+    date.textContent = getUzbekFormattedDate()
+    // document.getElementById("asosiy").addEventListener("click", e => {
+    //     clickSound.currentTime = 0;
+    //     clickSound.play().catch(()=>{/*ignore*/});
+    //     e.preventDefault();
+    //     loadTemplate('asosiy');
+    // });
 
     document.getElementById("menu").addEventListener("click", e => {
         clickSound.currentTime = 0;
         clickSound.play().catch(()=>{/*ignore*/});
         e.preventDefault();
         loadTemplate('menu');
+    });
+
+    document.getElementById("session").addEventListener("click", e => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(()=>{/*ignore*/});
+        e.preventDefault();
+        loadTemplate('session');
     });
 
     document.getElementById("buyurtma").addEventListener("click", e => {
@@ -92,20 +118,23 @@ window.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         loadTemplate('settings');
     });
-
+    window.electronAPI.onMenuReload(() => {
+        loadMenuData();
+    });
 });
 
-export function loadMenuData() {
+export async function loadMenuData() {
     const grid = document.getElementById('menuGrid');
 
+    const categories = await loadAllCategories();
+    
     fetch('http://localhost:3000/api/menu/all')
         .then(res => res.json())
         .then(data => {
             grid.innerHTML = '';
-            const categories = ['Ovqatlar', 'Salatlar', 'Ichimliklar', 'Desertlar','Non mahsulotlari'];
-
+            
             categories.forEach(category => {
-                const categoryItems = data.filter(item => item.category === category);
+                const categoryItems = data.filter(item => item.categoryId.name === category.name);
 
                 if (categoryItems.length) {
                     // Create category section
@@ -114,7 +143,7 @@ export function loadMenuData() {
 
                     const title = document.createElement('h2');
                     title.classList.add('category-title');
-                    title.textContent = category;
+                    title.textContent = category.name;
 
                     const catGrid = document.createElement('div');
                     catGrid.classList.add('category-grid');
@@ -123,17 +152,19 @@ export function loadMenuData() {
                     categoryItems.forEach(dish => {
                         let imgPath;
                         if (dish.image_url) {
-                        imgPath = `file:///C:/Users/user/Desktop/restaurant-app/img/${dish.image_url}`;
+                        imgPath = `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`;
                         } else {
                         // fallback if image is missing
-                        imgPath = `file:///C:/Users/user/Desktop/restaurant-app/img/placeholder.png`;
+                        imgPath = `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
                         }
 
                         const card = document.createElement('div');
                             card.classList.add('card');
                             
                             let portionHTML = '';
-                            if (dish.portions === 1) {
+                            
+                            if (dish.portions) {
+
                                 portionHTML = '<div class="portions"><small>Porsiya: </small>';
                                 PORTIONS.forEach((p,index) => {
                                     portionHTML += `<span class="${p.value === 1.0 ? 'active' : ''}">${p.value.toString()}</span> `;
@@ -144,7 +175,7 @@ export function loadMenuData() {
                                 portionHTML += '</div>';
                             }                            
                             
-
+                            
                             card.innerHTML = `
                                 <img src="${imgPath}" alt="${dish.name}">
                                 <h3>${dish.name}</h3>
@@ -162,7 +193,8 @@ export function loadMenuData() {
                             `;
                             card.setAttribute('data-original-price', dish.price);
                             document.addEventListener('click', function(e) {
-
+                                clickSound.currentTime = 0;
+                                clickSound.play().catch(() => {});
                                 if (e.target.matches('.portions span')) {
                             
                                     // Avvalgi activelarni olib tashlaymiz
@@ -206,9 +238,12 @@ export function loadMenuData() {
                             catGrid.appendChild(card);
 
                     });
+                    const inputLine = document.createElement('input')
+                    inputLine.classList.add('input-line')
 
                     section.appendChild(title);
                     section.appendChild(catGrid);
+                    section.appendChild(inputLine)
                     grid.appendChild(section);
                 }
             });
@@ -221,21 +256,45 @@ export function loadMenuData() {
 
 export function openModal(mode, dish = null) {
     const modal = document.getElementById('addModal');
+    const modalContent = modal.querySelector('.modal-content');
     const modalTitle = document.getElementById('modalTitle');
     const saveBtn = document.getElementById('saveProduct');
+    const preview = document.getElementById('preview');
+    const closeBtn = document.getElementById('closeModal');
 
     // Modalni ko'rsatish
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
 
+    // Ichki click-lar fon listeneriga yetmasligi uchun
+    modalContent.addEventListener('click', e => {
+        e.stopPropagation();
+    });
+
+    // Faqatgina fon (modal o'zi) bosilganda yopish
+    modal.addEventListener('click', e => {
+        if (e.target === modal) {
+            close();
+        }
+    });
+
+    // Close tugmasi
+    closeBtn.onclick = close;
+
+    function close() {
+        modal.style.display = 'none';
+        modal.classList.add('hidden');
+        // edit rejimidagi id-ni ham tozalab qo‘ya qolamiz
+        delete saveBtn.dataset.dishId;
+    }
+
     if (mode === 'add') {
         modalTitle.textContent = "Yangi Mahsulot Qo'shish";
         saveBtn.textContent = "Saqlash";
+        preview.src = `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
 
-        // Inputlarni tozalash
-        let productName = document.getElementById('productName');
-        productName.value = '';
-        productName.focus()
+        document.getElementById('productName').value = '';
+        document.getElementById('productName').focus();
         document.getElementById('productPrice').value = 0;
         document.getElementById('productImage').value = '';
         document.getElementById('productCategory').selectedIndex = 0;
@@ -245,24 +304,20 @@ export function openModal(mode, dish = null) {
     if (mode === 'edit' && dish) {
         modalTitle.textContent = "Mahsulotni Tahrirlash";
         saveBtn.textContent = "O'zgartirish";
+        saveBtn.dataset.dishId = dish._id;
 
-        // Ma'lumotlarni inputlarga joylash
+        preview.src = dish.image_url
+            ? `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`
+            : `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
+
         document.getElementById('productName').value = dish.name;
         document.getElementById('productPrice').value = dish.price;
         document.getElementById('productImage').value = dish.image_url;
         document.getElementById('productCategory').value = dish.category;
         document.getElementById('productDesc').value = dish.description;
-
-        // Qo'shimcha: Tahrirlashda dish_id ni saqlab qo'yish
-        saveBtn.dataset.dishId = dish._id;
     }
-
-    // Modalni yopish
-    document.getElementById('closeModal').onclick = () => {
-        modal.style.display = 'none';
-        modal.classList.add('hidden');
-    };
 }
+
 
 
 
@@ -270,7 +325,8 @@ function editDish(dish_id){
     fetch(`http://localhost:3000/api/menu/${dish_id}`)
     .then(res => res.json())
     .then(dish => {
-        openModal('edit', dish);
+        
+        window.electronAPI.openAddWindow(dish);
     })
     .catch(err => console.error(err));
 }

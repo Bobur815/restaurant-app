@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="modalTitle">Yangi Mahsulot Qo'shish</title>
+  <link rel="stylesheet" href="../css/alert.css">
+  <link rel="stylesheet" href="../css/add-item.css">
+</head>
+
+<body>
+
+  <div id="addModal" class="modal hidden">
+    <div class="modal-body">
+      <div class="modal-content">
+
+        <input type="text" id="productName" placeholder="Mahsulot nomi">
+        <!-- qo'shimcha wrapper -->
+        <div class="portion-group">
+          <div class="number-input">
+            <input type="number" id="productPrice" placeholder="Narxi" min="0" step="1000">
+          </div>
+
+          <ul class="portion-options">
+            <li class="option" data-value="true">Porsiyali</li>
+            <li class="option selected" data-value="false">Porsiyasiz</li>
+            
+          </ul>
+          <input type="hidden" id="portionValue" name="portion" value="false">
+        </div>
+
+        <div class="image-upload">
+          <input type="text" id="productImage" placeholder="Rasm yuklash" readonly>
+          <button type="button" id="uploadBtn">Yuklash</button>
+          <input type="file" id="realFileInput" accept="image/*" class="hidden-file-input">
+        </div>
+
+        <div class="category-section">
+          <select id="productCategory">
+            <option value="" disabled selected hidden>Kategoriyani tanlang...</option>
+            <!-- <option value="Ovqatlar">Ovqatlar</option> -->
+          </select>
+          <button id="setCategory">⚙️ Kategoriya</button>
+        </div>
+        <br><br>
+
+        <textarea id="productDesc" placeholder="Tavsif"></textarea><br>
+        <div class="actions">
+          <button id="saveProduct">Saqlash</button>
+          <button id="closeModal">Bekor qilish</button>
+        </div>
+
+      </div>
+
+      <div class="image-preview">
+        <img id="preview" alt="Image preview">
+      </div>
+    </div>
+  </div>
+  <script type="module" src="../renderer/add_items.js"></script>
+</body>
+
+</html>

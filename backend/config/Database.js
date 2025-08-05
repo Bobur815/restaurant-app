@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { exec } from "child_process";
+import { myInitFunction } from "../utils/category-add-init.js";
 
 export async function connectDB() {
     const uri = process.env.MONGO_URL;
@@ -11,6 +12,8 @@ export async function connectDB() {
     try {
         await mongoose.connect(uri);
         console.log("✅ MongoDB connected!");
+        const result = await myInitFunction()
+        if(result) console.log(result);
     } catch (error) {
         console.error("MongoDB connection error:", error.message);
 

@@ -165,3 +165,31 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;        /* ustunlarni teng bo‘limlash */
+  margin-bottom: 20px;
+}
+
+.report-table th,
+.report-table td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+  vertical-align: top;
+  word-wrap: break-word;      /* matnni bo‘lish */
+}
+
+.report-table th {
+  background: #f8f9fa;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.report-table tfoot th {
+  background: #e9ecef;
+  position: sticky;
+  bottom: 0;
+}

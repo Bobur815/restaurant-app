@@ -1,129 +1,194 @@
-import { loadMenuData,openModal } from "./mainrenderer.js";
-import { showAlert } from "../utils/alert.js";
+// add_items.js
+// This script runs in the dedicated "add item" BrowserWindow (loaded via add_item.html).
+// Make sure your <script> tag in add_item.html is:
+//   <script type="module" src="../renderer/add_items.js"></script>
 
-const clickSound = new Audio('../sounds/mixkit.wav');
+import { showAlert } from '../utils/alert.js';
+import { categoryOptions } from './add-load-category.js';
+
+// Preload the click sound
+const clickSound = new Audio(new URL('../sounds/mixkit.wav', import.meta.url));
 clickSound.preload = 'auto';
 
-export function loadMenuPage() {
-    loadMenuData();
+// Wait for the DOM to be ready
+window.addEventListener('DOMContentLoaded', async () => {
+  // If you still wrapped the form in a hidden modal, un-hide it:
+  const modal = document.getElementById('addModal');
+  if (modal) {
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+  }
 
-    document.querySelector('.add-btn').addEventListener('click', () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        openModal('add');
-    });
+  // Grab all controls
+  const saveBtn = document.getElementById('saveProduct');
+  const cancelBtn = document.getElementById('closeModal');
+  const uploadBtn = document.getElementById('uploadBtn');
+  const realInput = document.getElementById('realFileInput');
+  const modalTitle = document.getElementById('modalTitle');
 
-    document.querySelector('.increment').addEventListener('click', () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        let input = document.getElementById('productPrice');
-        input.value = parseInt(input.value) + 1000;  
-    });
+  const nameInput = document.getElementById('productName');
+  const priceInput = document.getElementById('productPrice');
+  const image_url = document.getElementById('productImage');
+  const category = document.getElementById('productCategory');
+  const setCategory = document.getElementById('setCategory');
+  const description = document.getElementById('productDesc');
+  const preview = document.getElementById('preview');
 
-    document.querySelector('.decrement').addEventListener('click', () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        let input = document.getElementById('productPrice');
-        if (parseInt(input.value) > 0) {
-            input.value = parseInt(input.value) - 1000;
-        }
-    });
+  const hiddenPortionInput = document.getElementById('portionValue');
+  const items = document.querySelectorAll('.portion-options .option');
 
-    document.getElementById('uploadBtn').addEventListener('click', () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        document.getElementById('realFileInput').click();
-    });
-
-    document.getElementById('realFileInput').addEventListener('change', function() {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        const fileName = this.files[0] ? this.files[0].name : '';
-        document.getElementById('productImage').value = fileName;
-    });
-}
-
-const saveBtn = document.getElementById('saveProduct');
-
-document.getElementById('saveProduct').addEventListener('click', async () => {
+  setCategory.addEventListener('click', () => {
     clickSound.currentTime = 0;
-    clickSound.play().catch(()=>{/*ignore*/});
-    let nameInput = document.getElementById('productName');
-    let priceInput = document.getElementById('productPrice');
-    let image_url = document.getElementById('productImage').value;
-    let category = document.getElementById('productCategory').value;
-    let description = document.getElementById('productDesc').value.trim();
-    let selectedPortion = document.querySelector('input[name="portion"]:checked');
-    let portions;
+    clickSound.play().catch(() => { });
+    window.electronAPI.openCategoryWindow()
+  })
 
-    selectedPortion.id === 'porsiyali' ? portions=true : portions=false;
+  preview.src = `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`
+  await categoryOptions(category)
+
+  items.forEach(li => {
+    li.addEventListener('click', () => {
+      clickSound.currentTime = 0;
+      clickSound.play().catch(() => { });
+      // 1) clear old selection
+      items.forEach(x => x.classList.remove('selected'));
+      // 2) mark this one
+      li.classList.add('selected');
+      // 3) update hidden input
+      hiddenPortionInput.value = li.dataset.value;
+    });
+  });
+
+
+
+  if (!saveBtn || !cancelBtn) {
+    console.warn('Add-item UI not found; skipping setup.');
+    return;
+  }
+
+  window.electronAPI.onLoadDish(dish => {
+    // exactly like your old openModal('edit', dish):
+
+    modalTitle.textContent = "Mahsulotni Tahrirlash";
+    saveBtn.dataset.dishId = dish._id;
+    nameInput.value = dish.name;
+    priceInput.value = dish.price;
+    image_url.value = dish.image_url;
+    category.value = dish.categoryId._id
+    
+    description.value = dish.description;
+    preview.src = dish.image_url
+      ? `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`
+      : `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
+
+    // if you want to change button text:
+    saveBtn.textContent = "O'zgartirish";
+  });
+
+  // Open native dialog to pick an image
+  uploadBtn?.addEventListener('click', async () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => { });
+    const filePath = await window.electronAPI.selectImage();
+    if (filePath) {
+      const fileName = filePath.split('/').pop();
+      document.getElementById('productImage').value = fileName;
+      document.getElementById('preview').src = `file://${filePath}`;
+    }
+  });
+
+  // Fallback HTML input (if ever used)
+  realInput?.addEventListener('change', (e) => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => { });
+    const file = e.target.files[0];
+    if (file) {
+      document.getElementById('productImage').value = file.name;
+      document.getElementById('preview').src = URL.createObjectURL(file);
+    }
+  });
+
+  // Cancel: just close this window
+  cancelBtn.addEventListener('click', () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => { });
+    window.close();
+  });
+
+  // Save product
+  saveBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+
+    const portions = document.getElementById('portionValue').value === 'true';
     const dishId = saveBtn.dataset.dishId;
 
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => { });
+
+    // Determine URL/method
     let url = 'http://localhost:3000/api/menu/create';
     let method = 'POST';
+    let showAlerMsg = '✅ Mahsulot qo‘shildi'
 
     if (dishId) {
-        url = `http://localhost:3000/api/menu/update/${dishId}`;
-        method = 'PUT';
+      url = `http://localhost:3000/api/menu/update/${dishId}`;
+      method = 'PUT';
+      showAlerMsg = "✅ Mahsulot o'zgartirildi"
     }
 
-    let name = nameInput.value.trim();
-    let price = priceInput.value.trim();
-
+    // Basic validation
+    const name = nameInput.value.trim();
+    const price = priceInput.value.trim();
     nameInput.style.border = '';
     priceInput.style.border = '';
-
-    nameInput.addEventListener('input', () => {
-        if (nameInput.value.trim()) {
-            nameInput.style.border = '';
-        }
-    });
-    priceInput.addEventListener('input', () => {
-        if (priceInput.value.trim()) {
-            priceInput.style.border = '';
-        }
-    });
-
-    if (!name || !parseInt(price)) {
-
-        if (!name) {
-            nameInput.style.border = '2px solid red';
-        }
-        if (!parseInt(price)) {
-            priceInput.style.border = '2px solid red';
-        }
-
-        return;
+    if (!name || !parseInt(price, 10) || !category.value) {
+      if (!name) nameInput.style.border = '2px solid red';
+      if (!parseInt(price, 10)) priceInput.style.border = '2px solid red';
+      if(!category.value) category.style.border = '2px solid red';
+      return;
     }
-    
+
+
     const newItem = {
-        name,
-        price,
-        image_url,
-        description,
-        category,
-        portions
+      name: nameInput.value.trim(),
+      price: parseInt(priceInput.value, 10),
+      image_url: image_url.value.trim(),
+      description: description.value.trim(),
+      categoryId: category.value,
+      portions: portions
     };
 
+    let response, data;
     try {
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(newItem)
-        });
+      response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newItem)
+      });
 
-        const data = await response.json();
-        showAlert("✅ Mahsulot qo'shildi");
-        document.getElementById('addModal').style.display = 'none';
-        loadMenuData()
-        nameInput.value = '';
-        priceInput.value = '';
-        document.getElementById('productImage').value = '';
-        document.getElementById('productDesc').value = '';
-    } catch (error) {
-        console.error("Xato:", error);
+      // 🔥 JSONni avval o‘qib olamiz
+      data = await response.json();
+
+      if (!response.ok) {
+        // data.message allaqachon mavjud bo‘ladi
+        if (data.message?.includes('Bu nomda mahsulot mavjud')) {
+          showAlert('❌ Bu nomda mahsulot allaqachon mavjud');
+          nameInput.style.border = '2px solid red';
+        } else {
+          showAlert('❌ Noma’lum xatolik yuz berdi');
+        }
+        return;  // chiqib ketamiz, xato holatda oynani yopmaymiz
+      }
+
+      await showAlert(showAlerMsg, { duration: 3000 });
+      window.electronAPI.menuUpdated();
+      window.close();
+
+    } catch (err) {
+      console.error("Fetch yoki tarmoq xatosi:", err);
+      showAlert('❌ Tarmoq xatosi yoki noto‘g‘ri javob');
+      // bu yerda ham oynani yopmaymiz, shunchaki alert ko‘rsatayapmiz
     }
-});
 
+  });
+});

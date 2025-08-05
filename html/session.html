@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../css/sessions.css">
+    <title>Sessiyalar</title>
+</head>
+
+<body>
+    <div class="header">
+        <h1><img src="../img/icons8-session-timeout-50.png" alt=""> Sessiyalar</h1>
+        <button class="add-btn" id="session-open-btn">+ Sessiyani ochish</button>
+    </div>
+
+    <div class="main-div">
+        <div class="filter-div">
+            <select name="" id="open-date-of-session">
+                <option value="" selected disabled hidden>Ochilish sanasini tanlang...</option>
+            </select>
+            <select name="" id="end-date-of-session" disabled>
+
+            </select>
+        </div>
+
+        <div class="table-wrapper">
+            <table class="session-table">
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Rasm</th>
+                        <th>Nomi</th>
+                        <th>Boshlang'ich soni</th>
+                        <th>Sotilgani</th>
+                        <th>Qoldiq</th>
+                        <th>✅ Holati</th>
+                        <th>Tahrirlash</th>
+                        <th>O'chirish</th>
+                        <th>Chop etish</th>
+                    </tr>
+                </thead>
+                <tbody id="sessionList">
+                    <!-- dynamic rows will be inserted here -->
+                </tbody>
+                <!-- <tfoot>
+                    <tr>
+                        <td></td>
+                        <td colspan="3"><strong>Jami:</strong></td>
+                        <td id="totalAmount"><strong>0 so'm</strong></td>
+                        <td colspan="5"></td>
+                    </tr>
+                </tfoot> -->
+            </table>
+        </div>
+    </div>
+
+    <script src="../renderer/sessions/render.sessions.js"></script>
+</body>
+
+</html>

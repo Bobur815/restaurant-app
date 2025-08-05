@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="../css/session-create.css">
+    <title>Sessiya ochish</title>
+</head>
+
+<body>
+    <div class="container">
+        <div class="table-wrapper">
+            <div class="products-header">
+                <h2>Tanlangan Mahsulotlar</h2>
+            </div>
+
+            <!-- Jadval scroll qilinadigan qism -->
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 10vh;">№</th>
+                            <th style="width: 20vh;">Rasm</th>
+                            <th style="width: 35vh;">Nomi</th>
+                            <th style="width: 23vh;">Soni</th>
+                            <th style="max-width: 12vh;">O'chirish</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderTableBody">
+                        <!-- JS orqali tanlangan mahsulotlar qo'shiladi -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="sessionBtn">
+                    <button class="createBtn">+ Yaratish</button>
+                </div>
+        </div>
+
+        <div class="menu-sidebar">
+            <h3>📋 Menu</h3>
+            <div class="search-div">
+                <img src="../img/icons8-search-50.png" alt="">
+                <input type="text" id="search-input" placeholder="search..">
+            </div>
+            <select id="productCategory">
+                <option value="all">Barchasi</option>
+
+            </select>
+            <ul id="menuList">
+                <!-- Mahsulotlar ro'yxati -->
+            </ul>
+        </div>
+    </div>
+    <script type="module" src="../renderer/sessions/open-session.js"></script>
+</body>
+
+</html>

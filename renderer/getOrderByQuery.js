@@ -1,17 +1,19 @@
-export async function getOrderByQuery(query){
+export async function getOrderByQuery(query) {
     try {
-        const queryString = new URLSearchParams(query).toString()
-        const response = await fetch(`http://localhost:3000/api/orders?${queryString}`);
-        
-        if (response.ok) {   // Agar status 200-299 orasida bo'lsa
-            const orders = await response.json(); // .json() qilish kerak
-            return orders;
-            
-        } else {
-            console.log("Buyurtmalar topilmadi.");
+        const qs = new URLSearchParams(query).toString();
+        const response = await fetch(`http://localhost:3000/api/orders?${qs}`);
+
+        if (!response.ok) {
+            throw new Error("Buyurtmalar topilmadi");
         }
+
+        const data = await response.json();
+        if (Array.isArray(data)) {
+            return data[0] || null;
+        }
+        return data;
     } catch (error) {
         console.error("Xatolik:", error);
+        return null;
     }
 }
-

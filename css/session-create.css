@@ -1,0 +1,327 @@
+/* session-create.css */
+
+/* Reset */
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: #b1aeae;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: inherit;
+}
+
+/* Layout */
+.container {
+    margin: 10px;
+    height: 728px;
+    display: flex;
+    gap: 20px;
+}
+
+.table-wrapper {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    border-radius: 10px;
+    background: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+.products-header {
+    padding: 12px 16px;
+    background-color: #fff;
+    border-bottom: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 4px 4px 8px rgba(34, 60, 80, 0.2);
+    text-align: center;
+}
+
+.products-header h2 {
+    margin: 0;
+    font-size: 20px;
+    color: #333;
+}
+
+/* Scrollable table area */
+.table-scroll {
+    flex: 1;
+    margin-top: 8px;
+    overflow-y: auto;
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+}
+
+.table-scroll table {
+    width: 100%;
+    min-width: 600px;
+    border-collapse: collapse;
+    border: 1px solid #ccc; 
+}
+
+/* Table cells & borders */
+.table-scroll th,
+.table-scroll td {
+    border: 1px solid #ccc;
+    padding: 8px 12px;
+    vertical-align: middle;
+    text-align: center;
+}
+
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    background-color: #fff;
+    font-weight: bold;
+    z-index: 1000;
+}
+
+.table-scroll tbody td.name {
+    text-align: left;
+    padding-left: 12px;
+}
+
+/* Row hover & delete cell */
+.table-scroll tbody tr:hover {
+    background-color: #fafafa;
+}
+
+
+.table-scroll table {
+  width: 100%;
+  border-collapse: collapse;      /* merge borders into one */
+  border: 1px solid #ccc;        /* outer border around the whole table */
+}
+
+.table-scroll th,
+.table-scroll td {
+  border: 1px solid #ccc;        /* grid lines between every cell */
+  padding: 8px 12px;             /* adjust to taste */
+}
+
+.table-scroll thead th {
+  background: #f5f5f5;           /* optional header styling */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+
+
+.table-scroll tbody td:last-child {
+    cursor: pointer;
+    color: #c00;
+    transition: color 0.2s;
+}
+
+.table-scroll tbody td:last-child:hover {
+    color: #900;
+}
+
+
+
+/* Quantity controls */
+.table-scroll button.decrement,
+.table-scroll button.increment {
+    padding: 4px 8px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    background-color: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.2s;
+    flex: 0 0 auto;
+}
+
+.table-scroll button.decrement:hover,
+.table-scroll button.increment:hover {
+    background-color: #e0e0e0;
+}
+
+.table-scroll input.quantity {
+    flex: 0 0 50px;
+    /* no grow, no shrink, 50px wide */
+    max-width: 60px;
+    padding: 4px;
+    margin: 0;
+    /* remove horizontal margins */
+    text-align: center;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+
+    /* hide native spinners */
+    appearance: none;
+    -moz-appearance: textfield;
+}
+
+.table-scroll input.quantity::-webkit-inner-spin-button,
+.table-scroll input.quantity::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Delete icon button */
+.delete-btn {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    color: #dc3545;
+    cursor: pointer;
+    transition: color 0.2s, transform 0.2s;
+}
+
+.delete-btn:hover {
+    color: #f1ebeb;
+    transform: scale(1.2);
+}
+
+/* Sidebar menu */
+.menu-sidebar {
+    flex: 1;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    background-color: #fff;
+    border-left: 1px solid #ccc;
+    border-radius: 10px;
+    box-shadow: 4px 4px 8px rgba(34, 60, 80, 0.2);
+}
+
+.menu-sidebar h3 {
+    margin: 0 0 12px;
+    text-align: center;
+    font-size: 18px;
+    color: #333;
+}
+
+/* Search box */
+.menu-sidebar .search-div {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    margin-bottom: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.menu-sidebar .search-div img {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+}
+
+.menu-sidebar .search-div input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    background: transparent;
+}
+
+.menu-sidebar .search-div input::placeholder {
+    color: #888;
+}
+
+.menu-sidebar .search-div:focus-within {
+    border-color: #66afe9;
+    box-shadow: 0 0 4px rgba(102, 175, 233, 0.5);
+}
+
+/* Category & portion selects */
+#productCategory,
+.portionSelect {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 16px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.portionSelect {
+    font-weight: bold;
+}
+
+/* Menu list */
+.menu-sidebar ul {
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow-y: auto;
+}
+
+#menuList li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    font-size: 18px;
+    cursor: pointer;
+    transition: background-color 0.3s, box-shadow 0.2s;
+}
+
+#menuList li:hover {
+    background-color: #e9e9e9;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+}
+
+#menuList img {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    margin-left: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    transition: transform 0.2s;
+}
+
+#menuList li:hover img {
+    transform: scale(1.1);
+}
+
+.sessionBtn{
+    display: flex;
+    justify-content: right;
+    padding: 10px 0;
+    margin: 8px;
+}
+
+.createBtn {
+    width: 33%;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 24px;
+    font-weight: bold;
+    transition: background-color 0.3s;
+    background-color: #28a745;
+    color: white;
+}
+
+.createBtn:hover{
+    opacity: 0.9;
+}
+
+.createBtn:active{
+    transform: scale(0.97);
+}

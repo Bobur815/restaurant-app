@@ -1,25 +1,30 @@
-
 import { showAlert } from "../utils/alert.js";
 import setStartDate from "../utils/setReportDate.js";
+
+const echartsLib = window.echarts;
 
 
 let salesChart = null;
 let productPieChart = null;
+const clickSound = new Audio(new URL('../sounds/mixkit.wav', import.meta.url));
+clickSound.preload = 'auto';
 
 export async function loadReportsPage() {
-  const typeEl     = document.getElementById('reportType');
-  const startDate  = document.getElementById('startDate');
-  const endDate    = document.getElementById('endDate');
-  const genBtn     = document.getElementById('generateBtn');
-  const printBtn   = document.getElementById('printBtn');
-  const out        = document.getElementById('reportResult');
+  const typeEl = document.getElementById('reportType');
+  const startDate = document.getElementById('startDate');
+  const endDate = document.getElementById('endDate');
+  const genBtn = document.getElementById('generateBtn');
+  const printBtn = document.getElementById('printBtn');
+  const out = document.getElementById('reportResult');
 
   const today = new Date().toISOString().split('T')[0];
   startDate.value = today;
   endDate.value = today;
-  
+
   typeEl.addEventListener('change', () => {
-    if(typeEl.value === 'custom'){
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => { });
+    if (typeEl.value === 'custom') {
       startDate.disabled = false
       endDate.disabled = false
     } else {
@@ -32,11 +37,13 @@ export async function loadReportsPage() {
   typeEl.dispatchEvent(new Event('change'));
 
   genBtn.addEventListener('click', async () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => { });
     const params = new URLSearchParams();
 
     params.set('start', startDate.value);
-    params.set('end',   endDate.value);
-    
+    params.set('end', endDate.value);
+
     // 2) Fetch the time‐series report
     let timeData;
     try {
@@ -49,7 +56,7 @@ export async function loadReportsPage() {
     } catch {
       return showAlert("🚫 Tarmoq muammosi. Iltimos, qayta urinib ko‘ring.");
     }
-    
+
     // 3) No results?
     if (!timeData) {
       out.innerHTML = '<p>Natija topilmadi.</p>';
@@ -58,8 +65,10 @@ export async function loadReportsPage() {
     }
 
     // 4) Render table and sales chart
-    out.innerHTML = renderReportTable(timeData.daily, typeEl.value);
-    renderSalesChart(timeData, typeEl.value);
+    out.innerHTML = renderSimpleTable(timeData.daily, typeEl.value);
+    // renderSalesEChart(timeData.daily, typeEl.value);
+    // renderStackedEChart(timeData.daily, timeData.productsByDate);
+    // renderSalesChart(timeData, typeEl.value);
 
     // // 5) Fetch product‐breakdown pie data
     // const prodParams = new URLSearchParams({
@@ -83,7 +92,11 @@ export async function loadReportsPage() {
     // renderProductPieChart(productData);
   });
 
-  printBtn.addEventListener('click', () => window.print());
+  printBtn.addEventListener('click', () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/*ignore*/ });
+    window.print()
+  });
 }
 
 
@@ -98,26 +111,35 @@ function destroyCharts() {
     productPieChart = null;
   }
 }
+// ### Chiziqli graﬁk (line) ECharts bilan ###
+// function renderSalesEChart(data, type) {
+//   const dom = document.getElementById('salesChart');
+//   // avval destroy qiling agar oldin bo‘lsa
+//   if (salesChart) {
+//     salesChart.dispose();
+//   }
+//   console.log(echartsLib);
+//   salesChart = echartsLib.init(dom);
 
-function renderSalesChart(data, type) {
-  const ctx = document.getElementById('salesChart').getContext('2d');
-  if (salesChart) {
-    salesChart.destroy();
-  }
+//   const labels = data.map(r => formatDMY(r.payment_date));
+//   const totals = data.map(r => r.totalSumOfEachDay || 0);
 
-  const labels = data.daily.map(r => r.productName);
-  const totals = data.daily.map(r => r.totalSumOfEachDay);
+//   const option = {
+//     title: { text: `Savdo hisobot (${type})` },
+//     tooltip: { trigger: 'axis' },
+//     xAxis: { type: 'category', data: labels },
+//     yAxis: { type: 'value', axisLabel: { formatter: v => v.toLocaleString() } },
+//     series: [{
+//       name: 'Jami summa',
+//       type: 'line',
+//       data: totals,
+//       smooth: true
+//     }]
+//   };
 
-  salesChart = new Chart(ctx, {
-    type: 'line',
-    data: { labels, datasets: [{ label: 'Jami summa', data: totals, fill: false, borderWidth: 2, tension: 0.1 }] },
-    options: {
-      responsive: true,
-      plugins: { title: { display: true, text: `Savdo hisobot (${type})` } },
-      scales: { y: { ticks: { callback: v => v.toLocaleString() } } }
-    }
-  });
-}
+//   salesChart.setOption(option);
+// }
+
 
 // pie chart of product quantities
 // function renderProductPieChart(products) {
@@ -150,51 +172,41 @@ function renderSalesChart(data, type) {
 //   });
 // }
 
-// render plain HTML table
-function renderReportTable(data, type) {
-  
-  const label = {
-    daily:   'Kun',
-    weekly:  'Hafta',
-    monthly: 'Oy',
-    yearly:  'Yil',
-    fromMonth: 'Oy boshidan',
-    fromYear: 'Yil Boshidan',
-    custom:  'Sana'
-  }[type];
+function formatDMY(dateStr) {
+  const [year, month, day] = dateStr.split('-');
+  return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+}
 
+// soddaroq HTML jadval
+function renderSimpleTable(data, type) {
+  const label = {
+    daily: 'Kun',
+    weekly: 'Hafta',
+    monthly: 'Oy',
+    yearly: 'Yil',
+    fromMonth: 'Oy boshidan',
+    fromYear: 'Yil boshidan',
+    custom: 'Sana'
+  }[type];
   const rows = data.map((r, i) => `
     <tr>
       <td>${i + 1}</td>
-      <td>${r.payment_date}</td>
+      <td>${formatDMY(r.payment_date)}</td>
       <td>${r.numberOfOrders}</td>
-      <td>${(r.totalSumOfEachDay ?? 0).toLocaleString()} so'm</td>
+      <td>${(r.totalSumOfEachDay || 0).toLocaleString()} so'm</td>
     </tr>
   `).join('');
-
-  // compute totals
-  const totalOrders = data.reduce((sum, r) => sum + (r.numberOfOrders ?? 0), 0);
-  const totalSum    = data.reduce((sum, r) => sum + (r.totalSumOfEachDay ?? 0), 0);
-
+  const totalOrders = data.reduce((s, r) => s + (r.numberOfOrders || 0), 0);
+  const totalSum = data.reduce((s, r) => s + (r.totalSumOfEachDay || 0), 0);
   return `
     <table class="report-table">
       <thead>
         <tr>
-          <th>№</th>
-          <th>${label}</th>
-          <th>Buyurtmalar soni</th>
-          <th>Jami summa</th>
+          <th>№</th><th>${label}</th><th>Buyurtmalar</th><th>Jami summa</th>
         </tr>
       </thead>
-      <tbody>
-        ${rows}
-      </tbody>
-      <tfoot style="
-          position: sticky;
-          bottom: 0;
-          background: #fff;
-          box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-        ">
+      <tbody>${rows}</tbody>
+      <tfoot>
         <tr>
           <th colspan="2">Jami:</th>
           <th>${totalOrders}</th>
@@ -204,3 +216,40 @@ function renderReportTable(data, type) {
     </table>
   `;
 }
+
+// ### Stacked bar ECharts bilan ###
+// function renderStackedEChart(daily, productsByDate) {
+//   const dom = document.getElementById('productStackedChart');
+//   if (stackedChart) {
+//     stackedChart.dispose();
+//   }
+//   stackedChart = echartsLib.init(dom);
+
+//   const labels = daily.map(r => formatDMY(r.payment_date));
+//   const productNames = Array.from(new Set(
+//     productsByDate.flatMap(g => g.products.map(p => p.productName))
+//   ));
+
+//   const series = productNames.map(name => ({
+//     name,
+//     type: 'bar',
+//     stack: 'total',
+//     emphasis: { focus: 'series' },
+//     data: daily.map(r => {
+//       const grp = productsByDate.find(g => g.date === r.payment_date);
+//       return grp?.products.find(p => p.productName === name)?.quantitySold || 0;
+//     })
+//   }));
+
+//   const option = {
+//     title: { text: 'Mahsulot bo‘yicha kunlik sotuvlar' },
+//     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+//     legend: { data: productNames },
+//     xAxis: { type: 'category', data: labels },
+//     yAxis: { type: 'value' },
+//     series
+//   };
+
+//   stackedChart.setOption(option);
+// }
+

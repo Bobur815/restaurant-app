@@ -3,10 +3,10 @@ import menuService from "../service/Menu.service.js";
 import CustomError from "../utils/CustomError.js";
 import { Validators } from "../utils/Joi.validation.js";
 
-class MenuController{
-    constructor(){}
+class MenuController {
+    constructor() { }
 
-    async getAllItems(req,res,next){
+    async getAllItems(req, res, next) {
         try {
             const menuItems = await menuService.getMenu()
             res.status(200).json(menuItems)
@@ -15,10 +15,10 @@ class MenuController{
         }
     }
 
-    async GET_BY_ID(req,res,next){
+    async GET_BY_ID(req, res, next) {
         try {
             const item = await menuService.getById(req.params.dish_id)
-            if(!item){
+            if (!item) {
                 throw new CustomError("No menu items found", 404, "NotFoundError");
             }
 
@@ -28,26 +28,27 @@ class MenuController{
         }
     }
 
-    async GET_BY_CATEGORY (req,res,next){
+    async GET_FILTERED(req, res) {
         try {
-            const itemsByCategory = await menuService.getByCategory(req.params.category)
-            res.status(200).json(itemsByCategory)
-
-        } catch (error) {
-            next(error)
+            const { category = 'all', search = '' } = req.query;
+            const items = await menuService.getFiltered(category, search);
+            return res.json(items);
+        } catch (err) {
+            return res.status(500).json({ message: err.message });
         }
     }
 
-    async createItem(req,res,next){
+    async createItem(req, res, next) {
         try {
             const { error, value } = Validators.menuValidator.validate(req.body);
+
             if (error) {
                 throw new CustomError(error.details[0].message, 400, "ValidationError");
             }
 
             const createdItem = await menuService.createMenuItem(req.body)
             res.status(201).json({
-                message: "✅ Menu item qo'shildi!", 
+                message: "✅ Menu item qo'shildi!",
                 data: createdItem
             })
 
@@ -56,26 +57,26 @@ class MenuController{
         }
     }
 
-    async deleteItem(req,res,next){
+    async deleteItem(req, res, next) {
         try {
             const result = await menuService.deleteMenuItem(req.params.dish_id)
             res.status(200).json({
-                message:result
+                message: result
             })
         } catch (error) {
-            next(error)    
+            next(error)
         }
     }
 
-    async updateItem(req,res,next){
+    async updateItem(req, res, next) {
         try {
             const { error, value } = Validators.menuValidator.validate(req.body);
             if (error) {
                 throw new CustomError(error.details[0].message, 400, "ValidationError");
             }
-            const result = await menuService.updateMenuItem(req.body,req.params.dish_id)
+            const result = await menuService.updateMenuItem(req.body, req.params.dish_id)
             res.status(201).json({
-                message: "✅ Mahsulot o'zgartirildi!", 
+                message: "✅ Mahsulot o'zgartirildi!",
                 data: result
             })
 

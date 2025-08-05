@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kategoriyalar bo'limi</title>
+  <!-- Xuddi add-item.css’dagi kabi umumiy uslublar -->
+  <link rel="stylesheet" href="../css/add-item.css" />
+  <link rel="stylesheet" href="../css/category.settings.css">
+</head>
+
+<body>
+  <div class="category-settings">
+    <div class="table-wrapper">
+      <table class="category-table" aria-label="Kategoriyalar ro‘yxati">
+        <thead>
+          <tr>
+            <th class="col-number">#</th>
+            <th class="col-name">Nomi</th>
+            <th class="th2">O'zgartirish</th>
+            <th class="th3">O'chirish</th>
+          </tr>
+        </thead>
+        <tbody id="categoryTableBody">
+
+        </tbody>
+      </table>
+    </div>
+
+    <div class="category-actions">
+      <button type="button" id="addCategoryBtn" class="btn-add" aria-label="Yangi kategoriya qo‘shish">+ Yangi
+        kategoriya
+      </button>
+    </div>
+  </div>
+
+  <div id="categoryModal" class="modal hidden">
+    <div class="modal-content">
+      <h3 id="modalTitle">Kategoriya qo‘shish</h3>
+      <input type="text" id="categoryNameInput" placeholder="Kategoriya nomi">
+      <button id="saveCategoryBtn">Saqlash</button>
+      <button id="closeModalBtn">Bekor qilish</button>
+    </div>
+  </div>
+  <script type="module" src="../renderer/category.settings.js"></script>
+</body>
+
+</html>

@@ -1,4 +1,4 @@
-import { Schema, model } from "mongoose";
+import { Schema, Types, model } from "mongoose";
 
 const menuSchema = new Schema({
   name: {
@@ -21,11 +21,10 @@ const menuSchema = new Schema({
     type: String,
     default: null
   },
-  category: {
-    type: String,
-    required: true,
-    maxlength: 20,
-    trim: true
+  categoryId: {
+    type: Types.ObjectId,
+    ref:'Category',
+    required: true
   },
   portions: {
     type: Boolean,

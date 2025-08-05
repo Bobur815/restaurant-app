@@ -244,3 +244,23 @@
 #editModal .close-btn:hover {
   background-color: rgba(239, 110, 110, 0.1);
 }
+
+/* Header ustuniga */
+.check-table thead th.col-date,
+.check-table tbody td.col-date {
+  background-color: #d8dbd8;
+  /* matn rangi ham oq bo‘lsa o‘qilishi oson: */
+}
+
+/* Stol ustuniga */
+.check-table thead th.col-table,
+.check-table tbody td.col-table {
+  background-color: #d8dbd8;
+}
+
+/* Summa ustuniga */
+.check-table thead th.col-amount,
+.check-table tbody td.col-amount {
+  background-color: #d8dbd8;
+}
+

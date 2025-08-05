@@ -1,7 +1,8 @@
 import { getOrdersOfTable } from "./ordersOfTable.js";
 import cancelOrder from "./cancelOrder.js";
-import { showAlert } from "../utils/alert.js";
+import { showAlert, showConfirm } from "../utils/alert.js";
 import { renderTables, renderMenuItems, attachOrderButtons  } from "./orderPageHelpers.js";
+import { categoryOptions } from "./add-load-category.js";
 
 
 
@@ -10,6 +11,9 @@ let table_number;
 let grandTotal = 0;
 
 let payBtn, orderBtn, cancelBtn;
+const clickSound = new Audio(new URL('../sounds/mixkit.wav', import.meta.url));
+clickSound.preload = 'auto';
+
 
 function selectProduct(item) {
     return new Promise((resolve) => {
@@ -90,6 +94,8 @@ function selectProduct(item) {
         }
 
         incrementBtn.addEventListener('click', () => {
+            clickSound.currentTime = 0;
+            clickSound.play().catch(() => {});
             qtySpan.textContent = parseInt(qtySpan.textContent) + 1;
             const portionMultiplier = portion_Select ? parseFloat(portion_Select.value) : 1;
             totalCell.textContent = parseInt(qtySpan.textContent) * item.price * portionMultiplier;
@@ -97,6 +103,8 @@ function selectProduct(item) {
         });
 
         decrementBtn.addEventListener('click', () => {
+            clickSound.currentTime = 0;
+            clickSound.play().catch(() => {});
             if (parseInt(qtySpan.textContent) > 1) {
                 qtySpan.textContent = parseInt(qtySpan.textContent) - 1;
                 const portionMultiplier = portion_Select ? parseFloat(portion_Select.value) : 1;
@@ -106,13 +114,14 @@ function selectProduct(item) {
         });
 
         deleteBtn.addEventListener('click', async () => {
+            clickSound.currentTime = 0;
+            clickSound.play().catch(() => {});
             row.remove();
             updateGrandTotal();
             payBtn.disabled = true;
 
             if (tableBody.querySelectorAll('tr').length === 0) {
-                const confirmCancel = confirm("Stoldagi barcha buyurtmalar o‘chirildi. Buyurtmani bekor qilmoqchimisiz?");
-                if (confirmCancel) {
+                if (await showConfirm("Stoldagi barcha buyurtmalar o‘chirildi. Buyurtmani bekor qilmoqchimisiz?")) {
                     await cancelOrder(table_number);
                     goingBack();
                     cancelBtn.disabled = true;
@@ -175,6 +184,8 @@ async function selectTable(tableNumber) {
     document.getElementById('pageTitle').innerText = '';
 
     document.getElementById('backButton').addEventListener('click', () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(() => {});
         goingBack();
     });
 }
@@ -192,7 +203,7 @@ function goingBack(){
         loadOrderPage(table_count);
 }
 
-export function loadOrderPage(newTableCount) {
+export async function loadOrderPage(newTableCount) {
     
     table_count = newTableCount; // ⬅️ Yangi qiymatni saqlab qolamiz
     const menuList = document.getElementById('menuList');
@@ -201,17 +212,20 @@ export function loadOrderPage(newTableCount) {
     orderBtn = document.querySelector('.order-btn');
     cancelBtn = document.querySelector('.cancel-order');
     payBtn = document.querySelector('.pay-btn');
-    
+    categorySelect.innerHTML = ''
+    await categoryOptions(categorySelect)
     // Render the tables
     renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfTable, selectTable, goingBack);
 
     // Initial render for default category
-    renderMenuItems('Ovqatlar', menuList, payBtn, selectProduct);
+    renderMenuItems({category: 'Ovqatlar'}, menuList, payBtn, selectProduct);
 
     // Re-render menu when category changes
     categorySelect.addEventListener('change', () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(() => {});
         const selectedCategory = categorySelect.value;
-        renderMenuItems(selectedCategory, menuList, payBtn, selectProduct);
+        renderMenuItems({category:selectedCategory}, menuList, payBtn, selectProduct);
     });
     
 }

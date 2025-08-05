@@ -1,9 +1,14 @@
 // === main.js ===
-import { app, ipcMain, BrowserWindow } from 'electron';
+import { app, ipcMain, BrowserWindow, dialog } from 'electron';
 import { createLoginWindow } from './login.page.js';
 import { createMainWindow } from './main.page.js';
 import path from 'path';
 import url from 'url';
+import fs from 'fs'
+import { categoryWindow } from './category-window.js';
+import { sessionWindow } from './sessionAdd-window.js';
+
+let mainWindow;
 
 // Electron reload in development
 if (process.env.NODE_ENV !== 'production') {
@@ -16,7 +21,13 @@ if (process.env.NODE_ENV !== 'production') {
 
   reload(__dirname, {
     electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-    watchRenderer: true
+    watchRenderer: true,
+
+    // ← Prevent reload when files change in your backend or log directories:
+    ignored: [
+      '**/backend/**',
+      '**/*.log'
+    ]
   });
 }
 
@@ -50,6 +61,38 @@ function createPaymentWindow(order,parentWindow) {
   return win;
 }
 
+function createAddWindow(parent) {
+
+  const addWin = new BrowserWindow({
+    width: 950,
+    height: 550,
+    parent,            
+    modal: true,       
+    autoHideMenuBar: true,
+    resizable: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false
+    }
+  });
+
+  addWin.loadFile(path.join(__dirname, 'html/add-item.html'));
+  return addWin;
+}
+
+ipcMain.handle('dialog:openImage', async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Rasm tanlang",
+    defaultPath: "/home/boburmirzo/restaurant-app/img",
+    properties: ['openFile'],
+    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif'] }]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
+});
+
 // Listen to renderer event to open payment window
 ipcMain.on('open-payment-window', (event, order) => {
   const parentWindow = BrowserWindow.getFocusedWindow();
@@ -70,7 +113,39 @@ ipcMain.on('open-payment-window', (event, order) => {
 
 // Electron lifecycle
 app.whenReady().then(() => {
-  createMainWindow(); 
+  mainWindow = createMainWindow(); 
+});
+
+ipcMain.handle('open-add-window', (event, dish) => {
+  const parent = BrowserWindow.fromWebContents(event.sender)
+  const win = createAddWindow(parent)
+  
+  if(dish){
+    win.webContents.once('did-finish-load', ()=> {
+      win.webContents.send('load-dish', dish)
+    })
+  }
+  // use the focused window (your main menu window) as parent
+  return true
+});
+
+ipcMain.handle('open-category-window', (event) => {
+  const parent = BrowserWindow.fromWebContents(event.sender)
+  const win = categoryWindow(parent)
+  return true
+})
+
+ipcMain.handle('open-session-window', (e) => {
+  const parent = BrowserWindow.fromWebContents(e.sender)
+  sessionWindow(parent)
+  return true
+})
+
+ipcMain.on('menu-updated', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // send a 'reload-menu' event into the main menu renderer
+    mainWindow.webContents.send('reload-menu');
+  }
 });
 
 app.on('activate', () => {

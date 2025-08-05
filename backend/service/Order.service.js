@@ -9,6 +9,7 @@ const uzbekistanTime = () => {
 };
 
 class OrderService {
+
   async getOrdersOfTable(table_number) {
 
     const orders = await OrderItemModel.aggregate([
@@ -50,18 +51,39 @@ class OrderService {
     return orders;
   }
 
-  async getOrder(query){
-    const order = await OrdersModel.find(query)
-    return order
+  async getOrder(query) {
+    
+    // 1) load the order itself
+    const order = await OrdersModel
+      .findOne(query)
+      .lean()
+      .exec();
+    
+    if (!order) {
+      throw new CustomError("Order not found", 404, "NotFoundError");
+    }
+
+    // 2) load all order‐items for that order, populating each menu_id
+    const items = await OrderItemModel
+      .find({ order_id: order._id })          // match FK
+      .populate("menu_id", "name image_url price")  // only these fields
+      .lean()
+      .exec();
+
+    // 3) merge and return
+    return {
+      ...order,
+      items
+    };
   }
 
-  async createOrder(data){
+  async createOrder(data) {
     const { table_number, total_amount, payment_method, items } = data;
 
     const order = await OrdersModel.create({
-        table_number,
-        total_amount,
-        payment_method
+      table_number,
+      total_amount,
+      payment_method
     })
 
     const order_id = order._id;
@@ -80,24 +102,27 @@ class OrderService {
     return "✅ Ordersga item qo'shildi!"
   }
 
-  async changeStatusofOrder(order_id,status){
+  async changeStatusofOrder(order_id, status) {
     const order = await OrdersModel.findById(order_id)
-    if(!order){
-      throw new CustomError("❌ Buyurtma topilmadi!",404,"NotFoundError");
+    if (!order) {
+      throw new CustomError("❌ Buyurtma topilmadi!", 404, "NotFoundError");
     }
 
     order.status = status;
     await order.save()
-    return "✅ Buyurtma muvaffaqqiyatli yangilandi!"
+    return {
+      data: order,
+      message: "✅ Buyurtma muvaffaqqiyatli yangilandi!"
+    }
   }
 
-  async updateOrder(data){
+  async updateOrder(data) {
     const { table_number, total_amount, payment_method, items } = data;
 
-    const order = await OrdersModel.findOne({table_number, status: 'pending'});
+    const order = await OrdersModel.findOne({ table_number, status: 'pending' });
 
-    if(!order){
-        throw new CustomError("❌ Buyurtma topilmadi!",404,"NotFoundError");
+    if (!order) {
+      throw new CustomError("❌ Buyurtma topilmadi!", 404, "NotFoundError");
     }
 
     const order_id = order._id
@@ -108,26 +133,26 @@ class OrderService {
     await OrderItemModel.deleteMany({ order_id });
 
     const newItems = items.map(item => ({
-        order_id,
-        menu_id: item.menu_id,
-        quantity: item.quantity,
-        price: item.price,
-        portions: item.portions,
-        updatedAt: uzbekistanTime()
-      }));
+      order_id,
+      menu_id: item.menu_id,
+      quantity: item.quantity,
+      price: item.price,
+      portions: item.portions,
+      updatedAt: uzbekistanTime()
+    }));
 
-      await OrderItemModel.insertMany(newItems);
+    await OrderItemModel.insertMany(newItems);
 
-      return order_id;
+    return order_id;
   }
 
-  async cancelOrder(table_number){
+  async cancelOrder(table_number) {
 
     // Step 1: Pending holatdagi buyurtmani topish
     const order = await OrdersModel.findOne({ table_number, status: "pending" });
 
     if (!order) {
-      throw new CustomError("❌ Bekor qilinadigan buyurtma topilmadi.",404, "NotFoundError");
+      return ("❌ Bekor qilinadigan buyurtma topilmadi.");
     }
 
     const order_id = order._id;

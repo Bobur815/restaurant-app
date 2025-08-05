@@ -28,6 +28,15 @@
       <option value="pending">🕒 Nasiya</option>
       <option value="refunded">🔄 Qaytarildi</option>
     </select>
+    <select id="orderByType">
+      <option value="table_number">🪑 Stol</option>
+      <option value="payment_date">📆 Sana</option>
+      <option value="amount">💰 Summa</option>
+    </select>
+    <select id="orderDirection">
+      <option value="asc">↗️ Ko'payish</option>
+      <option value="desc">↘️ Kamayish</option>
+    </select>
     <button id="filterBtn">🔍 Qidirish</button>
     <button id="refreshBtn">🔁 Yangilash</button>
   </div>
@@ -38,9 +47,9 @@
         <tr>
           <th>№</th>
           <th>Buyurtma ID</th>
-          <th>📆 Sana</th>
-          <th>🪑 Stol</th>
-          <th>💰 Summa</th>
+          <th class="col-date">📆 Sana</th>
+          <th class="col-table">🪑 Stol</th>
+          <th class="col-amount">💰 Summa</th>
           <th>💳 To‘lov turi</th>
           <th>✅ Holati</th>
           <th>Tahrirlash</th>

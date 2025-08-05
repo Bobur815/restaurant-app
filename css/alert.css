@@ -1,27 +1,73 @@
-.modal {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0,0,0,0.3);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 999;
-  }
-  .modal-content {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-  }
-  .hidden {
-    display: none;
-  }
-#cancelAlertBtn{
-    background-color: brown;
-    color: white;
-}  
-#confirmAlertBtn{
-    background-color: rgb(58, 178, 49);
-    color: white;
-}  
+/* alert.css */
+
+/* Overlay */
+#customAlert.modal:not(.hidden) {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.5);
+  display: flex;               /* only when not .hidden */
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+/* Dialog box */
+#customAlert.modal .modal-content {
+  background: #2b2b2b;               /* dark charcoal */
+  color: #f0f0f0;                    /* light text */
+  padding: 20px 24px;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  min-width: 300px;
+  max-width: 90%;
+  font-family: Arial, sans-serif;
+}
+
+/* Message */
+#customAlert p#alertMessage {
+  margin: 0 0 16px;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+/* Button container */
+#customAlert .modal-content div {
+  text-align: right;
+}
+
+/* Common button styles */
+#customAlert button {
+  min-width: 80px;
+  padding: 8px 16px;
+  margin-left: 8px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+/* Cancel (Bekor qilish) */
+#cancelAlertBtn {
+  background: #a33;      /* deep red/brown */
+  color: #fff;
+}
+#cancelAlertBtn:hover {
+  background: #c55;
+}
+
+/* Confirm (OK) */
+#confirmAlertBtn {
+  background: #3ab231;   /* bright green */
+  color: #fff;
+}
+#confirmAlertBtn:hover {
+  background: #2e9824;
+}
+
+/* Hide by default */
+.hidden {
+  display: none;
+}
+
