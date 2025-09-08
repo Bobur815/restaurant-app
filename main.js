@@ -4,7 +4,6 @@ import { createLoginWindow } from './login.page.js';
 import { createMainWindow } from './main.page.js';
 import path from 'path';
 import url from 'url';
-import fs from 'fs'
 import { categoryWindow } from './category-window.js';
 import { sessionWindow } from './sessionAdd-window.js';
 
@@ -135,11 +134,18 @@ ipcMain.handle('open-category-window', (event) => {
   return true
 })
 
-ipcMain.handle('open-session-window', (e) => {
-  const parent = BrowserWindow.fromWebContents(e.sender)
-  sessionWindow(parent)
-  return true
-})
+ipcMain.handle('open-session-window', (e, { mode = 'create', sessionId = null } = {}) => {
+  const parent = BrowserWindow.fromWebContents(e.sender);
+  sessionWindow(parent, { mode, sessionId });   // ⬅️ forward
+  return true;
+});
+
+// Child oyna saqlaganda parent’ni yangilash uchun relay
+ipcMain.on('session-updated', (e) => {
+  const child  = BrowserWindow.fromWebContents(e.sender);
+  const parent = child?.getParentWindow();
+  if (parent) parent.webContents.send('session-updated');
+});
 
 ipcMain.on('menu-updated', () => {
   if (mainWindow && !mainWindow.isDestroyed()) {
@@ -152,6 +158,11 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createLoginWindow();
   }
+});
+
+ipcMain.on("window:close", (event) => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (win) win.close();
 });
 
 app.on('window-all-closed', () => {

@@ -1,5 +1,6 @@
 export async function categoryOptions(category){
     const categories = await loadAllCategories()
+    category.innerHTML += `<option value="all">Hammasi</option>`
     for (let cat of categories){
         category.innerHTML += `<option value="${cat._id}">${cat.name}</option>`
     }

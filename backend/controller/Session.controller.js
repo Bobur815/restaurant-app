@@ -15,6 +15,7 @@ class SessionController {
             }
             
             const sessions = await sessionService.getAll(filter);
+            
             res.status(200).json(sessions);
         } catch (error) {
             next(error);
@@ -46,6 +47,8 @@ class SessionController {
                 );
             }
             const newSession = await sessionService.create(value);
+            
+            
             res.status(201).json({
                 message: "✅ New session started",
                 data: newSession
@@ -81,7 +84,7 @@ class SessionController {
 
     async close(req, res, next) {
         try {
-            const closed = await sessionService.close(req.params.sessionId);
+            const closed = await sessionService.close(req.params.sessionId, req.body || {});
             if (!closed) {
                 return res.status(404).json({ message: "Session not found" });
             }

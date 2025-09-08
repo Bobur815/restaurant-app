@@ -62,16 +62,21 @@ body {
   font-size: 25px;
   padding: 15px 20px;
   cursor: pointer;
+   font-weight: bold;
 }
 
 .sidebar li.active {
   background-color: #f8f9fa;
   color: #343a40;
-  font-weight: bold;
+ 
 }
 
 .sidebar li:hover {
   background-color: #495057;
+}
+
+.sidebar li.active:hover {
+  color: white;
 }
 
 .main-content {

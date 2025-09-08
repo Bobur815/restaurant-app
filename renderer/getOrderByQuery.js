@@ -4,7 +4,7 @@ export async function getOrderByQuery(query) {
         const response = await fetch(`http://localhost:3000/api/orders?${qs}`);
 
         if (!response.ok) {
-            throw new Error("Buyurtmalar topilmadi");
+            return console.log(response);
         }
 
         const data = await response.json();

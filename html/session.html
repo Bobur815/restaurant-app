@@ -5,13 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="../css/sessions.css">
-    <title>Sessiyalar</title>
+    <title>Smenalar</title>
 </head>
 
 <body>
     <div class="header">
-        <h1><img src="../img/icons8-session-timeout-50.png" alt=""> Sessiyalar</h1>
-        <button class="add-btn" id="session-open-btn">+ Sessiyani ochish</button>
+        <h1><img src="../img/icons8-session-timeout-50.png" alt=""> Smenalar</h1>
+        <button class="add-btn" id="session-open-btn">+ Smenani ochish</button>
     </div>
 
     <div class="main-div">
@@ -25,8 +25,11 @@
         </div>
 
         <div class="table-wrapper">
+            <h2>🟢 Ochiq Smenalar</h2>
             <table class="session-table">
                 <thead>
+                    <tr id="openSessionDate"
+                        style=" background-color: rgb(171, 220, 171); padding: 10px 8px; font-size: 17px;"></tr>
                     <tr>
                         <th>№</th>
                         <th>Rasm</th>
@@ -34,24 +37,35 @@
                         <th>Boshlang'ich soni</th>
                         <th>Sotilgani</th>
                         <th>Qoldiq</th>
-                        <th>✅ Holati</th>
-                        <th>Tahrirlash</th>
-                        <th>O'chirish</th>
-                        <th>Chop etish</th>
                     </tr>
                 </thead>
-                <tbody id="sessionList">
+
+                <tbody id="openSessionList">
                     <!-- dynamic rows will be inserted here -->
                 </tbody>
-                <!-- <tfoot>
-                    <tr>
-                        <td></td>
-                        <td colspan="3"><strong>Jami:</strong></td>
-                        <td id="totalAmount"><strong>0 so'm</strong></td>
-                        <td colspan="5"></td>
-                    </tr>
-                </tfoot> -->
             </table>
+            <div class="session-actions">
+                <button class="session-close-btn"><img src="../img/icons8-finish-100.png" alt=""> Yopish</button>
+                <button class="edit-btn">✏️ Tahrirlash</button>
+                <button class="delete-btn">🗑️ O'chirish</button>
+                <button class="print-btn">🖨️ Chop etish</button>
+            </div>
+        </div>
+
+        <!-- YOPILGAN SMENALAR WRAPPER -->
+        <div class="table-wrapper">
+            <h2>🔴 Yopilgan Smenalar</h2>
+            <!-- Umumiy header qatlamini ushlab qolamiz -->
+            <table class="session-table">
+                <thead>
+                    <tr id="closeSessionDate"
+                        style=" background-color: rgb(171, 220, 171); padding: 10px 8px; font-size: 17px;"></tr>
+                    
+                </thead>
+            </table>
+
+            <!-- Har bir YOPILGAN smena shu konteyner ichida ALOHIDA card/table bo‘lib render qilinadi -->
+            <div id="closedSessionsContainer"></div>
         </div>
     </div>
 

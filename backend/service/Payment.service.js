@@ -17,7 +17,7 @@ class PaymentService {
     } else if (filter.orderByType === 'amount') {
       sortKey = 'amount';
     } else {
-      // agar noto‘g‘ri kelgan bo‘lsa, default bo‘yicha sana bo‘yicha kamayish
+      // agar noto‘g‘ri kelgan bo‘lsa, default bo‘yicha sana bo‘yicha ko'payish
       sortKey = 'payment_date';
     }
     const start = new Date(filter.startDate);
@@ -96,7 +96,7 @@ class PaymentService {
 
 
   async getReports(query) {
-    const { start, end } = query;
+    const { start, end, bytype = 'payment_date', direction = 'asc' } = query;
     if (!start || !end) throw new CustomError("start and end required", 400, "BadRequest");
 
     const startDate = new Date(start);
@@ -105,7 +105,24 @@ class PaymentService {
 
     const dateMatch = { payment_date: { $gte: startDate, $lte: endDate } };
 
-    // 1) Har-sana bo‘yicha mahsulotlar
+    // --- whitelist & mapping ---
+    const byWhitelist = new Set(['payment_date', 'amount']);
+    const dir = direction === 'desc' ? -1 : 1;
+    const by = byWhitelist.has(bytype) ? bytype : 'payment_date';
+
+    // qaysi maydon bo‘yicha sort qilamiz?
+    // 'amount' => totalSumOfEachDay; 'payment_date' => payment_date
+    const sortField = by === 'amount' ? 'totalSumOfEachDay' : 'payment_date';
+
+
+    // ---- sortSpec ni to‘g‘ri quramiz
+    const sortSpec = {};
+    sortSpec[sortField] = dir;
+    // faqat amount bo‘lsa ikkilamchi tartib sifatida sanani qo‘shamiz
+    if (sortField !== 'payment_date') {
+      sortSpec['payment_date'] = 1;
+    }
+    // 1) Mahsulotlar bo‘yicha (o‘zizdagi kabi)
     const productsByDate = await PaymentsModel.aggregate([
       { $match: dateMatch },
       {
@@ -126,7 +143,6 @@ class PaymentService {
           quantitySold: { $sum: '$items.quantity' }
         }
       },
-      // nomini olish
       {
         $lookup: {
           from: 'menus',
@@ -144,47 +160,48 @@ class PaymentService {
           quantitySold: 1
         }
       },
-      // Birdaniga sanaga qarab guruhlash va arrayga to‘plash
       {
         $group: {
           _id: '$date',
-          products: {
-            $push: {
-              productName: '$productName',
-              quantitySold: '$quantitySold'
-            }
-          }
+          products: { $push: { productName: '$productName', quantitySold: '$quantitySold' } }
         }
       },
-      {
-        $project: {
-          _id: 0,
-          date: '$_id',
-          products: 1
-        }
-      },
-      { $sort: { date: 1 } }
+      { $project: { _id: 0, date: '$_id', products: 1 } },
+      { $sort: { date: 1 } } // bu qismini o‘zgartirmadik
     ]);
 
-    // 2) Kunlik umumiy sotuvlar
+    // 2) Kunlik umumiy + breakdown
     const daily = await PaymentsModel.aggregate([
       { $match: dateMatch },
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$payment_date' } },
-          numberOfOrders: { $sum: 1 },
-          totalSumOfEachDay: { $sum: '$amount' }
+
+          numberOfPayments: { $sum: 1 },
+          totalSumOfEachDay: { $sum: '$amount' },
+
+          cashSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'cash'] }, '$amount', 0] } },
+          cardSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'card'] }, '$amount', 0] } },
+          clickSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'click'] }, '$amount', 0] } },
+          creditSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'debt'] }, '$amount', 0] } },
         }
       },
+      { $addFields: { plasticSum: { $add: ['$cardSum', '$clickSum'] } } },
       {
         $project: {
           _id: 0,
           payment_date: '$_id',
-          numberOfOrders: 1,
-          totalSumOfEachDay: 1
+          numberOfOrders: '$numberOfPayments',
+          totalSumOfEachDay: 1,
+          cashSum: 1,
+          cardSum: 1,
+          clickSum: 1,
+          plasticSum: 1,
+          creditSum: 1
         }
       },
-      { $sort: { payment_date: 1 } }
+      // --- dinamik sort ---
+      { $sort: sortSpec} // ikkilamchi qat'iy tartib sifatida sana
     ]);
 
     return { daily, productsByDate };
@@ -230,7 +247,7 @@ class PaymentService {
       data.order_id,
       "completed"
     );
-    
+
     // 3) re-fetch the fully-populated order
     const fullOrder = await orderService.getOrder({ _id: order.data._id });
 

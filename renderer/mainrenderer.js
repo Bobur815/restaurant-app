@@ -2,6 +2,7 @@ import { PORTIONS } from '../utils/config_porsiya.js';
 import { showAlert, showConfirm } from "../utils/alert.js";
 import { loadAllCategories } from './add-load-category.js';
 import { loadSessionsPage } from './sessions/render.sessions.js';
+import getMenuItemById from './getMenuItemById.js';
 
 const clickSound = new Audio('../sounds/mixkit.wav');
 clickSound.preload = 'auto';
@@ -29,7 +30,7 @@ window.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`../html/${page}.html`);
             const html = await res.text();
             maincontent.innerHTML = html;
-
+            
             // Dynamic import asosida modul yuklash
             switch(page) {
                 case 'menu':
@@ -57,7 +58,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     import('./reports.js').then(module => module.loadReportsPage());
                     break;
                 case 'settings':
-                    import('./settings.js').then(module => module.loadSettingsPage());
+                    import('./settings/setting.js').then(module => module.loadSettingsPage());
                     break;
             }
         } catch (err) {
@@ -118,6 +119,13 @@ window.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         loadTemplate('settings');
     });
+
+    document.getElementById("chiqish").addEventListener("click", async e => {
+        e.preventDefault()
+        if(await showConfirm("Dasturdan chiqmoqchimisiz?")){
+            window.electronAPI.closeMainWindow();
+        }
+    })
     window.electronAPI.onMenuReload(() => {
         loadMenuData();
     });
@@ -151,11 +159,12 @@ export async function loadMenuData() {
                     // Add cards
                     categoryItems.forEach(dish => {
                         let imgPath;
+                        
                         if (dish.image_url) {
-                        imgPath = `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`;
+                            imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/${dish.image_url}`;
                         } else {
-                        // fallback if image is missing
-                        imgPath = `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
+                            // fallback if image is missing
+                            imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`;
                         }
 
                         const card = document.createElement('div');
@@ -321,14 +330,14 @@ export function openModal(mode, dish = null) {
 
 
 
-function editDish(dish_id){
-    fetch(`http://localhost:3000/api/menu/${dish_id}`)
-    .then(res => res.json())
-    .then(dish => {
-        
-        window.electronAPI.openAddWindow(dish);
-    })
-    .catch(err => console.error(err));
+async function editDish(dish_id) {
+  try {
+    const dish = await getMenuItemById(dish_id);
+    await window.electronAPI.openAddWindow(dish);
+  } catch (err) {
+    console.error('editDish error:', err);
+    showAlert?.(`❌ Ma'lumotni olishda xato: ${err.message}`) || alert(`Xato: ${err.message}`);
+  }
 }
 
 async function deleteDish(dish_id){

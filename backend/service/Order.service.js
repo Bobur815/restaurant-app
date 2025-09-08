@@ -1,6 +1,8 @@
+import mongoose from "mongoose";
 import OrderItemModel from "../models/Order_items.model.js";
 import OrdersModel from "../models/Orders.model.js";
 import CustomError from "../utils/CustomError.js";
+import SessionService from "./Session.service.js";
 
 const uzbekistanTime = () => {
   const now = new Date();
@@ -52,15 +54,15 @@ class OrderService {
   }
 
   async getOrder(query) {
-    
+
     // 1) load the order itself
     const order = await OrdersModel
       .findOne(query)
       .lean()
       .exec();
-    
+
     if (!order) {
-      throw new CustomError("Order not found", 404, "NotFoundError");
+      return [];
     }
 
     // 2) load all order‐items for that order, populating each menu_id
@@ -99,6 +101,11 @@ class OrderService {
     }));
 
     await OrderItemModel.insertMany(orderItems);
+
+    for (let item of items) {
+      await SessionService.recordSale(item.menu_id, item.quantity)
+    }
+
     return "✅ Ordersga item qo'shildi!"
   }
 
@@ -130,6 +137,7 @@ class OrderService {
     order.payment_method = payment_method;
     await order.save();
 
+    const oldItems = await OrderItemModel.find({ order_id }).lean();
     await OrderItemModel.deleteMany({ order_id });
 
     const newItems = items.map(item => ({
@@ -143,28 +151,73 @@ class OrderService {
 
     await OrderItemModel.insertMany(newItems);
 
+    const oldMap = new Map(oldItems.map(i => [i.menu_id.toString(), i.quantity]));
+    const newMap = new Map(items.map(i => [i.menu_id.toString(), i.quantity]));
+
+    const allIds = new Set([...oldMap.keys(), ...newMap.keys()]);
+
+    for (const id of allIds) {
+      const prevQ = oldMap.get(id) ?? 0;
+      const nextQ = newMap.get(id) ?? 0;
+      const delta = nextQ - prevQ; // + qo‘shish, - kamaytirish
+
+      if (delta !== 0) {
+        await SessionService.recordSale(id, delta /* manfiy bo‘lishi ham mumkin */);
+      }
+    }
+
     return order_id;
   }
 
+
   async cancelOrder(table_number) {
-
-    // Step 1: Pending holatdagi buyurtmani topish
+    // 0) Pending orderni olamiz
     const order = await OrdersModel.findOne({ table_number, status: "pending" });
-
-    if (!order) {
-      return ("❌ Bekor qilinadigan buyurtma topilmadi.");
-    }
+    if (!order) return "❌ Bekor qilinadigan buyurtma topilmadi.";
 
     const order_id = order._id;
+    const oldItems = await OrderItemModel.find({ order_id }).lean();
 
-    // Step 2: order_items collection'dan tegishli itemlarni o‘chirish
-    await OrderItemModel.deleteMany({ order_id });
+    // 1) Kompensatsiya ro‘yxati
+    const applied = []; // { menu_id, delta } larni yig‘amiz
 
-    // Step 3: orders collection'dan buyurtmaning o‘zini o‘chirish
-    await OrdersModel.deleteOne({ _id: order_id });
+    try {
+      // 2) Avval Session statistikani orqaga suramiz (delta = -qty)
+      for (const it of oldItems) {
+        const delta = -Number(it.quantity);
+        await SessionService.recordSale(it.menu_id, delta); // transaksiyasiz
+        applied.push({ menu_id: it.menu_id, delta }); // orqaga qaytarish uchun yozib qo‘yamiz
+      }
 
-    return "✅ Buyurtma muvaffaqqiyatli bekor qilindi."
+      // 3) Endi itemlar va orderni o‘chiramiz
+      await OrderItemModel.deleteMany({ order_id });
+      const delRes = await OrdersModel.deleteOne({ _id: order_id, status: "pending" });
+      if (delRes.deletedCount !== 1) {
+        // race guard
+        throw new CustomError("Buyurtma holati o‘zgargan bo‘lishi mumkin", 409, "ConflictException");
+      }
+
+      return "✅ Buyurtma muvaffaqiyatli bekor qilindi.";
+    } catch (err) {
+      // 4) Kompensatsiya: agar yuqorida xato bo‘lsa, o‘zgartirilgan statistikani qaytaramiz
+      try {
+        // applied ketma-ketligining TESKARI tartibida qaytaramiz (odatda xavfsizroq)
+        for (let i = applied.length - 1; i >= 0; i--) {
+          const { menu_id, delta } = applied[i];
+          await SessionService.recordSale(menu_id, -delta); // -delta = asl miqdorni qaytarish
+        }
+      } catch (revertErr) {
+        console.error("cancelOrder compensation error:", revertErr);
+        // Bu yerda admin logga yozish muhim; userga umumiy xabar beramiz
+      }
+
+      console.error("cancelOrder (no-tx) error:", err);
+      if (err instanceof CustomError) throw err;
+      throw new CustomError("Bekor qilishda xatolik yuz berdi", 500, "CancelOrderError");
+    }
   }
+
+
 }
 
 const orderService = new OrderService();

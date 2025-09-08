@@ -1,7 +1,9 @@
 import submitOrder from "./submitOrder.js"
 import { loadOrderPage } from "./order_items.js";
 import { getOrderByQuery } from "./getOrderByQuery.js";
-import { showConfirm } from "../utils/alert.js";
+import { showAlert, showConfirm } from "../utils/alert.js";
+import { renderAllSessions } from "./sessions/render.sessions.js";
+import { selectProduct } from "./order_items.js";
 
 const clickSound = new Audio('../sounds/mixkit.wav');
 clickSound.preload = 'auto';
@@ -71,15 +73,52 @@ function renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfT
 }
 
 // orderPageHelpers.js
-async function renderMenuItems(params, menuList, payBtn = null, selectProduct = null) {
+async function renderMenuItems(params, menuList, opts = {}) {
+    const { category = 'all', search = '' } = params;
     const {
-        category = 'all',
-        search = ''
-    } = params;
+        mode = 'order',                 // 'order' | 'open-session'
+        payBtn = null,
+        selectProduct = null,
+    } = opts;
 
-    // Build query string
     const query = new URLSearchParams({ category, search }).toString();
     const url = `http://localhost:3000/api/menu?${query}`;
+
+    // Faqat 'order' rejimida qolgan miqdorlarni hisoblaymiz
+    const remainByMenuId = new Map();
+
+    if (mode === 'order') {
+        const sessions = (await renderAllSessions({ status: 'open' })) || [];
+        if (!sessions.length) {
+            return showAlert('❌ Ochiq smena topilmadi!');
+        }
+        // Eng yangi ochiq smenani tanlaymiz
+        const active = [...sessions].sort(
+            (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        )[0];
+
+        if (active.items?.length) {
+            for (const it of active.items) {
+                const id = it.menu_id?._id ?? it.menu_id;
+                const initial = Number(it.initialQuantity || 0);
+                const sold = Number(it.soldQuantity || 0);
+                const remain = Math.max(0, initial - sold);
+                remainByMenuId.set(id, { remain, initial, sold });
+            }
+        }
+    }
+
+    const qtyBadgeStyle = (n) => {
+        let bg = '#ef4444'; // red-500
+        if (n > 10) bg = '#22c55e';      // green-500
+        else if (n > 0) bg = '#f59e0b';  // amber-500
+        return `
+      display:inline-flex;align-items:center;justify-content:center;
+      min-width:42px;height:28px;padding:0 10px;border-radius:20px;
+      font-weight:600;color:#111;background:${bg};
+      box-shadow:0 1px 2px rgba(0,0,0,.08);
+    `;
+    };
 
     try {
         const res = await fetch(url);
@@ -92,27 +131,90 @@ async function renderMenuItems(params, menuList, payBtn = null, selectProduct = 
         menuList.innerHTML = '';
 
         menuItems.forEach(item => {
+            const stat = remainByMenuId.get(item._id) || null;
+            const remain = stat?.remain ?? null;
+            const initial = stat?.initial ?? 0;
+            const sold = stat?.sold ?? 0;
+
             const li = document.createElement('li');
-            li.innerHTML = `
-        <img
-          src="../img/${item.image_url}"
-          alt="${item.name}"
-          width="40" height="40"
-          style="
-            vertical-align:middle;
-            border-radius:5px;
-            object-fit:cover;
-            border:1px solid #ccc;
-          "
-        >
-        <span style="margin-left:10px; font-size: 18px; font-weight:bold;">${item.name}</span>
+            li.style.cssText = `
+        display:flex;align-items:center;justify-content:space-between;
+        gap:12px;padding:10px;border-bottom:1px solid #eee;cursor:pointer;
+        border-radius:8px;transition:background .15s ease;
       `;
+
+            // 'order' rejimida qolmagan bo‘lsa disable feel
+            if (mode === 'order' && remain === 0) {
+                li.style.opacity = '0.6';
+                li.style.cursor = 'not-allowed';
+            }
+
+            li.onmouseenter = () => (li.style.background = '#f3f4f6');
+            li.onmouseleave = () => (li.style.background = 'transparent');
+
+            // Title (tooltip)
+            if (mode === 'order') {
+                li.title = (remain != null)
+                    ? `Boshlang'ich: ${initial} | Sotilgan: ${sold} | Qolgan: ${remain}`
+                    : `Bu mahsulot joriy smenaga kiritilmagan`;
+            } else {
+                li.title = `Yangi smena uchun mahsulot tanlang`;
+            }
+
+            // O‘ng tomondagi blok: 'order' rejimida badge ko‘rinadi, 'open-session' da ko‘rinmaydi
+            const rightBlockHTML = (mode === 'order')
+                ? (remain != null
+                    ? `<span style="${qtyBadgeStyle(remain)}">${remain}</span>`
+                    : `<span style="
+                 font-size:12px;color:#6b7280;border:1px dashed #d1d5db;
+                 padding:4px 8px;border-radius:12px;">0</span>`)
+                : ''; // open-session -> badge yo‘q
+
+            li.innerHTML = `
+        <div style="display:flex;align-items:center;gap:10px;">
+          <img
+            src="../img/${item.image_url}"
+            alt="${item.name}"
+            width="40" height="40"
+            style="vertical-align:middle;border-radius:6px;object-fit:cover;border:1px solid #e5e7eb;"
+          >
+          <span style="font-size:18px;font-weight:700;">${item.name}</span>
+        </div>
+        <div>${rightBlockHTML}</div>
+      `;
+
             li.addEventListener('click', () => {
-                clickSound.currentTime = 0;
-                clickSound.play().catch(() => { });
-                if (payBtn) payBtn.disabled = true;
-                if (selectProduct) selectProduct(item);
+                // 'order' rejimida qolmagan bo‘lsa tanlanmaydi
+                if (mode === 'order' && !remain) return;
+
+                if (typeof clickSound !== 'undefined') {
+                    clickSound.currentTime = 0;
+                    clickSound.play().catch(() => { });
+                }
+
+                if (mode === 'order' && payBtn) {
+                    payBtn.disabled = true;
+                }
+
+                if (selectProduct) {
+                    if (mode === 'order') {
+                        // buyurtma uchun remain ma’lumotlari bilan
+                        selectProduct({
+                            ...item,
+                            remainingQuantity: remain,
+                            initialQuantity: initial,
+                            soldQuantity: sold,
+                        });
+                    } else {
+                        // open-session: faqat itemning o‘zi (badge kerak emas)
+                        selectProduct(item);
+                    }
+                } else {
+                    console.log('no');
+                    
+                }
             });
+
             menuList.appendChild(li);
         });
     } catch (err) {
@@ -120,8 +222,12 @@ async function renderMenuItems(params, menuList, payBtn = null, selectProduct = 
     }
 }
 
+
+
 // Extracted helper: Attach order and cancel buttons safely
 function attachOrderButtons(cancelBtn, orderBtn, payBtn, table_number, cancelOrder, goingBack, getOrdersOfTable, showAlert) {
+    const categorySelect = document.getElementById('productCategory');
+    const searchInput = document.getElementById('search-input');
 
     if (!payBtn.dataset.listenerAttached) {
         payBtn.addEventListener("click", async () => {
@@ -218,6 +324,11 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, table_number, cancelOrd
             };
 
             await submitOrder(newOrder);
+            renderMenuItems(
+                { category: categorySelect.value, search: searchInput.value.trim() },
+                document.getElementById('menuList'),
+                { mode: 'order', payBtn, selectProduct }
+            );
         });
         orderBtn.dataset.listenerAttached = 'true';
     }

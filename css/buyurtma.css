@@ -299,9 +299,10 @@ html, body {
 .order-sidebar ul {
     list-style: none;
     padding: 0;
-    max-height: 70vh;
+    max-height: 55vh;
     overflow-y: auto;
 }
+
 #menuList li {
     margin-bottom: 12px;
     display: flex;
@@ -383,4 +384,38 @@ html, body {
 .delete-btn:hover {
     color: #f1ebeb; /* To'qroq qizil */
     transform: scale(1.2);
+}
+
+/* Search box */
+.order-sidebar .search-div {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    margin-bottom: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.order-sidebar .search-div img {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+}
+
+.order-sidebar .search-div input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 16px;
+    background: transparent;
+}
+
+.order-sidebar .search-div input::placeholder {
+    color: #888;
+}
+
+.order-sidebar .search-div:focus-within {
+    border-color: #66afe9;
+    box-shadow: 0 0 4px rgba(102, 175, 233, 0.5);
 }

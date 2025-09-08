@@ -194,8 +194,10 @@
 /* Stack inputs & labels */
 #editModal .filter {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
 }
 #editModal .filter label {
   display: flex;
@@ -213,8 +215,17 @@
   cursor: pointer;
   transition: background-color 0.2s;
 }
-#editModal button:not(.close-btn):hover {
+#editModal .editSaveBtn:hover {
   background-color: #198a24;
+}
+
+.editCancelBtn:hover{
+  background-color: #cb4956;
+}
+
+.editFilterBtns{
+  display: flex;
+  gap: 20px;
 }
 
 /* ─── Image-based Close Button ─────────────────────────────────────────── */

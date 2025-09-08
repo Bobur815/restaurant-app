@@ -1,108 +1,248 @@
+/* ─── Layout ──────────────────────────────────────────────────────────────── */
 .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 10px 20px 20px 0;
-    padding: 5px 10px;
-    font-size: 10px;
-    border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 10px 20px 20px 0;
+  padding: 5px 10px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  font-size: 10px;
 }
 
 .header img {
-    width: 18px;
-    height: 18px;
+  width: 24px;
+  height: 24px;
 }
 
-.main-div select {
-    flex: 1;
-    padding: 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    font-size: 16px;
-    box-sizing: border-box;
-    transition: border-color 0.2s;
+/* ─── Filters ─────────────────────────────────────────────────────────────── */
+.filter-div {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
 }
 
-/* Header ustuniga */
-.session-table thead th.col-date,
-.session-table tbody td.col-date {
-  background-color: #d8dbd8;
-  /* matn rangi ham oq bo‘lsa o‘qilishi oson: */
-}
-
-/* Stol ustuniga */
-.session-table thead th.col-table,
-.session-table tbody td.col-table {
-  background-color: #d8dbd8;
-}
-
-/* Summa ustuniga */
-.session-table thead th.col-amount,
-.session-table tbody td.col-amount {
-  background-color: #d8dbd8;
-}
-
-/* ─── Action Buttons in Table ────────────────────────────────────────────── */
-.table-action-btn {
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  padding: 4px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: transform 0.1s ease, box-shadow 0.2s ease, background-color 0.2s;
-}
-.table-action-btn img {
-  width: 18px;
-  height: 18px;
-  pointer-events: none;
-}
-.edit-btn:hover   { background-color: #f7d05e; }
-.delete-btn:hover { background-color: #bd2130; }
-.print-btn:hover  { background-color: #138496; }
-.table-action-btn:active {
-  transform: scale(0.95);
-  box-shadow: none;
-}
-
-/* ─── Scrollable Table Container ─────────────────────────────────────────── */
-.main-div .table-wrapper {
-  flex: 1 1 auto;
-  position: relative;
-  overflow-y: auto;    /* ← now *this* scrolls */
-  padding: 0 10px;
-}
-
-/* ─── Checks Table ───────────────────────────────────────────────────────── */
-.main-div .session-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin-top: 20px;
-}
-
-.main-div .session-table th,
-.main-div .session-table td {
+.filter-div select {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 14px;
   border: 1px solid #ccc;
-  padding: 10px;
-  text-align: center;
+  border-radius: 4px;
+  transition: border-color 0.2s;
 }
 
-/* sticky header cells */
-.main-div .session-table th {
+.filter-div select:focus {
+  border-color: #888;
+}
+
+/* ─── Tables ──────────────────────────────────────────────────────────────── */
+.table-wrapper {
+  flex: 1 1 0;
+  margin-bottom: 30px;
+  padding: 0 10px;
+  overflow-y: auto;
+}
+
+.session-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-top: 10px;
+  background: #fff;
+}
+
+.session-table th,
+.session-table td {
+  border: 1px solid #ddd;
+  padding: 10px 8px;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.session-table thead th {
   position: sticky;
   top: 0;
-  background: #f9f9f9;
+  background: #f4f4f4;
+  width: 100%;
   z-index: 2;
 }
 
-/* sticky footer cells */
-.main-div .session-table tfoot td {
+/* Zebra striping */
+.session-table tbody tr:nth-child(even) td {
+  background: #fafafa;
+}
+
+/* ─── Footer Button Bar ──────────────────────────────────────────────────── */
+.session-table tfoot {
   position: sticky;
   bottom: 0;
-  background: #f9f9f9;
-  z-index: 2;
+  background: #f4f4f4;
+  box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.session-table tfoot td {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  text-align: right;
+}
+
+
+
+
+/* ─── Buttons ─────────────────────────────────────────────────────────────── */
+.session-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 120px;
+  font-size: 16px;
+  font-weight: bold;
+  transition: transform 0.3s ease, background-color 0.2s ease;
+}
+
+.session-actions button:active {
+  transform: scale(0.95);
+}
+
+/* Action variants */
+.session-actions .edit-btn {
+  background-color: rgb(230, 85, 32);
+  border: 1px solid #f6bb0c;
+}
+
+.delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 120px;
+  font-size: 16px;
+  font-weight: bold;
+  transition: transform 0.3s ease, background-color 0.2s ease;
+  background-color: #bd2130;
+  border: 1px solid #bd2130;
+  color: #fff;
+}
+
+.print-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  min-width: 120px;
+  font-size: 16px;
+  font-weight: bold;
+  transition: transform 0.3s ease, background-color 0.2s ease;
+  background-color: #138496;
+  border: 1px solid #138496;
+  cursor: pointer;
+  color: #fff;
+}
+
+.session-actions .session-close-btn {
+  background-color: #147fdd;
+  border: 1px solid #147fdd;
+  color: #fff;
+  padding: 6px 12px;
+}
+
+.session-actions .edit-btn:hover,
+.delete-btn:hover,
+.print-btn:hover,
+.session-close-btn:hover {
+  background-color: #fff;
+  color: black;
+}
+
+.session-actions .edit-btn:hover {
+  box-shadow: 0 0 4px #f6bb0c(102, 175, 233, 0.5);
+}
+
+.session-actions .delete-btn:hover {
+  box-shadow: 0 0 4px #bd2130(102, 175, 233, 0.5);
+}
+
+.session-actions .print-btn:hover {
+  box-shadow: 0 0 4px #138496(102, 175, 233, 0.5);
+}
+
+.session-actions .session-close-btn:hover {
+  box-shadow: 0 0 4px #147fdd(102, 175, 233, 0.5);
+}
+
+.session-actions .session-close-btn img {
+  width: 20px;
+  height: 20px;
+  margin-right: 5px;
+}
+
+.session-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f4f4f4;
+  border-radius: 0 0 8px 8px;
+}
+
+.session-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  margin: 12px 0;
+  background: #fff;
+}
+
+.session-card__header {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.session-card__footer {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+}
+
+.btn-danger {
+  background: #fee2e2;
+}
+
+.btn-secondary {
+  background: #eef2ff;
+}
+
+.session-table--mini {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.session-table--mini th,
+.session-table--mini td {
+  border-bottom: 1px solid #f1f5f9;
+  padding: 6px 8px;
 }

@@ -1,3 +1,4 @@
+import { showAlert } from "../utils/alert.js";
 import { getOrdersOfTable } from "./ordersOfTable.js";
 
 async function submitOrder(order) {
@@ -20,9 +21,9 @@ async function submitOrder(order) {
         const result = await response.json();
 
         if (method === "POST") {
-            alert("✅ Buyurtma berildi!");
+            showAlert("✅ Buyurtma berildi!");
         } else {
-            alert("✅ Buyurtma o'zgartirildi!");
+            showAlert("✅ Buyurtma o'zgartirildi!");
         }
 
         document.querySelector('.pay-btn').disabled = false;
@@ -39,6 +40,5 @@ async function handleOrderMethod(table_number) {
     const orders = await getOrdersOfTable(table_number);
     return orders.length ? "PUT" : "POST";
 }
-
 
 export default submitOrder

@@ -8,114 +8,141 @@ clickSound.preload = 'auto';
 
 let table_count = 0;
 
-export function loadCheklarPage(table_count=10) {
-    const startDate = document.querySelector("#startDate");
-    const endDate = document.querySelector("#endDate");
-    const stol = document.querySelector('#stol');
-    const pay_method = document.querySelector('#pay-method');
-    const status = document.querySelector('#status');
-    const filterBtn = document.querySelector("#filterBtn");
-    const checkList = document.querySelector("#checkList");
-    const totalAmount = document.getElementById("totalAmount");
-    const refreshBtn = document.querySelector("#refreshBtn");
-    const deleteModal = document.getElementById("confirmDeleteModal");
-    const confirmDeleteYes = document.getElementById("confirmDeleteYes");
-    const confirmDeleteNo = document.getElementById("confirmDeleteNo");
-    const orderByType = document.getElementById('orderByType')
-    const orderDirection = document.getElementById('orderDirection')
-    const checkTable = document.querySelector('.check-table')
+export function loadCheklarPage(table_count = 10) {
+  const startDate = document.querySelector("#startDate");
+  const endDate = document.querySelector("#endDate");
+  const stol = document.querySelector("#stol");
+  const pay_method = document.querySelector("#pay-method");
+  const status = document.querySelector("#status");
+  const checkList = document.querySelector("#checkList");
+  const totalAmount = document.getElementById("totalAmount");
+  const refreshBtn = document.querySelector("#refreshBtn");
+  const deleteModal = document.getElementById("confirmDeleteModal");
+  const confirmDeleteYes = document.getElementById("confirmDeleteYes");
+  const confirmDeleteNo = document.getElementById("confirmDeleteNo");
+  const orderByType = document.getElementById("orderByType");
+  const orderDirection = document.getElementById("orderDirection");
+  const checkTable = document.querySelector(".check-table");
 
-    let deleteTargetOrderNumber = null;
-    table_count = parseInt(localStorage.getItem('table_count'), 10) || 10;
+  let deleteTargetOrderNumber = null;
+  table_count = parseInt(localStorage.getItem("table_count"), 10) || 10;
 
-    const today = new Date().toISOString().split('T')[0];
-    startDate.value = today;
-    endDate.value = today;
+  const today = new Date().toISOString().split("T")[0];
+  startDate.value = today;
+  endDate.value = today;
 
-    for (let i = 1; i <= table_count; i++) {
-        stol.innerHTML += `<option value="${i}">🪑 ${i}-stol</option>`;
+  // stollarni to'ldirish
+  stol.innerHTML = `<option value="all">🪑 Hammasi</option>`;
+  for (let i = 1; i <= table_count; i++) {
+    stol.innerHTML += `<option value="${i}">🪑 ${i}-stol</option>`;
+  }
+
+  // ---- DRY: joriy filter qiymatlarini olib, loadChecks ni chaqiradigan funksiya
+  function refresh() {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */});
+
+    if (!startDate.value || !endDate.value) {
+      showAlert("Sanani to'g'ri kiriting!");
+      return;
     }
 
-    refreshBtn.addEventListener("click", () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
+    loadChecks(
+      startDate.value,
+      endDate.value,
+      stol.value,
+      pay_method.value,
+      status.value,
+      orderByType.value,
+      orderDirection.value
+    );
+  }
 
-        startDate.value = today;
-        endDate.value = today;
-        stol.value = 'all'
-        pay_method.value = 'all'
-        status.value = 'all'
-        loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
-    });
+  // ---- Reset tugmasi
+  refreshBtn.addEventListener("click", () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */});
 
-    filterBtn.addEventListener("click", () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
+    startDate.value = today;
+    endDate.value = today;
+    stol.value = "all";
+    pay_method.value = "all";
+    status.value = "all";
+    orderByType.value = orderByType.querySelector("option")?.value || "table_number";
+    orderDirection.value = "asc";
+    refresh();
+  });
 
-        if (!startDate.value || !endDate.value) {
-            showAlert("Sanani to'g'ri kiriting!");
-            return;
-        }
-        loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
-    });
 
-    checkList.addEventListener('click',(e) => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
+  // ---- Har bir filtr/select o‘zgarsa ham avtomatik yangilansin
+  stol.addEventListener("change", refresh);
+  pay_method.addEventListener("change", refresh);
+  status.addEventListener("change", refresh);
+  orderByType.addEventListener("change", refresh);
+  orderDirection.addEventListener("change", refresh);
+  startDate.addEventListener("change", refresh);
+  endDate.addEventListener("change", refresh);
 
-        const btn = e.target.closest('button');
-        if (!btn) return;
+  // ---- Jadvaldagi tugmalar (edit/delete/print)
+  checkList.addEventListener("click", (e) => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */});
 
-        const row = btn.closest('tr');
-        const orderNumber = row?.querySelector('td:nth-child(2)')?.textContent;
+    const btn = e.target.closest("button");
+    if (!btn) return;
 
-        if (btn.classList.contains('edit-btn')) {
-            openEditModal(
-                orderNumber,
-                row.dataset.paymentMethod,
-                row.dataset.status
-              );
-        } else if (btn.classList.contains('delete-btn')) {
-            deleteTargetOrderNumber = orderNumber;
-            deleteModal.classList.remove("hidden");
-        } else if (btn.classList.contains('print-btn')) {
-            console.log('🖨️ Print', orderNumber);
-        }
-    });
+    const row = btn.closest("tr");
+    const orderNumber = row?.querySelector("td:nth-child(2)")?.textContent;
 
-    confirmDeleteYes.addEventListener("click", async () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
+    if (btn.classList.contains("edit-btn")) {
+      openEditModal(
+        orderNumber,
+        row.dataset.paymentMethod,
+        row.dataset.status
+      );
+    } else if (btn.classList.contains("delete-btn")) {
+      deleteTargetOrderNumber = orderNumber;
+      deleteModal.classList.remove("hidden");
+    } else if (btn.classList.contains("print-btn")) {
+      console.log("🖨️ Print", orderNumber);
+    }
+  });
 
-        try {
-            const res = await fetch(`http://localhost:3000/api/payment/${deleteTargetOrderNumber}`, {
-                method: "DELETE"
-            });
-            if (res.ok) {
-                showAlert("✅ Muvaffaqiyatli o‘chirildi");
-                loadChecks(startDate.value, endDate.value, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
-            } else {
-                showAlert("❌ O‘chirishda xatolik");
-            }
-        } catch (err) {
-            showAlert("🚫 Serverga ulanishda muammo");
-        } finally {
-            deleteModal.classList.add("hidden");
-            deleteTargetOrderNumber = null;
-        }
-    });
-    
-    confirmDeleteNo.addEventListener("click", () => {
-        clickSound.currentTime = 0;
-        clickSound.play().catch(()=>{/*ignore*/});
-        
-        deleteModal.classList.add("hidden");
-        deleteTargetOrderNumber = null;
-    });
-    // first load
-    loadChecks(today, today, stol.value, pay_method.value, status.value, orderByType.value, orderDirection.value);
-    
+  // ---- O‘chirish tasdiqlash
+  confirmDeleteYes.addEventListener("click", async () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */});
+
+    try {
+      const res = await fetch(`http://localhost:3000/api/payment/${deleteTargetOrderNumber}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        showAlert("✅ Muvaffaqiyatli o‘chirildi");
+        refresh(); // yangilaymiz
+      } else {
+        showAlert("❌ O‘chirishda xatolik");
+      }
+    } catch (err) {
+      showAlert("🚫 Serverga ulanishda muammo");
+    } finally {
+      deleteModal.classList.add("hidden");
+      deleteTargetOrderNumber = null;
+    }
+  });
+
+  confirmDeleteNo.addEventListener("click", () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */});
+
+    deleteModal.classList.add("hidden");
+    deleteTargetOrderNumber = null;
+  });
+
+  // ---- Birinchi yuklashda hozirgi filtrlarga ko‘ra ma’lumotlarni olib kelish
+  refresh();
 }
+
 
 export async function loadChecks(start, end, stol, payment_method, status, orderByType, orderDirection) {
     

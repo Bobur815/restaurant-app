@@ -10,24 +10,29 @@
 <body>
   <h1>📊 Hisobotlar</h1>
   <div class="report-controls">
-    <label>
-      <select id="reportType">
-        <option value="daily">Kunlik</option>
-        <option value="weekly">Haftalik</option>
-        <option value="monthly">Oylik</option>
-        <option value="yearly">Yillik</option>
-        <option value="fromMonth">Oy boshidan</option>
-        <option value="fromYear">Yil boshidan</option>
-        <option value="custom">Moslashuvchan</option>
-      </select>
-    </label>
+    <select id="reportType">
+      <option value="daily">Kunlik</option>
+      <option value="weekly">Haftalik</option>
+      <option value="monthly">Oylik</option>
+      <option value="yearly">Yillik</option>
+      <option value="fromMonth">Oy boshidan</option>
+      <option value="fromYear">Yil boshidan</option>
+      <option value="custom">Moslashuvchan</option>
+    </select>
 
-
-    <!-- shown only when “custom” is selected -->
     <input type="date" id="startDate" disabled />
     <input type="date" id="endDate" disabled />
 
-    <button id="generateBtn">🔍 Ko‘rsatish</button>
+    <select id="orderByType">
+      <option value="payment_date">📆 Sana</option>
+      <option value="amount">💰 Summa</option>
+    </select>
+
+    <select id="orderDirection">
+      <option value="asc">↗️ Ko'payish</option>
+      <option value="desc">↘️ Kamayish</option>
+    </select>
+
     <button id="printBtn">🖨️ Chop etish</button>
   </div>
 
@@ -41,7 +46,7 @@
   </div>
 
   <div id="alert-placeholder"></div>
-  
+
   <script type="module" src="./reports.js"></script>
   <script type="module" src="../utils/loadAlert.js"></script>
 </body>

@@ -2,8 +2,14 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld("electronAPI", {
 
-  openSessionAddWindow: () => ipcRenderer.invoke('open-session-window'),
-  
+  openSessionCreateWindow: () => ipcRenderer.invoke('open-session-window', { mode: 'create' }),
+  openSessionEditWindow: (sessionId) => ipcRenderer.invoke('open-session-window', { mode: 'edit', sessionId }),
+  closeSessionWindow: (sessionId) => ipcRenderer.invoke('open-session-window', { mode: 'close', sessionId }),
+  emitSessionUpdated: () => ipcRenderer.send('session-updated'),
+  onSessionUpdated: (cb) => ipcRenderer.on('session-updated', cb),
+
+  closeMainWindow: () => ipcRenderer.send("window:close"),
+
   openCategoryWindow: () => ipcRenderer.invoke('open-category-window'),
 
   // ↙︎ keep this so your menu page can open the add-item window
