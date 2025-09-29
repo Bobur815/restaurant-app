@@ -8,7 +8,7 @@ const menuSchema = new Schema({
     maxlength: 20,
     trim: true
   },
-  
+
   price: {
     type: Number,
     required: true
@@ -23,13 +23,18 @@ const menuSchema = new Schema({
   },
   categoryId: {
     type: Types.ObjectId,
-    ref:'Category',
+    ref: 'Category',
     required: true
   },
   portions: {
     type: Boolean,
     default: false
+  },
+  soldByWeight: {
+    type: Boolean,
+    default: false
   }
+
 }, {
   timestamps: true
 });

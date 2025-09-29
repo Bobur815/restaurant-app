@@ -9,17 +9,43 @@
 </head>
 
 <body>
+
     <div class="container">
+
+        <!-- Action Animation Overlay -->
+        <div id="action-anim" class="action-anim hidden">
+            <div class="anim-card">
+                <div class="anim-icon" id="anim-icon">✔</div>
+                <div class="anim-title" id="anim-title">Processing…</div>
+                <div class="anim-bar"><span></span></div>
+            </div>
+        </div>
+
         <div class="table-wrapper">
             <div class="products-header">
                 <h2>Tanlangan Mahsulotlar</h2>
+
             </div>
+
+            <!-- Bulk actions (shown in CLOSE mode) -->
+            <div id="bulk-actions" class="bulk-actions hidden">
+                <div class="left">
+                    <button type="button" class="btn-all-carry">Barchasi ➡️ O‘tkazish</button>
+                    <button type="button" class="btn-all-writeoff">Barchasi 🗑️ Chiqim</button>
+                </div>
+                <div class="right totals">
+                    <span>Umumiy qoldiq: <b id="total-remaining">0</b></span>
+                    <span>O‘tkazish: <b id="total-carry">0</b></span>
+                    <span>Chiqim: <b id="total-writeoff">0</b></span>
+                </div>
+            </div>
+
 
             <!-- Jadval scroll qilinadigan qism -->
             <div class="table-scroll">
                 <table>
                     <thead>
-                        <tr>
+                        <tr class="headTr">
                             <th style="width: 10vh;">№</th>
                             <th style="width: 20vh;">Rasm</th>
                             <th style="width: 35vh;">Nomi</th>
@@ -33,8 +59,8 @@
                 </table>
             </div>
             <div class="sessionBtn">
-                    <button class="createBtn">+   Yaratish</button>
-                </div>
+                <button class="createBtn">+ Yaratish</button>
+            </div>
         </div>
 
         <div class="menu-sidebar">
@@ -53,6 +79,9 @@
         </div>
     </div>
     <script type="module" src="../renderer/sessions/open-session.js"></script>
+    <script type="module" src="../utils/loadAnimation.js"></script>
+    <script type="module" src="../renderer/sessions/handleResiduals.js"></script>
+    <script type="module" src="../utils/alert.js"></script>
 </body>
 
 </html>

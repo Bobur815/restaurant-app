@@ -4,7 +4,7 @@ export async function getOrderByQuery(query) {
         const response = await fetch(`http://localhost:3000/api/orders?${qs}`);
 
         if (!response.ok) {
-            return console.log(response);
+            return response;
         }
 
         const data = await response.json();

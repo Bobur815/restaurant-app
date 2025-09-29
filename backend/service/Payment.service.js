@@ -1,3 +1,4 @@
+import ExpensesModel from "../models/Expenses.model.js";
 import OrdersModel from "../models/Orders.model.js";
 import PaymentsModel from "../models/Payments.model.js";
 import CustomError from "../utils/CustomError.js";
@@ -170,7 +171,7 @@ class PaymentService {
       { $sort: { date: 1 } } // bu qismini o‘zgartirmadik
     ]);
 
-    // 2) Kunlik umumiy + breakdown
+    // 2) Kunlik umumiy + breakdown (+ expenses)
     const daily = await PaymentsModel.aggregate([
       { $match: dateMatch },
       {
@@ -200,9 +201,98 @@ class PaymentService {
           creditSum: 1
         }
       },
-      // --- dinamik sort ---
-      { $sort: sortSpec} // ikkilamchi qat'iy tartib sifatida sana
+
+      // ---- attach expenses (same day) -----------------------------
+      {
+        $lookup: {
+          from: 'expenses',
+          let: { theDay: '$payment_date' },
+          pipeline: [
+            // 1) date range
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $gte: ['$createdAt', startDate] },
+                    { $lte: ['$createdAt', endDate] }
+                  ]
+                }
+              }
+            },
+            // 2) compute day key
+            {
+              $addFields: {
+                d: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
+              }
+            },
+            // 3) join menu to fallback price
+            {
+              $lookup: {
+                from: 'menus',
+                localField: 'menu_id',
+                foreignField: '_id',
+                as: 'menu'
+              }
+            },
+            { $unwind: { path: '$menu', preserveNullAndEmptyArrays: true } },
+
+            // 4) effective unit cost & amount with multi-level fallback
+            {
+              $addFields: {
+                unitCostEff: {
+                  $cond: [{ $gt: ['$unitCost', 0] }, '$unitCost', { $ifNull: ['$menu.price', 0] }]
+                },
+                amountEff: {
+                  $cond: [
+                    { $gt: ['$amount', 0] },
+                    '$amount',
+                    { $multiply: [{ $cond: [{ $gt: ['$unitCost', 0] }, '$unitCost', { $ifNull: ['$menu.price', 0] }] }, '$quantity'] }
+                  ]
+                }
+              }
+            },
+
+            // 5) keep only the expenses for this payment day
+            { $match: { $expr: { $eq: ['$d', '$$theDay'] } } },
+
+            // 6) group & sum
+            {
+              $group: {
+                _id: null,
+                expenseSum: { $sum: '$amountEff' },
+                residualWriteoffSum: {
+                  $sum: { $cond: [{ $eq: ['$type', 'residual_writeoff'] }, '$amountEff', 0] }
+                },
+                wasteSum: {
+                  $sum: { $cond: [{ $eq: ['$type', 'waste'] }, '$amountEff', 0] }
+                },
+                breakageSum: {
+                  $sum: { $cond: [{ $eq: ['$type', 'breakage'] }, '$amountEff', 0] }
+                },
+                expenseQtyTotal: { $sum: '$quantity' }
+              }
+            }
+          ],
+          as: 'expenses'
+        }
+      },
+      // flatten defaults...
+      {
+        $addFields: {
+          expenseSum: { $ifNull: [{ $arrayElemAt: ['$expenses.expenseSum', 0] }, 0] },
+          residualWriteoffSum: { $ifNull: [{ $arrayElemAt: ['$expenses.residualWriteoffSum', 0] }, 0] },
+          wasteSum: { $ifNull: [{ $arrayElemAt: ['$expenses.wasteSum', 0] }, 0] },
+          breakageSum: { $ifNull: [{ $arrayElemAt: ['$expenses.breakageSum', 0] }, 0] },
+          expenseQtyTotal: { $ifNull: [{ $arrayElemAt: ['$expenses.expenseQtyTotal', 0] }, 0] }
+        }
+      },
+      { $project: { expenses: 0 } },
+
+
+      // --- dynamic sort (same logic you had)
+      { $sort: sortSpec }
     ]);
+
 
     return { daily, productsByDate };
   }

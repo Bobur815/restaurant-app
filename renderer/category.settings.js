@@ -141,25 +141,23 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (!categoryName) return alert("Kategoriya nomini kiriting!");
 
         const bodyData = JSON.stringify({ name: categoryName });
-        console.log(bodyData);
 
         try {
             if (editCategoryId) {
-                await fetch(`http://localhost:3000/api/category/update/${editCategoryId}`, {
+                const resp = await fetch(`http://localhost:3000/api/category/update/${editCategoryId}`, {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: bodyData
-                })
-                    .then(res => console.log(res));
-                await showAlert("Kategoriya nomi o'zgartirildi")
+                });
+                await showAlert(resp.message || "Kategoriy nomi o'zgartirildi!");
+
             } else {
-                await fetch('http://localhost:3000/api/category/create', {
+                const resp = await fetch('http://localhost:3000/api/category/create', {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: bodyData
-                })
-                    .then(res => console.log(res));
-                await showAlert("Yangi kategoriya saqlandi")
+                });
+                await showAlert(resp.message || "Yangi kategoriya saqlandi")
             }
             window.location.reload();
         } catch (err) {

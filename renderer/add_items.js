@@ -34,8 +34,25 @@ window.addEventListener('DOMContentLoaded', async () => {
   const description = document.getElementById('productDesc');
   const preview = document.getElementById('preview');
 
+  const hiddenWeightInput = document.getElementById('soldByWeight');
   const hiddenPortionInput = document.getElementById('portionValue');
   const items = document.querySelectorAll('.portion-options .option');
+
+  items.forEach(li => {
+    li.addEventListener('click', () => {
+      clickSound.currentTime = 0;
+      clickSound.play().catch(() => { });
+
+      // 1) clear old selection
+      items.forEach(x => x.classList.remove('selected'));
+      // 2) mark selected
+      li.classList.add('selected');
+
+      // 3) update hidden inputs
+      hiddenPortionInput.value = li.dataset.portions; // "true"/"false"
+      hiddenWeightInput.value = li.dataset.weight;   // "true"/"false"
+    });
+  });
 
   setCategory.addEventListener('click', () => {
     clickSound.currentTime = 0;
@@ -43,22 +60,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.electronAPI.openCategoryWindow()
   })
 
-  preview.src = `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`
-  await categoryOptions(category)
-
-  items.forEach(li => {
-    li.addEventListener('click', () => {
-      clickSound.currentTime = 0;
-      clickSound.play().catch(() => { });
-      // 1) clear old selection
-      items.forEach(x => x.classList.remove('selected'));
-      // 2) mark this one
-      li.classList.add('selected');
-      // 3) update hidden input
-      hiddenPortionInput.value = li.dataset.value;
-    });
-  });
-
+  preview.src = `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`
+  await categoryOptions(category, 'add_item');
 
 
   if (!saveBtn || !cancelBtn) {
@@ -75,7 +78,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     priceInput.value = dish.price;
     image_url.value = dish.image_url;
     category.value = dish.categoryId._id
-    
+
     description.value = dish.description;
     preview.src = dish.image_url
       ? `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`
@@ -119,7 +122,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   saveBtn.addEventListener('click', async (e) => {
     e.preventDefault();
 
-    const portions = document.getElementById('portionValue').value === 'true';
+    const portions = hiddenPortionInput.value === 'true';
+    const soldByWeight = hiddenWeightInput.value === 'true';
     const dishId = saveBtn.dataset.dishId;
 
     clickSound.currentTime = 0;
@@ -144,10 +148,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (!name || !parseInt(price, 10) || !category.value) {
       if (!name) nameInput.style.border = '2px solid red';
       if (!parseInt(price, 10)) priceInput.style.border = '2px solid red';
-      if(!category.value) category.style.border = '2px solid red';
+      if (!category.value) category.style.border = '2px solid red';
       return;
     }
 
+    const normalizedPortions = soldByWeight ? false : portions;
 
     const newItem = {
       name: nameInput.value.trim(),
@@ -155,7 +160,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       image_url: image_url.value.trim(),
       description: description.value.trim(),
       categoryId: category.value,
-      portions: portions
+      portions: normalizedPortions,
+      soldByWeight: soldByWeight,
     };
 
     let response, data;

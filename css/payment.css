@@ -1,29 +1,245 @@
-/* === payment.css === */
+:root {
+  --card-w: 420px;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
 
 body {
-  font-family: sans-serif;
-  padding: 20px;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  margin: 20px;
+  background: #f7f7f7;
+  color: #222;
 }
 
+.wrap {
+  max-width: var(--card-w);
+  margin: 0 auto;
+}
+
+/* Receipt card */
 #checkPreview {
-  border: 1px dashed #ccc;
-  padding: 10px;
-  margin-bottom: 10px;
+  background: #fff;
+  padding: 18px 16px;
+  border: 1px solid #dedede;
+  border-radius: var(--radius);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .06);
 }
 
+.brand {
+  text-align: center;
+  margin: 0 0 2px 0;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.addr {
+  text-align: center;
+  margin: 0 0 8px 0;
+  color: #585858;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.phone{
+  text-align: center;
+  margin: 0 0 8px 0;
+  color: #585858;
+  font-size: 14px;
+}
+
+.footNote{
+  text-align: center;
+  margin: 0 0 8px 0;
+  color: #585858;
+  font-size: 14px;
+}
+
+.meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+  margin: 10px 0 6px;
+}
+
+.meta b {
+  font-weight: 600;
+}
+
+hr {
+  border: 0;
+  border-top: 1px dashed #bdbdbd;
+  margin: 10px 0;
+}
+
+/* Line items (monospace-kvitansiya ko‘rinishi) */
+.items {
+  margin: 8px 0;
+}
+
+.li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 3px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}
+
+.li .left {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.qtyname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.leaders {
+  border-bottom: 1px dotted #bbb;
+  align-self: end;
+  margin: 0 2px;
+}
+
+.price {
+  white-space: nowrap;
+}
+
+/* Payment options card */
+.payment-options {
+  margin: 14px auto 0;
+  max-width: var(--card-w);
+  background: #fff;
+  border: 1px solid #dedede;
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.payment-options h4 {
+  margin: 0 0 8px 0;
+}
+
+.payment-options label {
+  margin-right: 16px;
+  font-size: 14px;
+}
+
+#confirmPayment {
+  display: block;
+  margin: 14px auto 0;
+  padding: 10px 18px;
+  font-size: 15px;
+  background: #28a745;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#confirmPayment:hover {
+  background: #218838;
+}
+
+/* Print-only receipt */
 @media print {
-  body * {
-    visibility: hidden;
+  body {
+    background: #fff;
+    margin: 0;
   }
 
-  #checkPreview,
-  #checkPreview * {
-    visibility: visible;
+  .payment-options,
+  #confirmPayment,
+  .page-title {
+    display: none !important;
+  }
+
+  .wrap {
+    max-width: 320px;
+    margin: 0;
   }
 
   #checkPreview {
-    position: absolute;
-    left: 0;
-    top: 0;
+    border: none;
+    box-shadow: none;
+    border-radius: 0;
   }
+}
+
+.sep {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color: #bdbdbd;
+  text-align: center;
+  letter-spacing: 0.5px;
+  margin: 10px 0;
+  user-select: none;
+}
+
+.li { align-items: start; }                 /* o‘ng ustun yuqoridan boshlansin */
+.price {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+}
+.price .calc {
+  font-size: 12px;
+  color: transparent;
+}
+.price .subtotal {
+  font-weight: 700;
+  margin-top: 2px;                          /* “sal pastroqda” */
+}
+
+
+.total-row{
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* label | dots | amount */
+  align-items: end;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 18px;
+  margin: 20px 0;
+}
+
+.total-row .leaders{
+  border-bottom: 1px dotted #bdbdbd;   /* “…..” effekt */
+  height: 0;                           /* faqat chiziq ko'rinsin */
+  align-self: end;                 /* pastki qismda joylashsin */
+}
+
+.total-row .amount{
+  white-space: nowrap;
+}
+
+.method-row{
+  display: grid;
+  grid-template-columns: auto 1fr auto; /* label | dots | amount */
+  align-items: end;
+  gap: 4px;
+  font-size: 13px;
+  margin-bottom: 3px;
+}
+
+.method-row .leaders{
+  border-bottom: 1px dotted #bdbdbd;   /* “…..” effekt */
+  height: 0;                           /* faqat chiziq ko'rinsin */
+  align-self: end;                     /* pastki qismda joylashsin */
+   transform: translateY(-12px); /* yuqoriga 12px ko‘tariladi */
+}
+
+.method-row .amount{
+  white-space: nowrap;
+}
+.label{
+  font-weight: 400;
 }

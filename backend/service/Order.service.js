@@ -44,12 +44,17 @@ class OrderService {
           _id: "$menu._id",
           name: "$menu.name",
           image_url: "$menu.image_url",
-          price: "$price",
+          price: "$menu.price",
           quantity: "$quantity",
-          portions: "$portions"
+          portions: "$portions",
+          soldByWeight: "$soldByWeight",
+          total_price: "$total_price",
+          units: "$units",
+          weight_kg: "$weight_kg"
         }
       }
     ]);
+
     return orders;
   }
 
@@ -79,35 +84,133 @@ class OrderService {
     };
   }
 
+  // CREATE
   async createOrder(data) {
-    const { table_number, total_amount, payment_method, items } = data;
+    const { table_number, payment_method, items = [] } = data;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new CustomError("❌ Mahsulotlar bo'sh!", 400, "BadRequest");
+    }
+
+    // total_amountni serverda hisoblaymiz (ishonchlilik)
+    const computedTotal = items.reduce((sum, it) => {
+      const tp = Number(it.total_price ?? 0);
+      return sum + (Number.isFinite(tp) ? tp : 0);
+    }, 0);
 
     const order = await OrdersModel.create({
       table_number,
-      total_amount,
+      total_amount: Math.round(computedTotal * 100) / 100,
       payment_method
-    })
+    });
 
     const order_id = order._id;
 
-    const orderItems = items.map(item => ({
+    // OrderItem hujjatlari
+    const orderItems = items.map(it => ({
       order_id,
-      menu_id: item.menu_id,
-      quantity: item.quantity,
-      price: item.price,
-      portions: item.portions,
-      createdAt: uzbekistanTime(),
-      updatedAt: uzbekistanTime()
+      menu_id: it.menu_id,
+      soldByWeight: !!it.soldByWeight,
+      quantity: Number(it.quantity ?? 0),          // weight: effective kg; non-weight: dona
+      portions: it.soldByWeight ? null : (it.portions ?? null),
+      unit_price: Number(it.unit_price ?? it.price ?? 0),
+      total_price: Number(it.total_price ?? 0),
+
+      // ✅ Qo'shimcha maydonlar:
+      units: it.soldByWeight ? Number(it.units ?? 1) : null,
+      weight_kg: it.soldByWeight ? Number(it.weight_kg ?? 0) : null,
     }));
+
 
     await OrderItemModel.insertMany(orderItems);
 
-    for (let item of items) {
-      await SessionService.recordSale(item.menu_id, item.quantity)
+    // Sessiondagi sotuvlarni yangilash
+    for (const it of items) {
+      const isWeight = !!it.soldByWeight;
+      const qty = Number(it.quantity ?? 0);
+      const portion = isWeight ? 1 : Number(it.portions ?? 1);
+      const effectiveQty = isWeight ? qty : (qty * portion);
+      if (effectiveQty !== 0) {
+        await SessionService.recordSale(it.menu_id, effectiveQty);
+      }
     }
 
-    return "✅ Ordersga item qo'shildi!"
+    return "✅ Buyurtma yaratildi va itemlar qo'shildi!";
   }
+
+
+  // UPDATE
+  async updateOrder(data) {
+    const { table_number, payment_method, items = [] } = data;
+
+    const order = await OrdersModel.findOne({ table_number, status: 'pending' });
+    if (!order) {
+      throw new CustomError("❌ Buyurtma topilmadi!", 404, "NotFoundError");
+    }
+
+    // Yangi totalni hisoblab qo'yamiz
+    const computedTotal = items.reduce((sum, it) => {
+      const tp = Number(it.total_price ?? 0);
+      return sum + (Number.isFinite(tp) ? tp : 0);
+    }, 0);
+
+    order.total_amount = Math.round(computedTotal * 100) / 100;
+    order.payment_method = payment_method;
+    await order.save();
+
+    const order_id = order._id;
+
+    // Eski itemlarni olib, rekord-sotuv delta hisoblaymiz
+    const oldItems = await OrderItemModel.find({ order_id }).lean();
+
+    // Eski itemlarni o‘chirib, yangilarini qo‘yamiz (soddaroq va xavfsiz)
+    await OrderItemModel.deleteMany({ order_id });
+
+    const newItems = items.map(it => ({
+      order_id,
+      menu_id: it.menu_id,
+      soldByWeight: !!it.soldByWeight,
+      quantity: Number(it.quantity ?? 0),
+      portions: it.soldByWeight ? null : (it.portions ?? null),
+      unit_price: Number(it.unit_price ?? it.price ?? 0),
+      total_price: Number(it.total_price ?? 0),
+      units: it.soldByWeight ? Number(it.units ?? 1) : null,
+      weight_kg: it.soldByWeight ? Number(it.weight_kg ?? 0) : null,
+      updatedAt: uzbekistanTime(), // timestamps ham qo'yadi, lekin siz xohlasangiz qoldiring
+    }));
+
+    await OrderItemModel.insertMany(newItems);
+
+    // === Delta hisob: effectiveQty (zaxiradan yedirish birligi)
+    // weight: qty(kg)
+    // non-weight: qty * portions
+    const eff = (doc) => {
+      const isWeight = !!doc.soldByWeight;
+      const q = Number(doc.quantity ?? 0);
+      const p = isWeight ? 1 : Number(doc.portions ?? 1);
+      return q * p;
+    };
+
+    const oldMap = new Map(
+      oldItems.map(i => [String(i.menu_id), eff(i)])
+    );
+    const newMap = new Map(
+      newItems.map(i => [String(i.menu_id), eff(i)])
+    );
+
+    const allIds = new Set([...oldMap.keys(), ...newMap.keys()]);
+    for (const id of allIds) {
+      const prevEff = oldMap.get(id) ?? 0;
+      const nextEff = newMap.get(id) ?? 0;
+      const delta = nextEff - prevEff; // + qo‘shildi, - kamaydi
+      if (delta !== 0) {
+        await SessionService.recordSale(id, delta);
+      }
+    }
+
+    return order_id;
+  }
+
 
   async changeStatusofOrder(order_id, status) {
     const order = await OrdersModel.findById(order_id)
@@ -121,52 +224,6 @@ class OrderService {
       data: order,
       message: "✅ Buyurtma muvaffaqqiyatli yangilandi!"
     }
-  }
-
-  async updateOrder(data) {
-    const { table_number, total_amount, payment_method, items } = data;
-
-    const order = await OrdersModel.findOne({ table_number, status: 'pending' });
-
-    if (!order) {
-      throw new CustomError("❌ Buyurtma topilmadi!", 404, "NotFoundError");
-    }
-
-    const order_id = order._id
-    order.total_amount = total_amount;
-    order.payment_method = payment_method;
-    await order.save();
-
-    const oldItems = await OrderItemModel.find({ order_id }).lean();
-    await OrderItemModel.deleteMany({ order_id });
-
-    const newItems = items.map(item => ({
-      order_id,
-      menu_id: item.menu_id,
-      quantity: item.quantity,
-      price: item.price,
-      portions: item.portions,
-      updatedAt: uzbekistanTime()
-    }));
-
-    await OrderItemModel.insertMany(newItems);
-
-    const oldMap = new Map(oldItems.map(i => [i.menu_id.toString(), i.quantity]));
-    const newMap = new Map(items.map(i => [i.menu_id.toString(), i.quantity]));
-
-    const allIds = new Set([...oldMap.keys(), ...newMap.keys()]);
-
-    for (const id of allIds) {
-      const prevQ = oldMap.get(id) ?? 0;
-      const nextQ = newMap.get(id) ?? 0;
-      const delta = nextQ - prevQ; // + qo‘shish, - kamaytirish
-
-      if (delta !== 0) {
-        await SessionService.recordSale(id, delta /* manfiy bo‘lishi ham mumkin */);
-      }
-    }
-
-    return order_id;
   }
 
 

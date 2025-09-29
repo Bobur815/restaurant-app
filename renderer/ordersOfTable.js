@@ -6,8 +6,6 @@ export async function getOrdersOfTable(table_number){
             const orders = await response.json(); // .json() qilish kerak
             return orders;
             
-        } else {
-            console.log("Buyurtmalar topilmadi.");
         }
     } catch (error) {
         console.error("Xatolik:", error);

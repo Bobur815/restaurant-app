@@ -15,7 +15,15 @@ class SessionController {
             }
             
             const sessions = await sessionService.getAll(filter);
-            
+            for (const sess of sessions) {
+                if(sess.status === "open") {
+                   for (const it of sess.items) {
+                    //    console.log(it);
+                        // virtualni chaqirish
+                   }
+                }
+            }
+
             res.status(200).json(sessions);
         } catch (error) {
             next(error);
@@ -29,6 +37,7 @@ class SessionController {
             if (!session) {
                 throw new CustomError("Session not found", 404, "NotFound");
             }
+            
             res.status(200).json(session);
         } catch (error) {
             next(error);
@@ -69,7 +78,7 @@ class SessionController {
                     "ValidationError"
                 );
             }
-            const updated = await sessionService.update(
+            const updated = await sessionService.updateSession(
                 req.params.sessionId,
                 value
             );

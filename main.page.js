@@ -1,31 +1,23 @@
-import { BrowserWindow } from 'electron';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { BrowserWindow, screen } from 'electron';
+import { getPreloadPath, htmlPath } from './paths.js';
 
 export function createMainWindow() {
-  const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 800,      // ← minimum width
-    minHeight: 600, 
-    fullscreenable: false,
-    autoHideMenuBar: true,
+  const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+
+  const win = new BrowserWindow({
+    width,
+    height,                          // ✅ ish maydoni bo‘yicha
+    show: false,
+    resizable: true,
+    
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: getPreloadPath(),
       contextIsolation: true,
-      nodeIntegration: true,
+      nodeIntegration: false
     }
   });
-
-  // ❌ maximize emas — bu taskbarni e’tiborga olmaydi
-  mainWindow.maximize();
-  mainWindow.setMenuBarVisibility(false);
-  mainWindow.loadFile(join(__dirname, '/html/index.html'));
-
-  // ❗ DevTools vaqtincha, ishlab chiqqach olib tashlang
-  mainWindow.webContents.openDevTools();
-  return mainWindow
+  win.setMenuBarVisibility(false)
+  win.loadFile(htmlPath('index.html'));
+  win.once('ready-to-show', () => win.show());
+  return win;
 }

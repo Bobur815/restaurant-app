@@ -23,11 +23,14 @@
           </div>
 
           <ul class="portion-options">
-            <li class="option" data-value="true">Porsiyali</li>
-            <li class="option selected" data-value="false">Porsiyasiz</li>
-            
+            <li class="option" data-portions="true" data-weight="false">Porsiyali</li>
+            <li class="option selected" data-portions="false" data-weight="false">Porsiyasiz</li>
+            <li class="option" data-portions="false" data-weight="true">Kiloga (kg)</li>
           </ul>
-          <input type="hidden" id="portionValue" name="portion" value="false">
+
+          <input type="hidden" id="portionValue" value="false" />
+          <input type="hidden" id="soldByWeight" value="false" />
+
         </div>
 
         <div class="image-upload">
@@ -39,7 +42,7 @@
         <div class="category-section">
           <select id="productCategory">
             <option value="" disabled selected hidden>Kategoriyani tanlang...</option>
-            <!-- <option value="Ovqatlar">Ovqatlar</option> -->
+            <!-- Dynamic categories will be populated here -->
           </select>
           <button id="setCategory">⚙️ Kategoriya</button>
         </div>

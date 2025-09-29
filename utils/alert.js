@@ -31,6 +31,7 @@ export async function showAlert(message, { duration = 3000 } = {}) {
   const okBtn      = document.getElementById('confirmAlertBtn');
 
   msgEl.textContent = message;
+  msgEl.style.whiteSpace = 'pre-line'; 
   alertEl.classList.remove('hidden');
   document.getElementById('cancelAlertBtn').style.display = 'none';
 

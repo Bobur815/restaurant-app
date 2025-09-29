@@ -19,13 +19,13 @@ async function submitOrder(order) {
         }
 
         const result = await response.json();
-
+        
         if (method === "POST") {
             showAlert("✅ Buyurtma berildi!");
         } else {
             showAlert("✅ Buyurtma o'zgartirildi!");
         }
-
+        
         document.querySelector('.pay-btn').disabled = false;
         document.querySelector('.cancel-order').disabled = false;
         return result;

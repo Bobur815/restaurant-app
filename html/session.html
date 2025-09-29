@@ -11,18 +11,11 @@
 <body>
     <div class="header">
         <h1><img src="../img/icons8-session-timeout-50.png" alt=""> Smenalar</h1>
-        <button class="add-btn" id="session-open-btn">+ Smenani ochish</button>
+        <button class="add-btn" id="session-open-btn"><strong>+</strong> Smenani ochish</button>
     </div>
 
     <div class="main-div">
-        <div class="filter-div">
-            <select name="" id="open-date-of-session">
-                <option value="" selected disabled hidden>Ochilish sanasini tanlang...</option>
-            </select>
-            <select name="" id="end-date-of-session" disabled>
 
-            </select>
-        </div>
 
         <div class="table-wrapper">
             <h2>🟢 Ochiq Smenalar</h2>
@@ -52,15 +45,21 @@
             </div>
         </div>
 
+        
         <!-- YOPILGAN SMENALAR WRAPPER -->
         <div class="table-wrapper">
             <h2>🔴 Yopilgan Smenalar</h2>
+            <div class="filter-div">
+                <select name="" id="open-date-of-session">
+                    <option value="" selected disabled hidden>Ochilish sanasini tanlang...</option>
+                </select>
+            </div>
             <!-- Umumiy header qatlamini ushlab qolamiz -->
             <table class="session-table">
                 <thead>
                     <tr id="closeSessionDate"
                         style=" background-color: rgb(171, 220, 171); padding: 10px 8px; font-size: 17px;"></tr>
-                    
+
                 </thead>
             </table>
 

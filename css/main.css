@@ -20,11 +20,11 @@ body {
   overflow: hidden;
 }
 
-.header {
+.top-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
+  padding: 5px 20px;
   background-color: #ffffff;
   border-bottom: 1px solid #ddd;
 }
@@ -88,3 +88,4 @@ body {
   overflow: auto;    /* only our inner .table-wrapper scrolls */
   min-height: 0;       /* allow flex-child to shrink */
 }
+

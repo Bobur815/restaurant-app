@@ -4,6 +4,7 @@ import { myInitFunction } from "../utils/category-add-init.js";
 
 export async function connectDB() {
     const uri = process.env.MONGO_URL;
+    
     if (!uri) {
         console.error("❌ MONGO_URL is undefined");
         process.exit(1);

@@ -1,14 +1,7 @@
 import { BrowserWindow } from 'electron';
-import { fileURLToPath, pathToFileURL } from 'url';
-import { dirname, join } from 'path';
+import { getPreloadPath, htmlPath } from './paths.js';
 
-// ESMda __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = dirname(__filename);
-
-export function sessionWindow(parent, { mode = 'create', sessionId = null } = {}) {
-  const preloadPath = join(__dirname, 'preload.js');
-  const htmlPath    = join(__dirname, 'html', 'session-create.html');
+export function createSessionWindow(parent, { mode = 'create', sessionId = null } = {}) {
 
   const win = new BrowserWindow({
     width: 1200,
@@ -18,19 +11,30 @@ export function sessionWindow(parent, { mode = 'create', sessionId = null } = {}
     autoHideMenuBar: true,
     resizable: false,
     webPreferences: {
-      preload: preloadPath,
+      preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
 
-  // file:// URL yaratib, query param qo‘shamiz
-  const fileUrl = pathToFileURL(htmlPath);
-  fileUrl.searchParams.set('mode', mode);
+  // --- Query obyektini tayyorlaymiz
+  const query = { mode: String(mode) };
   if (mode === 'edit' && sessionId) {
-    fileUrl.searchParams.set('edit', sessionId);
+    query.edit = String(sessionId);
+  } else if (mode === 'close' && sessionId) {
+    query.sessionId = String(sessionId);
   }
 
-  win.loadURL(fileUrl.toString());
+
+  // ✅ ENG ISHONCHLI USUL: loadFile(..., { query })
+  win.loadFile(htmlPath('session-create.html'), {query});
+
+  // DIAGNOSTIKA: renderer yuklangach, u yerda ko‘rayotgan location’ni qayta log qilamiz
+  win.webContents.once('did-finish-load', () => {
+    win.webContents.executeJavaScript('location.href')
+      .then(href => console.log('[sessionWindow] renderer location.href =', href))
+      .catch(err => console.warn('executeJavaScript err:', err));
+  });
+
   return win;
 }

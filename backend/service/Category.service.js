@@ -35,10 +35,8 @@ class CategoryService {
     }
 
     async delete(categoryId) {
-        console.log(categoryId);
         // 1. Shu kategoriya bilan bog‘langan mahsulotlar sonini hisoblaymiz
         const linkedCount = await MenuModel.countDocuments({ categoryId });
-        console.log(linkedCount);
         if (linkedCount > 0) {
             // 2. Agar bitta bo'lsa ham mahsulot topsa — o‘chirishni taqiqlaymiz
             throw new CustomError(

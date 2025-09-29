@@ -1,46 +1,21 @@
-import { BrowserWindow, ipcMain } from 'electron';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-// import connectDB from './backend/config/Database.js';  // DB ni shu yerda ishlatamiz 
-import { createMainWindow } from './main.page.js';  // Main oynani shu fayldan chaqiramiz
-import UsersModel from './backend/models/Users.model.js';
+import { BrowserWindow } from 'electron';
+import { getPreloadPath, htmlPath } from './paths.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 export function createLoginWindow() {
-  const loginWin = new BrowserWindow({
-    width: 450,
-    height: 600,
+  const win = new BrowserWindow({
+    width: 420,
+    height: 560,
+    resizable: false,
+    show: false,
+    title: 'Login',
     webPreferences: {
-      preload: join(__dirname, 'preload.js'),
+      preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
   });
-
-  loginWin.setMenuBarVisibility(false);
-  loginWin.loadFile(join(__dirname, './html/login.html'));
-  // loginWin.webContents.openDevTools();
-
-  // Login jarayoni shu yerda
-  ipcMain.on("attempt-login", async (event, { username, password }) => {
-    try {
-      const rows = await UsersModel.findOne({username,password})
-      console.log(rows);
-      if (rows.length > 0) {
-        event.sender.send("login-result", { success: true });
-        loginWin.close();
-        createMainWindow();   // Muvaffaqiyatli login bo‘lsa, asosiy oynani ochamiz
-      } else {
-        event.sender.send("login-result", { success: false });
-      }
-    } catch (err) {
-      console.error("Login DB error:", err);
-      event.sender.send("login-result", { success: false, error: err.message });
-    }
-  });
-
-  return loginWin;
+  win.loadFile(htmlPath('login.html'));
+  win.once('ready-to-show', () => win.show());
+  return win;
 }
-

@@ -164,7 +164,7 @@ async function renderMenuItems(params, menuList, opts = {}) {
             // O‘ng tomondagi blok: 'order' rejimida badge ko‘rinadi, 'open-session' da ko‘rinmaydi
             const rightBlockHTML = (mode === 'order')
                 ? (remain != null
-                    ? `<span style="${qtyBadgeStyle(remain)}">${remain}</span>`
+                    ? `<span style="${qtyBadgeStyle(remain)}">${remain} ${item.soldByWeight ? 'kg' : ''}</span>`
                     : `<span style="
                  font-size:12px;color:#6b7280;border:1px dashed #d1d5db;
                  padding:4px 8px;border-radius:12px;">0</span>`)
@@ -209,9 +209,6 @@ async function renderMenuItems(params, menuList, opts = {}) {
                         // open-session: faqat itemning o‘zi (badge kerak emas)
                         selectProduct(item);
                     }
-                } else {
-                    console.log('no');
-                    
                 }
             });
 
@@ -222,116 +219,177 @@ async function renderMenuItems(params, menuList, opts = {}) {
     }
 }
 
-
-
-// Extracted helper: Attach order and cancel buttons safely
 function attachOrderButtons(cancelBtn, orderBtn, payBtn, table_number, cancelOrder, goingBack, getOrdersOfTable, showAlert) {
     const categorySelect = document.getElementById('productCategory');
     const searchInput = document.getElementById('search-input');
 
-    if (!payBtn.dataset.listenerAttached) {
-        payBtn.addEventListener("click", async () => {
-            clickSound.currentTime = 0;
-            clickSound.play().catch(() => {/*ignore*/ });
-            let grandTotal = 0;
-            let items = [];
-            document.querySelectorAll("tr[id^='order-item-']").forEach(row => {
-                let menuId = row.id.replace('order-item-', '');
-                let quantity = parseInt(row.querySelector('.quantity').textContent);
-                let price = parseInt(row.querySelector('.price').textContent);
-                let portionSelect = row.querySelector('.portionSelect');
-                let portions = portionSelect ? parseFloat(portionSelect.value) : null;
-                let name = row.querySelector('.name').textContent;
+    const toNum = (v, d = 0) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : d;
+    };
 
-                grandTotal += +row.querySelector('.total').textContent
+    // PAY
+    payBtn.onclick = async () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(() => { });
 
-                items.push({ menu_id: menuId, name, quantity, portions, price });
-            });
+        let grandTotal = 0;
+        let items = [];
 
-            if (!items.length) {
-                return showAlert("Mahsulot tanlanmagan!");
-            }
+        document.querySelectorAll("tr[id^='order-item-']").forEach(row => {
+            const menuId = row.id.replace('order-item-', '');
 
-            let query = {
-                table_number,
-                status: "pending"
-            };
+            // quantity: input yoki (kamdan-kam) span
+            const qtyEl = row.querySelector('.quantity');
+            const quantity = toNum(qtyEl?.value ?? qtyEl?.textContent ?? '0');
 
-            const orderData = await getOrderByQuery(query)
+            // unit price: span yoki input bo'lishi mumkin
+            const priceEl = row.querySelector('.price');
+            const price = toNum(priceEl?.value ?? priceEl?.textContent ?? '0');
 
-            if (!orderData || Object.keys(orderData).length === 0) {
-                return showAlert("Hali hech qanday pending buyurtma mavjud emas!");
-            }
+            // portions: select bo‘lsa o‘qiymiz (non-weight), aks holda null
+            const portionSelect = row.querySelector('.portionSelect');
+            const portions = portionSelect ? toNum(portionSelect.value, 1) : null;
 
-            const { order_number, _id: order_id } = orderData;
+            const weightInput = row.querySelector('.weight-input');
+            const weightValue = weightInput ? toNum(weightInput.value, 0) : null;
 
-            const order = {
-                table_number,
-                orderId: order_number,
-                order_id,
-                total_amount: grandTotal,
-                items
-            };
+            // total: non-weight -> <span class="total">, weight -> <input class="total-input">
+            const totalEl = row.querySelector('.total') || row.querySelector('.total-input');
+            const totalVal = toNum(totalEl?.value ?? totalEl?.textContent ?? '0');
 
-            const result = await window.electronAPI.openPaymentWindow(order);
-            if (result.success) {
-                goingBack()
-            }
+            const name = (row.querySelector('.name')?.textContent || '').trim();
+
+            grandTotal += totalVal;
+            items.push({ menu_id: menuId, name, quantity, weightValue, portions, price });
         });
 
-        payBtn.dataset.listenerAttached = 'true';
-    }
+        if (!items.length) return showAlert("Mahsulot tanlanmagan!");
+        
+        const query = { table_number, status: "pending" };
+        const orderData = await getOrderByQuery(query);
+        if (!orderData || Object.keys(orderData).length === 0) {
+            return showAlert("Hali hech qanday pending buyurtma mavjud emas!");
+        }
 
-    if (!cancelBtn.dataset.listenerAttached) {
-        cancelBtn.addEventListener('click', async () => {
-            clickSound.currentTime = 0;
-            clickSound.play().catch(() => {/*ignore*/ });
-            if (await showConfirm("Buyurtmani bekor qilmoqchimisiz?")) {
-                await cancelOrder(table_number);
-                await getOrdersOfTable(table_number); // You may use this result to toggle busy class
-                goingBack();
-            }
-        });
-        cancelBtn.dataset.listenerAttached = 'true';
-    }
+        const { order_number, _id: order_id } = orderData;
+        const order = {
+            table_number,
+            orderId: order_number,
+            order_id,
+            total_amount: grandTotal,
+            items
+        };
 
-    if (!orderBtn.dataset.listenerAttached) {
-        orderBtn.addEventListener('click', async () => {
-            clickSound.currentTime = 0;
-            clickSound.play().catch(() => {/*ignore*/ });
-            let grandTotal = 0;
-            let items = [];
-            document.querySelectorAll("tr[id^='order-item-']").forEach(row => {
-                let menuId = row.id.replace('order-item-', '');
-                let quantity = parseInt(row.querySelector('.quantity').textContent);
-                let price = parseInt(row.querySelector('.price').textContent);
-                let portionSelect = row.querySelector('.portionSelect');
-                let portions = portionSelect ? parseFloat(portionSelect.value) : null;
+        const result = await window.electronAPI.openPaymentWindow(order);
+        if (result.success) goingBack();
+    };
 
-                grandTotal += +row.querySelector('.total').textContent
-                items.push({ menu_id: menuId, quantity, portions, price });
-            });
+    // CANCEL
+    cancelBtn.onclick = async () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(() => { });
+        if (await showConfirm("Buyurtmani bekor qilmoqchimisiz?")) {
+            await cancelOrder(table_number);
+            await getOrdersOfTable(table_number);
+            goingBack();
+        }
+    };
+    
+    // ORDER
+    orderBtn.onclick = async () => {
+        clickSound.currentTime = 0;
+        clickSound.play().catch(() => { });
+        
+        const toNum = (v, d = 0) => {
+            const n = parseFloat(v);
+            return Number.isFinite(n) ? n : d;
+        };
+        const round2 = (x) => Math.round(x * 100) / 100;
+        const round3 = (x) => Math.round(x * 1000) / 1000;
 
-            if (!items.length) {
-                return showAlert("Mahsulot tanlanmagan!");
-            }
+        let grandTotal = 0;
+        let items = [];
 
-            const newOrder = {
-                table_number,
-                total_amount: grandTotal,
-                payment_method: 'cash',
-                items
+        document.querySelectorAll("tr[id^='order-item-']").forEach(row => {
+            const menuId = row.id.replace('order-item-', '');
+
+            // qty (span yoki input)
+            const qtyEl = row.querySelector('.quantity');
+            const qty = toNum(qtyEl?.value ?? qtyEl?.textContent ?? '0');
+
+            // unit price (span yoki input) — sizda class '.price'
+            const priceEl = row.querySelector('.price');
+            const unitPrice = toNum(priceEl?.value ?? priceEl?.textContent ?? '0');
+
+            // portion / weight
+            const portionSelect = row.querySelector('.portionSelect'); // porsiya (0.5/0.7/1)
+            const weightInput = row.querySelector('.weight-input');  // kg (faqat kg, birlik yo'q)
+
+            // total (span yoki input)
+            const totalEl = row.querySelector('.total, .total-input');
+            const totalVal = toNum(totalEl?.value ?? totalEl?.textContent ?? '0');
+
+            // default payload
+            const payload = {
+                menu_id: menuId,
+                soldByWeight: false,
+                quantity: 0,
+                portions: null,
+                unit_price: round2(unitPrice),
+                total_price: round2(totalVal),
             };
 
-            await submitOrder(newOrder);
-            renderMenuItems(
-                { category: categorySelect.value, search: searchInput.value.trim() },
-                document.getElementById('menuList'),
-                { mode: 'order', payBtn, selectProduct }
-            );
+            if (weightInput) {
+                // === Kilolik mahsulot ===
+                const unitsCount = Math.max(1, Math.trunc(qty));          // masalan: qty=2
+                const weightKgPerUnit = parseFloat(weightInput.value || '0'); // masalan: 0.5
+                const effectiveKg = unitsCount * weightKgPerUnit;         // 1.0 kg
+
+                payload.soldByWeight = true;
+                payload.units = unitsCount;            // ✅ NEW
+                payload.weight_kg = weightKgPerUnit;   // ✅ NEW
+
+                payload.quantity = round3(effectiveKg); // inventar uchun
+                payload.portions = null;
+            } else if (portionSelect) {
+                // === Porsiyali mahsulot (soldByWeight = false) ===
+                const portion = toNum(portionSelect.value, 1);        // 1 / 0.7 / 0.5
+                payload.soldByWeight = false;
+                payload.quantity = Math.max(1, Math.trunc(qty));      // non-weight: qty butun
+                payload.portions = portion;                           // 0.5 yoki 0.7 (float)
+            } else {
+                // === Oddiy dona mahsulot ===
+                payload.soldByWeight = false;
+                payload.quantity = Math.max(1, Math.trunc(qty));      // butun
+                payload.portions = null;
+            }
+
+            grandTotal += totalVal;
+            items.push(payload);
         });
-        orderBtn.dataset.listenerAttached = 'true';
-    }
+
+        if (!items.length) return showAlert("Mahsulot tanlanmagan!");
+
+        const newOrder = {
+            table_number,
+            total_amount: round2(grandTotal),
+            payment_method: 'cash',
+            items
+        };
+
+        await submitOrder(newOrder);
+
+        renderMenuItems(
+            { category: categorySelect.value, search: searchInput.value.trim() },
+            document.getElementById('menuList'),
+            { mode: 'order', payBtn, selectProduct }
+        );
+    };
+
+
+
 }
+
 
 export { renderTables, renderMenuItems, attachOrderButtons };

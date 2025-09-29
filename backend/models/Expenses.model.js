@@ -31,6 +31,8 @@ const expenseSchema = new Schema(
       index: true,
     },
 
+    note: { type: String, default: "" }, // ixtiyoriy
+
     // Miqdoriy va pul ko‘rinishidagi maydonlar:
     quantity: { type: Number, min: 0, default: 0 }, // ixtiyoriy
     unitCost: { type: Number, min: 0, default: 0 }, // ixtiyoriy

@@ -1,7 +1,6 @@
 import { showAlert } from "../utils/alert.js";
 import setStartDate from "../utils/setReportDate.js";
 
-const echartsLib = window.echarts;
 
 
 let salesChart = null;
@@ -107,7 +106,7 @@ function renderSimpleTable(data, type) {
     fromYear: 'Yil boshidan',
     custom: 'Sana'
   }[type];
-
+  
   const rows = data.map((r, i) => `
     <tr>
       <td>${i + 1}</td>
@@ -115,16 +114,16 @@ function renderSimpleTable(data, type) {
       <td>${r.numberOfOrders}</td>
       <td>${(r.totalSumOfEachDay || 0).toLocaleString()} so'm</td>
       <td>${(r.cashSum || 0).toLocaleString()} so'm</td>
-      <td>${(r.cardSum || 0).toLocaleString()} so'm</td>
+      <td>${(r.plasticSum || 0).toLocaleString()} so'm</td>
       <td>${(r.creditSum || 0).toLocaleString()} so'm</td>
-      <td>0 so'm</td> <!-- Chiqim hozircha yo‘q bo‘lsa -->
+      <td>${(r.expenseSum || 0).toLocaleString()} so'm</td>
     </tr>
   `).join('');
 
   const totalOrders = data.reduce((s, r) => s + (r.numberOfOrders || 0), 0);
   const totalSum = data.reduce((s, r) => s + (r.totalSumOfEachDay || 0), 0);
   const totalCash = data.reduce((s, r) => s + (r.cashSum || 0), 0);
-  const totalCard = data.reduce((s, r) => s + (r.cardSum || 0), 0);
+  const totalCard = data.reduce((s, r) => s + (r.plasticSum || 0), 0);
   const totalCredit = data.reduce((s, r) => s + (r.creditSum || 0), 0);
 
   return `

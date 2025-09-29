@@ -135,6 +135,7 @@ export async function loadSessionsPage() {
   // Loaderlar
   setLoadingRow(openListEl);
   setLoadingRow(closedListEl);
+  const orders = await getOrderByQuery({ status: "pending" });
 
   if (closeBtn) {
     closeBtn.onclick = async (e) => {
@@ -148,19 +149,11 @@ export async function loadSessionsPage() {
         const sessionId = await getOpenSessionId();
         if (!sessionId) return showAlert("❌ Ochiq Smena topilmadi!");
 
-        const orders = await getOrderByQuery({ status: "pending" })
-
         if (orders) {
           return showAlert('🚫 Tugallanmagan buyurtma mavjud!')
         }
 
-        const ok = typeof showConfirm === 'function'
-          ? await showConfirm("Smenani yopishni tasdiqlaysizmi?")
-          : confirm("Smenani yopishni tasdiqlaysizmi?");
-        if (!ok) return;
-
-        const payload = await apiPut(`/session/close/${sessionId}`);
-        await showAlert("✅ Smena yopildi");
+        await window.electronAPI.closeSessionWindow(sessionId);
 
       } catch (error) {
         console.error(error);
@@ -211,6 +204,10 @@ export async function loadSessionsPage() {
       try {
         const sessionId = await getOpenSessionId();
         if (!sessionId) return showAlert("❌ Ochiq Smena topilmadi!");
+
+        if (orders) {
+          return showAlert('🚫 Tugallanmagan buyurtma mavjud!')
+        }
 
         const ok = typeof showConfirm === 'function'
           ? await showConfirm("Smenani o‘chirishni tasdiqlaysizmi?")
@@ -370,7 +367,7 @@ function renderSessionRowsGrouped(sessions, tbody, headerTr) {
     if (items.length === 0) continue;
 
     hasRows = true;
-
+    
     // O‘sha kunning itemlari
     for (const item of items) {
       const menu = item.menu_id || {};
@@ -390,9 +387,9 @@ function renderSessionRowsGrouped(sessions, tbody, headerTr) {
           >
         </td>
         <td>${menu.name || '-'}</td>
-        <td>${initial}</td>
+        <td>${initial} ${menu.soldByWeight ? '(kg)' : ''}</td>
         <td>${sold}</td>
-        <td>${remain}</td>
+        <td>${remain} ${menu.soldByWeight ? '(kg)' : ''}</td>
       `;
       frag.appendChild(tr);
     }

@@ -1,145 +1,236 @@
 <!DOCTYPE html>
 <html lang="uz">
+
 <head>
   <meta charset="UTF-8">
   <title>To‘lov oynasi</title>
   <link rel="stylesheet" href="../css/payment.css">
-  <style>
-    body {
-      font-family: sans-serif;
-      margin: 20px;
-      background-color: #f9f9f9;
-      color: #333;
-    }
-
-    #checkPreview {
-      background: #fff;
-      padding: 20px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      max-width: 500px;
-      margin: 0 auto;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-    }
-
-    #checkPreview p, #checkPreview h3 {
-      margin: 8px 0;
-    }
-
-    hr {
-      border: 0;
-      border-top: 1px dashed #aaa;
-      margin: 12px 0;
-    }
-
-    .payment-options {
-      max-width: 500px;
-      margin: 20px auto;
-      padding: 15px;
-      background: #fff;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-    }
-
-    .payment-options label {
-      margin-right: 20px;
-      font-weight: 500;
-    }
-
-    #confirmPayment {
-      display: block;
-      margin: 20px auto;
-      padding: 10px 20px;
-      font-size: 16px;
-      background-color: #28a745;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    #confirmPayment:hover {
-      background-color: #218838;
-    }
-  </style>
   <script type="module" src="../renderer/confirmPayment.js"></script>
 </head>
+
 <body>
+  <div class="wrap">
+    <h2 class="page-title" style="text-align:center; margin: 6px 0 14px;">🧾 Buyurtma tafsilotlari</h2>
 
-  <h2 style="text-align:center;">🧾 Buyurtma Tafsilotlari</h2>
+    <div id="checkPreview">
+      <h3 class="brand"></h3>
+      <p class="addr"></p>
+      <p class="phone"></p>
+      <div class="sep" aria-hidden="true">**************************************</div>
+    </div>
 
-  <div id="checkPreview">
-    <h3 style="text-align:center;">🍽️ Shoxona Milliy taomlar</h3>
-    <p style="text-align:center;">📍 Arabmozor, Toshloq, Farg'ona<br>📞 +998 90 123 45 67</p>
-    <hr>
+    <div class="payment-options">
+      <h4>To‘lov usuli:</h4>
+      <label><input type="radio" name="payment" value="cash" checked> Naqd</label>
+      <label><input type="radio" name="payment" value="card"> Karta</label>
+      <label><input type="radio" name="payment" value="click"> Klik</label>
+      <label><input type="radio" name="payment" value="debt"> Nasiya</label>
+      <br><br>
+      <label><input type="checkbox" id="printCheck"> Checkni chop etish</label>
+    </div>
+
+    <button id="confirmPayment">💵 To‘lovni tasdiqlash</button>
   </div>
 
-  <div class="payment-options">
-    <h4>To‘lov usuli:</h4>
-    <label><input type="radio" name="payment" id="cash" checked value="cash"> Naqd</label>
-    <label><input type="radio" name="payment" id="card" value="card"> Karta</label>
-    <label><input type="radio" name="payment" id="klik" value="click"> Klik</label>
-    <label><input type="radio" name="payment" id="nasiya" value="debt"> Nasiya</label>
-    <br><br>
-    <label><input type="checkbox" id="printCheck"> Checkni chop etish</label>
-  </div>
-
-  <button id="confirmPayment">💵 To‘lovni tasdiqlash</button>
 
   <script type="module">
     import confirmPayment from "../renderer/confirmPayment.js";
 
+    // ------------ Helpers ------------
+    const toNum = (v, d = 0) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : d;
+    };
+    const money = (n) => toNum(n).toLocaleString('uz-UZ') + " so'm";
+
+    const now = new Date();
+    const dateStr = new Intl.DateTimeFormat('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
+    const timeStr = new Intl.DateTimeFormat('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
+
+    // Render a single line with dotted leaders
+    function renderLine(container, leftLabel, unitPrice, qty, qtyFactor, subtotal) {
+      const row = document.createElement('div');
+      row.className = 'li';
+
+      const left = document.createElement('div');
+      left.className = 'left';
+
+      const qtyname = document.createElement('div');
+      qtyname.className = 'qtyname';
+      qtyname.textContent = leftLabel;
+
+      const leaders = document.createElement('div');
+      leaders.className = 'leaders';
+
+      // o‘ng blok — 2 qatordan iborat
+      const right = document.createElement('div');
+      right.className = 'price';
+
+      const f = (qtyFactor && qtyFactor !== 1) ? qtyFactor : 1;
+      const unitWithFactor = unitPrice * f;
+
+      const calc = document.createElement('div');
+      calc.className = 'calc';
+      calc.textContent = `${qty} × ${unitWithFactor.toLocaleString('uz-UZ')}`;
+
+      const sub = document.createElement('div');
+      sub.className = 'subtotal';
+      sub.textContent = `${Number(subtotal).toLocaleString('uz-UZ')} so'm`;
+
+
+      right.append(calc, sub);
+
+      left.append(qtyname, leaders);
+      row.append(left, right);
+      container.appendChild(row);
+    }
+
+
     window.electronAPI.onLoadOrder((orderData) => {
+      const brandName = document.querySelector('.brand');
+      const addr = document.querySelector('.addr');
+      const phone = document.querySelector('.phone');
       const preview = document.getElementById("checkPreview");
-      const checkBox = document.getElementById("printCheck");
+      const printBox = document.getElementById("printCheck");
       const confirmBtn = document.getElementById("confirmPayment");
 
-      let total = 0;
-      const now = new Date();
-      const day = String(now.getDate()).padStart(2, '0');
-      const month = String(now.getMonth() + 1).padStart(2, '0'); // months are 0-based
-      const year = now.getFullYear();
+      const footNote = document.createElement('footer')
+      footNote.className = 'footNote'
+      // ---- Header (brand/address/phone/footer) ----
+      const setText = (el, text) => { if (el) el.textContent = text ?? ""; };
 
-      const formattedDate = `${day}.${month}.${year}`;
+      (async () => {
+        try {
+          const res = await fetch("http://localhost:3000/api/receipt-settings", {
+            headers: { "Accept": "application/json" }
+          });
+          const data = res.ok ? await res.json() : null;
 
-      let headers = `
-        <p><strong>Stol:</strong> ${orderData.table_number} &nbsp;&nbsp;&nbsp; <strong>Buyurtma:</strong> #${orderData.orderId}</p>
-        <p><strong>Sana:</strong> ${formattedDate} &nbsp;&nbsp; <strong>Soat:</strong> ${new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false })}</p>
-        <hr>
+          const restaurantName = data?.restaurantName ?? orderData?.brand ?? "Oshxona";
+          const address = data?.address ?? "";
+          const phoneNum = data?.phone ?? "";
+          const footerNote = data?.footerNote ?? "";
+
+          setText(brandName, restaurantName);
+          setText(addr, address);
+          setText(phone, `📞 ${phoneNum}`);
+          // Use textContent for safety. If you want rich HTML (e.g., <br>), sanitize then use innerHTML.
+          setText(footNote, `***** ${footerNote} *****`);
+        } catch (e) {
+          // Fallbacks if settings API is unavailable
+          setText(brandName, orderData?.brand ?? "Restoran");
+          setText(addr, "");
+          setText(phone, "📞 ");
+          setText(footNote, "");
+        }
+      })();
+
+
+      // ---- Header meta ----
+      const meta = document.createElement('div');
+      meta.className = 'meta';
+      meta.innerHTML = `
+        <div><b>Stol:</b> ${orderData.table_number}</div>
+        <div style="text-align:right;"><b>Buyurtma:</b> #${orderData.orderId}</div>
+        <div><b>Sana:</b> ${dateStr}</div>
+        <div style="text-align:right;"><b>Soat:</b> ${timeStr}</div>
       `;
-      preview.innerHTML += headers;
+      preview.appendChild(meta);
+      preview.appendChild(document.createElement('hr'));
+      preview.appendChild(document.createElement('hr'));
+      // ---- Items ----
+      const itemsBox = document.createElement('div');
+      itemsBox.className = 'items';
 
-      orderData.items.forEach(item => {
-        const portion = item.portions || 1;
-        const subtotal = item.quantity * item.price * portion;
-        total += subtotal;
+      let total = 0;
 
-        const maxLineLength = 30;
-        const namePortion = `${item.quantity} × ${item.name}`;
-        const dots = '.'.repeat(Math.max(3, maxLineLength - namePortion.length - item.price.toString().length));
-        const line = `${namePortion} ${dots} ${item.price} × ${portion}`;
+      (orderData.items || []).forEach((it, index) => {
+        const name = String(it.name || '').trim();
+        const qty = Math.max(0, toNum(it.quantity, 0));                 // qty (dona yoki kg birligi)
+        const unitPrice = toNum(it.price, 0);
+        const portion = it.portions != null ? toNum(it.portions, 1) : 1; // non-weight: 1/0.7/0.5
+        const weight = it.weight_kg != null ? toNum(it.weight_kg, 1) : (it.weightValue != null ? toNum(it.weightValue, 1) : 1);
+        // Agar weight_kg mavjud bo‘lsa (kilolik), faktor = weight; bo‘lmasa portions
+        const factor = (weight && weight !== 1) ? weight : portion;
 
-        preview.innerHTML += `
-        <p>${line} = <strong>${subtotal.toLocaleString()} so'm</strong></p>
-        `;
+        // Subtotal: qty × factor × unit_price
+        const lineSubtotal = qty * factor * unitPrice;
+        total += lineSubtotal;
 
+        index += 1;  // 1 dan boshlash uchun
+        // Chap label: "qty × name" va agar factor ≠ 1 bo‘lsa, qo‘shimcha "(factor)" ni ko‘rsatamiz
+        const leftLabel = (factor && factor !== 1)
+          ? `${index}. ${name} (${factor}) \n\t${qty} × ${unitPrice * factor}`
+          : `${index}. ${name} \n\t${qty} × ${unitPrice}`;
+
+        renderLine(itemsBox, leftLabel, unitPrice, qty, (factor !== 1 ? factor : 1), lineSubtotal);
       });
 
-      preview.innerHTML += `<hr><p style="text-align:right;"><strong>Jami: ${total.toLocaleString()} UZS</strong></p>`;
+      preview.appendChild(itemsBox);
+      preview.appendChild(document.createElement('hr'));
+      preview.appendChild(document.createElement('hr'));
 
+      // Total purchase
+      const totalLabel = document.createElement('div');
+      totalLabel.className = 'total-label';
+      totalLabel.style = "font-weight: 600; font-size: 14px";
+      totalLabel.textContent = `Pozitsiyalar: ${(orderData.items || []).length}`;
+      preview.appendChild(totalLabel);
+
+      preview.appendChild(document.createElement('hr'));
+      preview.appendChild(document.createElement('hr'));
+      // ---- Total row ----
+      const totalRow = document.createElement('div');
+      totalRow.className = 'total-row';
+      totalRow.innerHTML = `
+        <div class="label">Jami to'lovga:</div>
+        <div class="leaders"></div>
+        <div class="amount">${money(total)}</div>
+      `;
+      preview.appendChild(totalRow);
+
+      // formadan tanlangan to‘lov usulini olish
+      const selectedPayment = document.querySelector('input[name="payment"]:checked')?.value || 'cash';
+
+      const paymentMap = {
+        cash: "Naqd",
+        card: "Karta",
+        click: "Klik",
+        debt: "Nasiya"
+      };
+      // previewga chiqarish
+      const paymentMethods = document.createElement('div');
+      paymentMethods.className = 'payment-methods';
+      paymentMethods.innerHTML = `
+  <div class="label">To'lov usuli:</div>
+  <div class="method-row"> 
+      <p class="method"> · ${paymentMap[selectedPayment]}</p>
+    <div class="leaders"></div>
+    <p class="amount">= ${money(total)}</p>
+  </div> 
+`;
+
+      preview.appendChild(paymentMethods);
+
+
+      preview.appendChild(document.createElement('hr'));
+      preview.appendChild(document.createElement('hr'));
+      preview.appendChild(footNote)
+
+      // ---- Confirm handler ----
       confirmBtn.addEventListener("click", async () => {
         const checkedRadio = document.querySelector('input[name="payment"]:checked');
-        const paymentMethod = checkedRadio.value
-        
-        await confirmPayment(orderData,paymentMethod)
-        if (checkBox.checked) window.print();
+        const paymentMethod = checkedRadio?.value || 'cash';
 
-        window.electronAPI.confirmPayment(); // ✅
+        // backendga tasdiqlash
+        await confirmPayment(orderData, paymentMethod);
 
+        if (printBox.checked) window.print();
+        window.electronAPI.confirmPayment();
         window.close();
       });
     });
   </script>
-
 </body>
+
 </html>

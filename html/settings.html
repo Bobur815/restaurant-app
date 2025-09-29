@@ -1,19 +1,83 @@
-
-
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uz">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="../css/template.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚙️ Settings</title>
+  <link rel="stylesheet" href="../css/settings.css">
 </head>
 <body>
-    
-    <h1>⚙️ Settings</h1>
-    <div class="grid" id="menuGrid">
-        
-    </div>
-    <div id="alert-placeholder"></div>
+
+  <h1>⚙️ Settings</h1>
+
+  <div class="settings-grid" id="settingsGrid">
+    <!-- Profile -->
+    <section class="section" id="profileSection">
+      <h2>👤 Profil</h2>
+      <form id="profileForm" class="rows" autocomplete="off">
+
+        <div class="row">
+          <label for="username">Login</label>
+          <input id="username" name="username" type="text" placeholder="Username">
+        </div>
+
+        <div class="row">
+          <label for="current-password">Joriy parol</label>
+          <input id="current-password" name="current-password" type="password" readonly>
+        </div>
+
+        <div class="row">
+          <label for="newPassword">Yangi parol</label>
+          <input id="newPassword" name="newPassword" type="password" placeholder="Yangi parol">
+        </div>
+
+        <div class="row">
+          <label for="confirmPassword">Yangi parol (tasdiq)</label>
+          <input id="confirmPassword" name="confirmPassword" type="password" placeholder="Yangi parolni takrorlang">
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn secondary" id="profileReset">Bekor</button>
+          <button type="submit" class="btn" id="profileSave">Saqlash</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Receipt Settings -->
+    <section class="section" id="receiptSection">
+      <h2>🧾 Chek sozlamalari</h2>
+      <form id="receiptForm" class="rows" autocomplete="off">
+        <div class="row">
+          <label for="restaurantName">Restaurant nomi</label>
+          <input id="restaurantName" name="restaurantName" type="text" placeholder="Shoxona Milliy Taomlar">
+        </div>
+
+        <div class="row">
+          <label for="address">Manzil</label>
+          <textarea id="address" name="address" placeholder="Arabmozor, Toshloq, Farg‘ona"></textarea>
+        </div>
+
+        <div class="row">
+          <label for="phone">Telefon</label>
+          <input id="phone" name="phone" type="text" placeholder="+998 90 123 45 67">
+        </div>
+
+        <div class="row">
+          <label for="footerNote">Chek pastidagi izoh</label>
+          <textarea id="footerNote" name="footerNote" placeholder="Rahmat! Yana kutib qolamiz."></textarea>
+        </div>
+
+        <div class="actions">
+          <button type="button" class="btn secondary" id="receiptReset">Bekor</button>
+          <button type="submit" class="btn" id="receiptSave">Saqlash</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div id="alert-placeholder"></div>
+
   <script type="module" src="../renderer/loadAlert.js"></script>
+  <script type="module" src="../renderer/settings/setting.js"></script>
 </body>
 </html>
