@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>To‘lov oynasi</title>
+  <title>To'lov oynasi</title>
   <link rel="stylesheet" href="../css/payment.css">
   <script type="module" src="../renderer/confirmPayment.js"></script>
 </head>
@@ -11,6 +11,15 @@
 <body>
   <div class="wrap">
     <h2 class="page-title" style="text-align:center; margin: 6px 0 14px;">🧾 Buyurtma tafsilotlari</h2>
+
+    <!-- Action Animation Overlay -->
+    <div id="action-anim" class="action-anim hidden">
+      <div class="anim-card">
+        <div class="anim-icon" id="anim-icon">✔</div>
+        <div class="anim-title" id="anim-title">Processing…</div>
+        <div class="anim-bar"><span></span></div>
+      </div>
+    </div>
 
     <div id="checkPreview">
       <h3 class="brand"></h3>
@@ -20,7 +29,7 @@
     </div>
 
     <div class="payment-options">
-      <h4>To‘lov usuli:</h4>
+      <h4>To'lov usuli:</h4>
       <label><input type="radio" name="payment" value="cash" checked> Naqd</label>
       <label><input type="radio" name="payment" value="card"> Karta</label>
       <label><input type="radio" name="payment" value="click"> Klik</label>
@@ -29,7 +38,7 @@
       <label><input type="checkbox" id="printCheck"> Checkni chop etish</label>
     </div>
 
-    <button id="confirmPayment">💵 To‘lovni tasdiqlash</button>
+    <button id="confirmPayment">💵 To'lovni tasdiqlash</button>
   </div>
 
 
@@ -62,7 +71,7 @@
       const leaders = document.createElement('div');
       leaders.className = 'leaders';
 
-      // o‘ng blok — 2 qatordan iborat
+      // o'ng blok — 2 qatordan iborat
       const right = document.createElement('div');
       right.className = 'price';
 
@@ -113,14 +122,14 @@
 
           setText(brandName, restaurantName);
           setText(addr, address);
-          setText(phone, `📞 ${phoneNum}`);
+          setText(phone, `${phoneNum}`);
           // Use textContent for safety. If you want rich HTML (e.g., <br>), sanitize then use innerHTML.
           setText(footNote, `***** ${footerNote} *****`);
         } catch (e) {
           // Fallbacks if settings API is unavailable
           setText(brandName, orderData?.brand ?? "Restoran");
           setText(addr, "");
-          setText(phone, "📞 ");
+          setText(phone, "");
           setText(footNote, "");
         }
       })();
@@ -150,7 +159,7 @@
         const unitPrice = toNum(it.price, 0);
         const portion = it.portions != null ? toNum(it.portions, 1) : 1; // non-weight: 1/0.7/0.5
         const weight = it.weight_kg != null ? toNum(it.weight_kg, 1) : (it.weightValue != null ? toNum(it.weightValue, 1) : 1);
-        // Agar weight_kg mavjud bo‘lsa (kilolik), faktor = weight; bo‘lmasa portions
+        // Agar weight_kg mavjud bo'lsa (kilolik), faktor = weight; bo'lmasa portions
         const factor = (weight && weight !== 1) ? weight : portion;
 
         // Subtotal: qty × factor × unit_price
@@ -158,7 +167,7 @@
         total += lineSubtotal;
 
         index += 1;  // 1 dan boshlash uchun
-        // Chap label: "qty × name" va agar factor ≠ 1 bo‘lsa, qo‘shimcha "(factor)" ni ko‘rsatamiz
+        // Chap label: "qty × name" va agar factor ≠ 1 bo'lsa, qo'shimcha "(factor)" ni ko'rsatamiz
         const leftLabel = (factor && factor !== 1)
           ? `${index}. ${name} (${factor}) \n\t${qty} × ${unitPrice * factor}`
           : `${index}. ${name} \n\t${qty} × ${unitPrice}`;
@@ -189,7 +198,7 @@
       `;
       preview.appendChild(totalRow);
 
-      // formadan tanlangan to‘lov usulini olish
+      // formadan tanlangan to'lov usulini olish
       const selectedPayment = document.querySelector('input[name="payment"]:checked')?.value || 'cash';
 
       const paymentMap = {
@@ -225,12 +234,22 @@
         // backendga tasdiqlash
         await confirmPayment(orderData, paymentMethod);
 
-        if (printBox.checked) window.print();
+        if (printBox.checked) {
+
+          orderData.brand = brandName.textContent;
+          orderData.address = addr.textContent;
+          orderData.phone = phone.textContent;
+          orderData.footNote = footNote.textContent;
+
+          window.electronAPI.sendPrint({ order: orderData, paymentMethod });
+        }
         window.electronAPI.confirmPayment();
         window.close();
       });
     });
   </script>
+  <script type="module" src="../utils/loadAnimation.js"></script>
+  <script type="module" src="../utils/alert.js"></script>
 </body>
 
 </html>

@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-
+import helmet from 'helmet';
 dotenv.config();
 
 import express from 'express';
@@ -13,9 +13,10 @@ import UsersModel from "./models/Users.model.js";
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+app.use(helmet());
+app.use(cors({ origin: true }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
 
 app.get("/api/health", async (req, res) => {
     try {
@@ -39,14 +40,12 @@ app.use(ErrorHandler)
 
 // ❗️Call AFTER routes are mounted (even after app.listen)
 
-
 !(async () => {
     try {
         await connectDB();
-        app.listen(PORT, () =>
-            console.log(`🚀 Server running on http://localhost:${PORT}`)
-
-    );
+        app.listen(PORT, '127.0.0.1', () => {
+            console.log(`API on http://127.0.0.1:${PORT}`);
+        });
 
     } catch (err) {
         logger.error("❌ Failed to start server: " + err.message);

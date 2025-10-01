@@ -1,7 +1,10 @@
 import { paymentMethods } from "../utils/paymentMethods.js";
 import { payStatuses } from "../utils/payStatuses.js";
-import { showAlert } from "../utils/alert.js";
+import { showAlert, showConfirm } from "../utils/alert.js";
 import { openEditModal } from "./editCheck.js";
+import { getOrderByQuery } from "./getOrderByQuery.js";
+import { getReceiptSetting } from "./settings/receipt-setting.js";
+import { withActionAnimation } from "../utils/loadAnimation.js";
 
 const clickSound = new Audio('../sounds/mixkit.wav');
 clickSound.preload = 'auto';
@@ -40,7 +43,7 @@ export function loadCheklarPage(table_count = 10) {
   // ---- DRY: joriy filter qiymatlarini olib, loadChecks ni chaqiradigan funksiya
   function refresh() {
     clickSound.currentTime = 0;
-    clickSound.play().catch(() => {/* ignore */});
+    clickSound.play().catch(() => {/* ignore */ });
 
     if (!startDate.value || !endDate.value) {
       showAlert("Sanani to'g'ri kiriting!");
@@ -61,7 +64,7 @@ export function loadCheklarPage(table_count = 10) {
   // ---- Reset tugmasi
   refreshBtn.addEventListener("click", () => {
     clickSound.currentTime = 0;
-    clickSound.play().catch(() => {/* ignore */});
+    clickSound.play().catch(() => {/* ignore */ });
 
     startDate.value = today;
     endDate.value = today;
@@ -84,9 +87,9 @@ export function loadCheklarPage(table_count = 10) {
   endDate.addEventListener("change", refresh);
 
   // ---- Jadvaldagi tugmalar (edit/delete/print)
-  checkList.addEventListener("click", (e) => {
+  checkList.addEventListener("click", async (e) => {
     clickSound.currentTime = 0;
-    clickSound.play().catch(() => {/* ignore */});
+    clickSound.play().catch(() => {/* ignore */ });
 
     const btn = e.target.closest("button");
     if (!btn) return;
@@ -103,93 +106,130 @@ export function loadCheklarPage(table_count = 10) {
     } else if (btn.classList.contains("delete-btn")) {
       deleteTargetOrderNumber = orderNumber;
       deleteModal.classList.remove("hidden");
-    } else if (btn.classList.contains("print-btn")) {
-      console.log("🖨️ Print", orderNumber);
-    }
-  });
+    } else if (btn.classList.contains('print-btn')) {
+      if (!await showConfirm("Chekni chop etishni tasdiqlaysizmi?")) return;
+      
+      const orderItems = await getOrderByQuery({ order_number: orderNumber });
+      if (!orderItems) return showAlert("❌ Buyurtma topilmadi");
 
-  // ---- O‘chirish tasdiqlash
-  confirmDeleteYes.addEventListener("click", async () => {
-    clickSound.currentTime = 0;
-    clickSound.play().catch(() => {/* ignore */});
+      const receiptSettings = await getReceiptSetting();
+      const { restaurantName, address, phone, footerNote } = receiptSettings;
+      const { order_number, payment_method, order_date, total_amount, table_number } = orderItems;
 
-    try {
-      const res = await fetch(`http://localhost:3000/api/payment/${deleteTargetOrderNumber}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        showAlert("✅ Muvaffaqiyatli o‘chirildi");
-        refresh(); // yangilaymiz
-      } else {
-        showAlert("❌ O‘chirishda xatolik");
+      const order = {
+        items: orderItems.items || [],
+        order_number,
+        order_date,
+        total_amount,
+        table_number,
+        restaurantName,
+        address,
+        phone,
+        footerNote,
+      };
+
+      // prevent double-clicks while printing (optional)
+      btn.disabled = true;
+
+      try {
+        await withActionAnimation(
+          () => window.electronAPI.printReceipt({ order, paymentMethod: payment_method }),
+          { type: 'open', title: "Chek chop etilmoqda…", icon: '🧾' }
+        );
+        await showAlert("✅ Chek chop etildi");
+      } catch (e) {
+        console.error(e);
+        await showAlert("❌ Chek chop etilmadi: " + e.message);
+      } finally {
+        btn.disabled = false;
       }
-    } catch (err) {
-      showAlert("🚫 Serverga ulanishda muammo");
-    } finally {
-      deleteModal.classList.add("hidden");
-      deleteTargetOrderNumber = null;
+    };
+
+
+});
+
+// ---- O‘chirish tasdiqlash
+confirmDeleteYes.addEventListener("click", async () => {
+  clickSound.currentTime = 0;
+  clickSound.play().catch(() => {/* ignore */ });
+
+  try {
+    const res = await fetch(`http://localhost:3000/api/payment/${deleteTargetOrderNumber}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      showAlert("✅ Muvaffaqiyatli o‘chirildi");
+      refresh(); // yangilaymiz
+    } else {
+      showAlert("❌ O‘chirishda xatolik");
     }
-  });
-
-  confirmDeleteNo.addEventListener("click", () => {
-    clickSound.currentTime = 0;
-    clickSound.play().catch(() => {/* ignore */});
-
+  } catch (err) {
+    showAlert("🚫 Serverga ulanishda muammo");
+  } finally {
     deleteModal.classList.add("hidden");
     deleteTargetOrderNumber = null;
-  });
+  }
+});
 
-  // ---- Birinchi yuklashda hozirgi filtrlarga ko‘ra ma’lumotlarni olib kelish
-  refresh();
+confirmDeleteNo.addEventListener("click", () => {
+  clickSound.currentTime = 0;
+  clickSound.play().catch(() => {/* ignore */ });
+
+  deleteModal.classList.add("hidden");
+  deleteTargetOrderNumber = null;
+});
+
+// ---- Birinchi yuklashda hozirgi filtrlarga ko‘ra ma’lumotlarni olib kelish
+refresh();
 }
 
 
 export async function loadChecks(start, end, stol, payment_method, status, orderByType, orderDirection) {
-    
-    const checkList = document.querySelector("#checkList");
-    checkList.innerHTML = `<tr><td colspan="10">⏳ Yuklanmoqda...</td></tr>`;
-    
-    const orderTypeColumnColor = {
-        'table_number':'col-table',
-        'payment_date':'col-date',
-        'amount':'col-amount'
+
+  const checkList = document.querySelector("#checkList");
+  checkList.innerHTML = `<tr><td colspan="10">⏳ Yuklanmoqda...</td></tr>`;
+
+  const orderTypeColumnColor = {
+    'table_number': 'col-table',
+    'payment_date': 'col-date',
+    'amount': 'col-amount'
+  }
+
+  columnColorByOrderType(orderTypeColumnColor[orderByType])
+
+  try {
+    let allParams = {
+      startDate: start,
+      endDate: end,
+      table_number: stol,
+      payment_method,
+      status,
+      orderByType,
+      orderDirection
     }
+    const queryObj = Object.fromEntries(
+      Object.entries(allParams)
+        .filter(([_, value]) => value !== 'all' && value != null)
+    );
+    const queryString = new URLSearchParams(queryObj).toString();
+    const uri = "http://localhost:3000/api/payment?" + queryString;
+    const response = await fetch(uri);
 
-    columnColorByOrderType(orderTypeColumnColor[orderByType])
+    checkList.innerHTML = '';
+    if (response.ok) {
+      const checks = await response.json();
+      if (!checks.length) {
+        checkList.innerHTML = `<tr><td colspan="9">📭 Checklar topilmadi</td></tr>`;
+        return;
+      }
 
-    try {
-        let allParams = {
-            startDate: start, 
-            endDate: end,
-            table_number: stol,
-            payment_method,
-            status,
-            orderByType,
-            orderDirection
-        }
-        const queryObj = Object.fromEntries(
-            Object.entries(allParams)
-            .filter(([_, value]) => value !== 'all' && value != null)
-        );
-        const queryString = new URLSearchParams(queryObj).toString();
-        const uri = "http://localhost:3000/api/payment?" + queryString;
-        const response = await fetch(uri);
+      let total = 0;
+      let increment = 1;
+      checks.forEach(check => {
+        total += check.amount || 0;
 
-        checkList.innerHTML = '';
-        if (response.ok) {
-            const checks = await response.json();
-            if (!checks.length) {
-                checkList.innerHTML = `<tr><td colspan="9">📭 Checklar topilmadi</td></tr>`;
-                return;
-            }
-
-            let total = 0;
-            let increment = 1;
-            checks.forEach(check => {
-                total += check.amount || 0;
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
                     <td>${increment}</td>
                     <td>${check.order_number || "-"}</td>
                     <td>${formatDateTime(check.payment_date)}</td>
@@ -201,39 +241,39 @@ export async function loadChecks(start, end, stol, payment_method, status, order
                     <td><button class="table-action-btn delete-btn"><img src="../img/delete-icon.png" alt="delete"></button></td>
                     <td><button class="table-action-btn print-btn">🖨️</button></td>
                 `;
-                increment++;
-                tr.dataset.orderNumber    = check.order_number;
-                tr.dataset.paymentMethod  = check.payment_method;
-                tr.dataset.status         = check.status;
-                checkList.appendChild(tr);
-                
-                
-            });
+        increment++;
+        tr.dataset.orderNumber = check.order_number;
+        tr.dataset.paymentMethod = check.payment_method;
+        tr.dataset.status = check.status;
+        checkList.appendChild(tr);
 
-            totalAmount.innerHTML = `<strong>${total.toLocaleString()} so'm</strong>`;
-        } else {
-            checkList.innerHTML = `<tr><td colspan="9">❌ Xatolik yuz berdi. Qayta urinib ko‘ring.</td></tr>`;
-        }
-    } catch (error) {
-        console.error("Xatolik", error);
-        checkList.innerHTML = `<tr><td colspan="9">🚫 Server bilan bog‘lanishda muammo</td></tr>`;
+
+      });
+
+      totalAmount.innerHTML = `<strong>${total.toLocaleString()} so'm</strong>`;
+    } else {
+      checkList.innerHTML = `<tr><td colspan="9">❌ Xatolik yuz berdi. Qayta urinib ko‘ring.</td></tr>`;
     }
+  } catch (error) {
+    console.error("Xatolik", error);
+    checkList.innerHTML = `<tr><td colspan="9">🚫 Server bilan bog‘lanishda muammo</td></tr>`;
+  }
 }
 
 // Bu funksiya global scope’ga emas, loadChecks ichida ham bo’lishi mumkin
-function columnColorByOrderType(orderClass){
+function columnColorByOrderType(orderClass) {
   const table = document.querySelector('.check-table');
   if (!table) return;
 
   // 1) Qachonki biron bir ustun avvalgi qachon bo‘yoqlangan bo‘lsa, uni tozalaymiz
-  const allClasses = ['col-date','col-table','col-amount'];
-  const indexMap  = { 'col-date':3, 'col-table':4, 'col-amount':5 };
+  const allClasses = ['col-date', 'col-table', 'col-amount'];
+  const indexMap = { 'col-date': 3, 'col-table': 4, 'col-amount': 5 };
 
   allClasses.forEach(cls => {
     const idx = indexMap[cls];
     // header va body dagi teglarni topib klassini olib tashlaymiz
     table.querySelectorAll(`thead th:nth-child(${idx}), tbody td:nth-child(${idx})`)
-         .forEach(el => el.classList.remove(cls));
+      .forEach(el => el.classList.remove(cls));
   });
 
   // 2) So‘ngra yangi orderClass bo‘lsa, uning index’ini olib, o‘sha ustunga qo‘shamiz
@@ -244,21 +284,21 @@ function columnColorByOrderType(orderClass){
   // header ustuniga
   const th = table.querySelector(`thead th:nth-child(${colIdx})`);
   if (th) th.classList.add(orderClass);
-  
+
   // har bir row’dagi tegishli td ustuniga
   table.querySelectorAll(`tbody td:nth-child(${colIdx})`)
-       .forEach(td => td.classList.add(orderClass));
+    .forEach(td => td.classList.add(orderClass));
 }
 
 
 function formatDateTime(isoString) {
-    const date = new Date(isoString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    return `${day}-${month}-${year} | ${hours}:${minutes}:${seconds}`;
+  const date = new Date(isoString);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${day}-${month}-${year} | ${hours}:${minutes}:${seconds}`;
 }
 

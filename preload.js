@@ -29,6 +29,30 @@ const electronAPI = {
   }),
   onLoadOrder: (cb) => ipcRenderer.on('load-order', (_e, data) => cb?.(data)),
   confirmPayment: () => ipcRenderer.send('confirm-payment'),
+  
+  printReceipt(payload, { timeoutMs = 15000 } = {}) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('Print timeout'));
+      }, timeoutMs);
+
+      const done = (_evt, data) => {
+        cleanup();
+        if (data?.ok) resolve(data);
+        else reject(new Error(data?.error || 'Print failed'));
+      };
+
+      const cleanup = () => {
+        clearTimeout(timer);
+        ipcRenderer.removeListener('print-receipt:done', done);
+      };
+
+      ipcRenderer.once('print-receipt:done', done);
+      ipcRenderer.send('print-receipt', payload);
+    });
+  },
+  sendPrint: (payload) => ipcRenderer.send('print-receipt', payload),
 
   // --- Setup flow (merge these; do NOT expose electronAPI twice) ---
   submitSetup: (payload) => ipcRenderer.invoke('setup:submit', payload),
@@ -43,6 +67,10 @@ const authAPI = {
   me: () => ipcRenderer.invoke('auth:me'),
   logout: () => ipcRenderer.send('auth:logout'),
 };
+
+contextBridge.exposeInMainWorld('printer', {
+  printReceipt: (payload) => ipcRenderer.send('print-receipt', payload)
+});
 
 // Guard to avoid double-binding error
 try {

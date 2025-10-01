@@ -3,24 +3,43 @@
   "version": "1.0.0",
   "main": "main.js",
   "type": "module",
-  "scripts": {
-    "test": "node main.js",
-    "start": "electron .",
-    "dev": "nodemon --watch . --ext js,html,css --exec electron ."
-  },
-  "keywords": [],
+  "description": "SavdoChef – Offline Restaurant CRM & POS for small cafes and eateries.",
   "author": "Boburmirzo Ergashev",
   "license": "ISC",
-  "description": "",
+  "scripts": {
+    "test": "node main.js",
+    "start": "electron-forge start",
+    "dev": "nodemon --watch . --ext js,html,css --exec electron .",
+    "package": "electron-forge package",
+    "make": "electron-forge make",
+    "deploy:appimage": "electron-forge make && cp -f out/make/*.AppImage ~/Apps/SavdoChef.AppImage"
+  },
+  "config": {
+    "forge": "./forge.config.cjs"
+  },
+  "keywords": [],
   "devDependencies": {
+    "@electron-forge/cli": "^7.9.0",
+    "@electron-forge/maker-deb": "^7.9.0",
+    "@electron-forge/maker-rpm": "^7.9.0",
+    "@electron-forge/maker-squirrel": "^7.9.0",
+    "@electron-forge/maker-zip": "^7.9.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.9.0",
+    "@electron-forge/plugin-fuses": "^7.9.0",
+    "@electron/fuses": "^1.8.0",
+    "@pengx17/electron-forge-maker-appimage": "^1.2.1",
     "electron": "^35.2.0",
     "electron-reload": "^2.0.0-alpha.1",
     "nodemon": "^3.1.9"
   },
   "dependencies": {
+    "@node-escpos/core": "^0.6.0",
+    "@node-escpos/usb-adapter": "^0.3.1",
     "bootstrap": "^5.3.5",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
-    "helmet": "^8.1.0"
+    "electron-squirrel-startup": "^1.0.1",
+    "helmet": "^8.1.0",
+    "iconv-lite": "^0.7.0"
   }
 }

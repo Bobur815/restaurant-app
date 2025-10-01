@@ -6,17 +6,15 @@ export function createMainWindow() {
 
   const win = new BrowserWindow({
     width,
-    height,                          // ✅ ish maydoni bo‘yicha
+    height,                         
     show: false,
     resizable: true,
-    
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false
     }
   });
-  win.setMenuBarVisibility(false)
   win.loadFile(htmlPath('index.html'));
   win.once('ready-to-show', () => win.show());
   return win;

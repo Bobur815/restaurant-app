@@ -1,7 +1,7 @@
 // main.js
 import { app, ipcMain, BrowserWindow, dialog } from 'electron';
 import path from 'node:path';
-import 'dotenv/config';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 // Window factories (split files are optional; see below)
 import { createLoginWindow } from './login.page.js';
@@ -9,28 +9,74 @@ import { createMainWindow } from './main.page.js';
 import { createCategoryWindow } from './category-window.js';
 import { createSessionWindow } from './sessionAdd-window.js';
 import { getPreloadPath, htmlPath } from './paths.js';
-import { fileURLToPath } from 'node:url';
+import { loadEnv } from './config.env.js';
+import { printReceipt } from './printer.js';
 
 // IMPORTANT: base origin without /api
-const API_ORIGIN = process.env.API_BASE || 'http://localhost:3000';
+const API_PORT = process.env.API_PORT || '3000';
+const API_ORIGIN = process.env.API_BASE || `http://127.0.0.1:${API_PORT}`;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
+async function startBackendInline() {
+  const appRoot = app.isPackaged ? app.getAppPath() : process.cwd();
+  const entryPath = path.join(appRoot, 'backend', 'server.js'); // ✅ now inside app.asar in prod
+  const entryUrl = pathToFileURL(entryPath).href;
+
+  process.env.PORT = process.env.PORT || '3000';
+  process.env.NODE_ENV = process.env.NODE_ENV || (app.isPackaged ? 'production' : 'development');
+
+  try {
+    await import(entryUrl);
+    console.log('[backend] started from', entryPath);
+  } catch (e) {
+    console.error('[backend] failed to start:', e);
+  }
+}
+
+
+
+
+
+async function waitForApi(origin, { retries = 40, interval = 250 } = {}) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), 800);
+      const r = await fetch(`${origin}/api/setup/status`, { signal: c.signal, cache: 'no-store' });
+      clearTimeout(t);
+      if (r.ok) return true;
+    } catch { }
+    await new Promise(r => setTimeout(r, interval));
+  }
+  return false;
+}
+
 let mainWindow = null;
 let setupWindow = null;
 
-// Dev reload (optional)
-if (process.env.NODE_ENV !== 'production') {
-  const { createRequire } = await import('module');
-  const require = createRequire(import.meta.url);
-  const reload = require('electron-reload');
-  reload(__dirname, {
-    electron: path.join(__dirname, 'node_modules', '.bin', 'electron'),
-    watchRenderer: true,
-    ignored: ['**/backend/**', '**/*.log']
-  });
+// DEV ONLY: enable reload when not packaged
+if (!app.isPackaged) {
+  try {
+    const { default: reload } = await import('electron-reload'); // dynamic import
+    const electronBin =
+      process.platform === 'win32'
+        ? path.join(process.cwd(), 'node_modules', '.bin', 'electron.cmd')
+        : path.join(process.cwd(), 'node_modules', '.bin', 'electron');
+
+    reload(__dirname, {
+      electron: electronBin,
+      watchRenderer: true,
+      awaitWriteFinish: true,
+      ignored: ['**/backend/**', '**/*.log'],
+    });
+  } catch { }
 }
+
+
+
 
 /* ----------------------------- Setup Window ----------------------------- */
 function openSetupWindow() {
@@ -149,7 +195,7 @@ ipcMain.handle('attempt-login', async (_e, { username, password }) => {
   });
   if (!res.ok) return { success: false, message: 'Login failed' };
   const data = await res.json();
-  
+
   return { success: true, user: data.user };
 });
 
@@ -165,7 +211,7 @@ function createPaymentWindow(order, parentWindow) {
     parent: parentWindow || mainWindow,
     modal: true,
     autoHideMenuBar: true,
-    resizable: false,
+    resizable: true,
     minimizable: false,
     maximizable: false,
     webPreferences: {
@@ -239,8 +285,29 @@ ipcMain.on("window:close", (event) => {
   if (win && !win.isDestroyed()) win.close();
 });
 
+
+ipcMain.on('print-receipt', async (evt, payload) => {
+  try {
+    const { order, paymentMethod } = payload || {};
+    await printReceipt(order, paymentMethod); 
+    evt.reply('print-receipt:done', { ok: true });
+  } catch (err) {
+    console.error('print-receipt failed:', err);
+    evt.reply('print-receipt:done', { ok: false, error: String(err?.message || err) });
+  }
+});
+
 /* ----------------------------- App lifecycle ---------------------------- */
 app.whenReady().then(async () => {
+  loadEnv();
+  // Optional sane default if not set
+  if (!process.env.MONGO_URL) {
+    process.env.MONGO_URL = 'mongodb://127.0.0.1:27017/savdochef';
+    console.warn('[env] MONGO_URL was missing, defaulting to', process.env.MONGO_URL);
+  }
+
+  await startBackendInline();            // ⬅️ start API in the same process
+  const up = await waitForApi(API_ORIGIN);
   // decide which window to show first
   const setupComplete = await checkHealth();
   if (!setupComplete) {
@@ -254,6 +321,20 @@ app.whenReady().then(async () => {
       createLoginWindow();
     }
   });
+});
+
+app.on('browser-window-created', (_e, win) => {
+  if (app.isPackaged) {
+    win.webContents.on('before-input-event', (event, input) => {
+      // Block F12 and Ctrl+Shift+I (Cmd+Alt+I on macOS)
+      const isDevToolsCombo =
+        input.key === 'F12' ||
+        (input.control && input.shift && input.key.toUpperCase() === 'I') ||
+        (process.platform === 'darwin' && input.meta && input.alt && input.key.toUpperCase() === 'I');
+
+      if (isDevToolsCombo) event.preventDefault();
+    });
+  }
 });
 
 app.on('window-all-closed', () => {

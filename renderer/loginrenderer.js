@@ -1,4 +1,6 @@
 //renderer/loginrenderer.js:
+
+
 window.addEventListener('DOMContentLoaded', () => {
   const loginForm = document.querySelector('#login-form');
   const usernameInput = document.getElementById('username');

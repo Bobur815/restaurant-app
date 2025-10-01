@@ -1,14 +1,25 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="../css/checklar.css">
   <title>Cheklar</title>
 </head>
+
 <body>
 
   <div class="filter">
+    <!-- Action Animation Overlay -->
+    <div id="action-anim" class="action-anim hidden">
+      <div class="anim-card">
+        <div class="anim-icon" id="anim-icon">✔</div>
+        <div class="anim-title" id="anim-title">Processing…</div>
+        <div class="anim-bar"><span></span></div>
+      </div>
+    </div>
+
     <h1>🧾 Cheklar</h1>
     <input type="date" id="startDate">
     <input type="date" id="endDate">
@@ -82,33 +93,36 @@
   </div>
 
   <!-- Modal for Edit -->
-<div id="editModal" class="modal hidden">
-  <div class="modal-content">
-    <!-- 1a) Close “X” -->
-    <button id="editCloseBtn" class="close-btn" aria-label="Close"><img src="../img/delete-icon.png"></button>
+  <div id="editModal" class="modal hidden">
+    <div class="modal-content">
+      <!-- 1a) Close “X” -->
+      <button id="editCloseBtn" class="close-btn" aria-label="Close"><img src="../img/delete-icon.png"></button>
 
-    <h2>Check tahrirlash</h2>
-    <div class="filter">
-      <label>
-        💳 To'lov turi:
-        <select id="edit-payment-method"></select>
-      </label>
-      <label>
-        ✅ Holati:
-        <select id="edit-status"></select>
-      </label>
-      <div class="editFilterBtns">
-        <button id="editSaveBtn">Saqlash</button>
-        <button id="editCancelBtn" style="background-color: #c82333; ">Bekor qilish</button>
+      <h2>Check tahrirlash</h2>
+      <div class="filter">
+        <label>
+          💳 To'lov turi:
+          <select id="edit-payment-method"></select>
+        </label>
+        <label>
+          ✅ Holati:
+          <select id="edit-status"></select>
+        </label>
+        <div class="editFilterBtns">
+          <button id="editSaveBtn">Saqlash</button>
+          <button id="editCancelBtn" style="background-color: #c82333; ">Bekor qilish</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
 
   <div id="alert-placeholder"></div>
   <script type="module" src="../renderer/loadAlert.js"></script>
   <script type="module" src="../renderer/checks.js"></script>
   <script type="module" src="../renderer/editCheck.js"></script>
+  <script type="module" src="../renderer/getOrderByQuery.js"></script>
+  <script type="module" src="../utils/loadAnimation.js"></script>
 </body>
+
 </html>

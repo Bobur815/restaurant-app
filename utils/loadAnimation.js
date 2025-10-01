@@ -37,6 +37,7 @@ function hideActionAnim() {
  */
 async function withActionAnimation(promiseFactory, { type = 'open', title = 'Processing…', icon = '✔' } = {}) {
     showActionAnim(type, title, icon);
+    
     const start = Date.now();
     try {
         const p = promiseFactory(); // create the promise now

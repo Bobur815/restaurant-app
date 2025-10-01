@@ -1,5 +1,6 @@
 // /renderer/settings/setting.js
 import { showAlert } from "../../utils/alert.js";
+import { getReceiptSetting } from "./receipt-setting.js";
 
 const API_BASE = 'http://localhost:3000/api';
 
@@ -129,7 +130,7 @@ async function loadReceipt() {
   let original = null;
 
   try {
-    original = await fetch(`http://localhost:3000/api/receipt-settings`).then(toJSON);
+    original = await getReceiptSetting();
   } catch {
     // create defaults if API returns empty
     original = {
