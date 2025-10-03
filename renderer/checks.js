@@ -71,7 +71,7 @@ export function loadCheklarPage(table_count = 10) {
     stol.value = "all";
     pay_method.value = "all";
     status.value = "all";
-    orderByType.value = orderByType.querySelector("option")?.value || "table_number";
+    orderByType.value = orderByType.querySelector("option")?.value || "tableNumber";
     orderDirection.value = "asc";
     refresh();
   });
@@ -98,6 +98,7 @@ export function loadCheklarPage(table_count = 10) {
     const orderNumber = row?.querySelector("td:nth-child(2)")?.textContent;
 
     if (btn.classList.contains("edit-btn")) {
+      
       openEditModal(
         orderNumber,
         row.dataset.paymentMethod,
@@ -107,21 +108,23 @@ export function loadCheklarPage(table_count = 10) {
       deleteTargetOrderNumber = orderNumber;
       deleteModal.classList.remove("hidden");
     } else if (btn.classList.contains('print-btn')) {
-      if (!await showConfirm("Chekni chop etishni tasdiqlaysizmi?")) return;
+      const orderItems = await getOrderByQuery({ orderNumber });
+      console.log(orderItems);
       
-      const orderItems = await getOrderByQuery({ order_number: orderNumber });
-      if (!orderItems) return showAlert("❌ Buyurtma topilmadi");
+      if (!await showConfirm("Chekni chop etishni tasdiqlaysizmi?")) return;
 
+      if (!orderItems) return showAlert("❌ Buyurtma topilmadi");
+      
       const receiptSettings = await getReceiptSetting();
       const { restaurantName, address, phone, footerNote } = receiptSettings;
-      const { order_number, payment_method, order_date, total_amount, table_number } = orderItems;
-
+      const { payment_method, orderDate, totalAmount, tableNumber } = orderItems;
+      
       const order = {
         items: orderItems.items || [],
-        order_number,
-        order_date,
-        total_amount,
-        table_number,
+        orderNumber,
+        orderDate,
+        totalAmount,
+        tableNumber,
         restaurantName,
         address,
         phone,
@@ -130,7 +133,7 @@ export function loadCheklarPage(table_count = 10) {
 
       // prevent double-clicks while printing (optional)
       btn.disabled = true;
-
+      
       try {
         await withActionAnimation(
           () => window.electronAPI.printReceipt({ order, paymentMethod: payment_method }),
@@ -146,41 +149,41 @@ export function loadCheklarPage(table_count = 10) {
     };
 
 
-});
+  });
 
-// ---- O‘chirish tasdiqlash
-confirmDeleteYes.addEventListener("click", async () => {
-  clickSound.currentTime = 0;
-  clickSound.play().catch(() => {/* ignore */ });
+  // ---- O‘chirish tasdiqlash
+  confirmDeleteYes.addEventListener("click", async () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */ });
 
-  try {
-    const res = await fetch(`http://localhost:3000/api/payment/${deleteTargetOrderNumber}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
-      showAlert("✅ Muvaffaqiyatli o‘chirildi");
-      refresh(); // yangilaymiz
-    } else {
-      showAlert("❌ O‘chirishda xatolik");
+    try {
+      const res = await fetch(`http://localhost:3000/api/payment/${deleteTargetOrderNumber}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        showAlert("✅ Muvaffaqiyatli o‘chirildi");
+        refresh(); // yangilaymiz
+      } else {
+        showAlert("❌ O‘chirishda xatolik");
+      }
+    } catch (err) {
+      showAlert("🚫 Serverga ulanishda muammo");
+    } finally {
+      deleteModal.classList.add("hidden");
+      deleteTargetOrderNumber = null;
     }
-  } catch (err) {
-    showAlert("🚫 Serverga ulanishda muammo");
-  } finally {
+  });
+
+  confirmDeleteNo.addEventListener("click", () => {
+    clickSound.currentTime = 0;
+    clickSound.play().catch(() => {/* ignore */ });
+
     deleteModal.classList.add("hidden");
     deleteTargetOrderNumber = null;
-  }
-});
+  });
 
-confirmDeleteNo.addEventListener("click", () => {
-  clickSound.currentTime = 0;
-  clickSound.play().catch(() => {/* ignore */ });
-
-  deleteModal.classList.add("hidden");
-  deleteTargetOrderNumber = null;
-});
-
-// ---- Birinchi yuklashda hozirgi filtrlarga ko‘ra ma’lumotlarni olib kelish
-refresh();
+  // ---- Birinchi yuklashda hozirgi filtrlarga ko‘ra ma’lumotlarni olib kelish
+  refresh();
 }
 
 
@@ -190,7 +193,7 @@ export async function loadChecks(start, end, stol, payment_method, status, order
   checkList.innerHTML = `<tr><td colspan="10">⏳ Yuklanmoqda...</td></tr>`;
 
   const orderTypeColumnColor = {
-    'table_number': 'col-table',
+    'tableNumber': 'col-table',
     'payment_date': 'col-date',
     'amount': 'col-amount'
   }
@@ -201,7 +204,7 @@ export async function loadChecks(start, end, stol, payment_method, status, order
     let allParams = {
       startDate: start,
       endDate: end,
-      table_number: stol,
+      tableNumber: stol,
       payment_method,
       status,
       orderByType,
@@ -227,22 +230,22 @@ export async function loadChecks(start, end, stol, payment_method, status, order
       let increment = 1;
       checks.forEach(check => {
         total += check.amount || 0;
-
+        
         const tr = document.createElement('tr');
         tr.innerHTML = `
                     <td>${increment}</td>
-                    <td>${check.order_number || "-"}</td>
+                    <td>${check.orderNumber || "-"}</td>
                     <td>${formatDateTime(check.payment_date)}</td>
-                    <td>${check.table_number || "-"}</td>
+                    <td>${check.tableNumber || "-"}</td>
                     <td>${check.amount?.toLocaleString()} so'm</td>
-                    <td>${paymentMethods[check.payment_method] || "-"}</td>
+                    <td>${paymentMethods[check.paymentMethod] || "-"}</td>
                     <td>${payStatuses[check.status] || "-"}</td>
                     <td><button class="table-action-btn edit-btn"><img src="../img/edit-icon.png" alt="edit"></button></td>
                     <td><button class="table-action-btn delete-btn"><img src="../img/delete-icon.png" alt="delete"></button></td>
                     <td><button class="table-action-btn print-btn">🖨️</button></td>
                 `;
         increment++;
-        tr.dataset.orderNumber = check.order_number;
+        tr.dataset.orderNumber = check.orderNumber;
         tr.dataset.paymentMethod = check.payment_method;
         tr.dataset.status = check.status;
         checkList.appendChild(tr);

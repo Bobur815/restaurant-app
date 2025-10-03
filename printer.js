@@ -1,9 +1,10 @@
 // printer.js
 import { Printer } from '@node-escpos/core';
 import USB from '@node-escpos/usb-adapter';
+import { showAlert } from './utils/alert';
 
 /** ===== Formatting helpers (80mm, Font A ≈ 42 cols; Font B ≈ 48 cols) ===== */
-const COLS = 42;       // try 42 first; if lines wrap, set 48 and call printer.font('B')
+const COLS = 46;       // try 42 first; if lines wrap, set 48 and call printer.font('B')
 const SEP = '-'.repeat(COLS);
 
 function normalizeUz(str = '') {
@@ -16,7 +17,7 @@ function normalizeUz(str = '') {
     .replaceAll('–', '-')
     .replaceAll('—', '-')
     .replaceAll('·', '-')
-    .replaceAll('📍','');
+    .replaceAll('📍', '');
 }
 
 function center(text) {
@@ -26,10 +27,12 @@ function center(text) {
   return ' '.repeat(pad) + t;
 }
 
-function padRight(text, width = COLS) {
-  const t = normalizeUz(text);
-  if (t.length >= width) return t.slice(0, width);
-  return t + ' '.repeat(width - t.length);
+function setFooter(text) {
+  const t = normalizeUz(text)
+  if (t.length >= COLS) return t;
+  const pad = Math.floor((COLS - t.length) / 2);
+  return `${'*'.repeat(pad - 1)} ${t} ${'*'.repeat(pad - 1)}`
+
 }
 
 function padLeft(text, width) {
@@ -55,83 +58,103 @@ function dotLine(left, right) {
 
 /** Item line: two lines (calc + subtotal), similar to screenshot */
 function itemLines(idx, name, qty, unit, factor, lineSubtotal) {
+
   const fx = (factor && factor !== 1) ? ` (${factor})` : '';
-  const leftName = `${idx}. ${name}${fx}`;               // line 1 left
-  const rightCalc = `${qty} × ${unit * (factor || 1)}`; // line 1 right (no currency)
-  const line1 = dotLine(leftName, rightCalc);
+  const line1 = `${idx}. ${name}${fx}`;
+  const rightCalc = `${qty} x ${unit * (factor || 1)}`;
 
   // line 2 only shows the money total, aligned right
   const subStr = money(lineSubtotal);
-  const line2 = padLeft(subStr, COLS); // right align
+  const line2 = dotLine(rightCalc, padLeft(subStr, COLS));
   return [line1, line2];
 }
 
 /** ===== Main print function ===== */
-export async function printReceipt(order, paymentMethod, opts = {}) {
-  // fallback values
-  const brand = normalizeUz(order?.brand || 'Shoxona milliy');
-  const addr  = normalizeUz(order?.address || '');
-  const tel   = normalizeUz(order?.phone || '');
-  const footerNote = normalizeUz(order?.footerNote || "Xaridingiz uchun rahmat !");
+export async function printReceipt(orderIn, paymentMethod, opts = {}) {
+  // ---------- Normalize order root ----------
+  const order = orderIn || {};
+  const brand =
+    (order.restaurantName ?? order.brand ?? 'Shoxona milliy').toString();
+  const addr = (order.address ?? '').toString();
+  const tel = (order.phone ?? '').toString();
+  // accept either footerNote or footNote (from payment.html)
+  const footerNote = (order.footerNote ?? order.footNote ?? 'Xaridingiz uchun rahmat !').toString();
 
-  const items = Array.isArray(order?.items) ? order.items : [];
-  const now = new Date();
+  // order meta
+  const orderNumber = order.orderNumber ?? order.order_id ?? order.orderId ?? '';
+  const tableNumber = order.tableNumber ?? order.table_number ?? '';
+  const now = order.orderDate ? new Date(order.orderDate) : new Date();
 
-  const device = new USB();
-  await new Promise((res, rej) => device.open(err => err ? rej(err) : res())); // open USB
+  // ---------- Normalize items to a common shape ----------
+  // For each item, produce: { name, unitPrice, quantity, factor }
+  const rawItems = Array.isArray(order.items) ? order.items : [];
+  const items = rawItems.map((it) => {
+    // name: checks.js => it.menu?.name ; payment.html => it.name
+    const name =
+      (it?.menu && typeof it.menu === 'object' ? it.menu.name : it?.name) ?? '';
 
-  const p = new Printer(device, {
-    encoding: 'CP437'   // try 'CP858' if you need more latin glyphs
+    // unit price: checks.js => it.unitPrice ; payment.html => it.price
+    const unitPrice = Number(
+      it?.unitPrice ?? it?.price ?? 0
+    );
+
+    // quantity: string/number, fallback 1
+    const quantity = Math.max(0, Number(it?.quantity ?? 1));
+
+    // factor: weight (if provided) OR portion OR 1
+    const weight = it?.weightKg ?? it?.weight_kg ?? it?.weightValue;
+    const portion = it?.portions != null ? Number(it.portions) : undefined;
+    const factor = Number(
+      (weight != null && weight !== '' ? weight : (portion != null ? portion : 1))
+    ) || 1;
+
+    return { name: String(name), unitPrice, quantity, factor };
   });
 
-  let total = 0;
-
+  // ---------- Printer ----------
+  const device = new USB();
   try {
-    // Choose font & init
+    await new Promise((res, rej) => device.open(err => err ? rej(err) : res()));
+  } catch (e) {
+    await showAlert("Printer not accessible. On Windows, install WinUSB with Zadig, then replug the printer.");
+  }
+  const p = new Printer(device, { encoding: 'CP437' }); // or 'CP858' if accents needed
+
+  let total = 0;
+  try {
     p.hardware('INIT');
-    p.font('A');               // for 42 columns. Use 'B' + COLS=48 if you prefer narrower text
-    p.align('CT');
-    p.style('B').size(1,1).text(center(brand));
-    p.style('NORMAL').size(1,1);
+    p.font('A'); // 42 cols
+
+    // Header
+    p.style('B').size(1.5, 1.5).text(center(brand));
+    p.style('NORMAL').size(1, 1);
     if (addr) p.text(center(addr));
-    if (tel)  p.text(center(`Tel: ${tel}`));
+    if (tel) p.text(center(`Tel: ${tel}`));
+    p.text('');
     p.text('*'.repeat(COLS));
+    p.text('');
 
     // Meta
-    p.align('LT');
-    p.text(
-      dotLine(
-        `Stol: ${order?.table_number ?? ''}`,
-        `Buyurtma: #${String(order?.orderId ?? '').padStart(6, '0')}`
-      )
-    );
-    p.text(
-      dotLine(
-        `Sana: ${now.toLocaleDateString('uz-UZ')}`,
-        `Soat: ${now.toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit', hour12:false})}`
-      )
-    );
-    p.text(SEP);
+    p.text(dotLine(`Stol: ${tableNumber ?? ''}`, `Buyurtma: #${String(orderNumber ?? '')}`));
+    p.text(dotLine(
+      `Sana: ${now.toLocaleDateString('uz-UZ')}`,
+      `Soat: ${now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false })}`
+    ));
+    p.text(SEP); p.text(SEP); p.text('');
 
-    // Items
+    // Lines
     items.forEach((it, i) => {
-      const name    = normalizeUz(String(it?.name || '').trim());
-      const qty     = Number(it?.quantity || 0);
-      const unit    = Number(it?.price || 0);
-      const portion = it?.portions != null ? Number(it.portions || 1) : 1;
-      const weight  = it?.weight_kg ?? it?.weightValue ?? 1;
-      const factor  = (weight && weight !== 1) ? Number(weight) : portion;
-      const lineSum = qty * factor * unit;
+      const lineSum = it.quantity * it.factor * it.unitPrice;
       total += lineSum;
 
-      const [l1, l2] = itemLines(i + 1, name, qty, unit, factor, lineSum);
+      const [l1, l2] = itemLines(i + 1, it.name, it.quantity, it.unitPrice, it.factor, lineSum);
       p.text(l1);
       p.text(l2);
-      p.text(''); // small spacing between items
+      p.text('');
     });
 
-    // positions count
-    p.text(`Pozitsiyalar: ${(items.length || 0)}`);
+    p.text(SEP); p.text(SEP);
+    p.text(`Pozitsiyalar: ${items.length}`);
     p.text(SEP);
 
     // Total
@@ -142,21 +165,17 @@ export async function printReceipt(order, paymentMethod, opts = {}) {
 
     // Payment method
     const map = { cash: 'Naqd', card: 'Karta', click: 'Klik', debt: 'Nasiya' };
-    const pmt = map[paymentMethod] || 'Naqd';
+    const pmt = map[(paymentMethod ?? '').toLowerCase()] || 'Naqd';
     p.text(`To'lov usuli:`);
     p.text(dotLine(`- ${pmt}`, `= ${money(total)}`));
 
-    p.text('');
-    p.align('CT');
-    p.text(`***** ${footerNote} *****`);
-    p.align('LT');
+    p.text(''); p.text(SEP); p.text(SEP);
+    if (footerNote) p.text(setFooter(footerNote));
 
-    // feed + cut
     p.feed(3);
     p.cut();
-    // optional: open drawer on pin 2
-    // p.cashdraw(2);
   } finally {
-    try { p.close(); } catch {}
+    try { p.close(); } catch { }
   }
 }
+

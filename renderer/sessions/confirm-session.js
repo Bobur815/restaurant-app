@@ -8,7 +8,8 @@ export async function confirmSession({ items }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ items /* your data */ }),
   });
-
+  console.log(items);
+  
   try {
     const resp = await withActionAnimation(
       postOpen,

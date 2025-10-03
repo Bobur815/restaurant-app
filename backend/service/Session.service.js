@@ -1,81 +1,117 @@
-// src/services/Session.service.js
-import mongoose from "mongoose";
-import ExpensesModel from "../models/Expenses.model.js";
-import Order_itemsModel from "../models/Order_items.model.js";
-import OrdersModel from "../models/Orders.model.js";
-import ResidualModel from "../models/Residual.model.js";
-import SessionModel from "../models/Sessions.model.js";
+// backend/services/session.service.js
+import prisma from "../database/prisma.js";
 import CustomError from "../utils/CustomError.js";
 import { getGlobalPendingQtyByMenu } from "../utils/pendingOrders.js";
 import getProductByMenuId from "../utils/getProductByMenuId.js";
 
-// Kutiladigan action constantlari
 export const RES_ACTION = {
   CARRY: "CARRY_TO_NEXT",
   WRITE_OFF: "WRITE_OFF",
 };
 
-const toObjectId = (v) => {
-  if (!v) return null;
-  const s = String(v);
-  return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : null;
+const toIntId = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
 };
 
 class SessionService {
-  constructor() { }
+  constructor() {}
 
-  /** Fetch all sessions, optionally with a Mongo filter (e.g. { status: 'open' }) */
+  /** Fetch all sessions, optional filter (e.g. { status: 'open' }) */
   async getAll(filter = {}) {
-    return SessionModel
-      .find(filter)
-      .populate({
-        path: 'items.menu_id',
-        select: 'name image_url soldByWeight'
-      })
-      .lean();
+    // Map incoming filter to Prisma where
+    const where = {};
+    if (filter.status) where.status = String(filter.status);
+
+    const sessions = await prisma.session.findMany({
+      where,
+      include: {
+        items: {
+          include: {
+            menu: { select: { name: true, imageUrl: true, soldByWeight: true } },
+          },
+        },
+      },
+      orderBy: { id: "desc" },
+    });
+
+    return sessions;
   }
 
-
-  /** Fetch a single session by its _id */
+  /** Fetch a single session by its id */
   async getSingle(sessionId) {
-
-    const session = await SessionModel.findById(sessionId);
-    return session
+    const id = toIntId(sessionId);
+    if (!id) return null;
+    return prisma.session.findUnique({
+      where: { id },
+      include: {
+        items: true,
+      },
+    });
   }
 
-  /** Create a new session (day/period start) */
+  /** Create a new session (day/period start) + apply pending CARRY residuals as 'applied' to this session */
   async create({ items }) {
-    const exists = await SessionModel.findOne({ status: "open" }).lean();
+    // only one open session
+    const exists = await prisma.session.findFirst({ where: { status: "open" } });
     if (exists) throw new Error("Another open session already exists");
-
-    // items should be an array of { menu_id, initialQuantity }
     
-    const session = await SessionModel.create({ items });
+    // items: [{ menuId, initialQuantity }]
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new Error("Items required");
+    }
+    const payloadItems = items.map((it, idx) => {
+      const mid = toIntId(it.menuId);
+      const init = Number(it.initialQuantity);
+      if (!mid) throw new Error(`items[${idx}].menuId is invalid`);
+      if (!Number.isFinite(init) || init < 0) {
+        throw new Error(`items[${idx}].initialQuantity must be >= 0`);
+      }
+      return { menuId: mid, initialQuantity: init, soldQuantity: 0 };
+    });
 
-    // 2) Pending carry residuallarni olamiz (eng so‘nggi yopilgan smenalardan bo‘lishi ham mumkin)
-    const toCarry = await ResidualModel.find({
-      action: RES_ACTION.CARRY,
-      status: "pending",
-    }).lean();
+    // Create session + items
+    const session = await prisma.session.create({
+      data: {
+        status: "open",
+        items: {
+          create: payloadItems,
+        },
+      },
+    });
 
-    // 4) Residuallarni applied qilish
-    await ResidualModel.updateMany(
-      { _id: { $in: toCarry.map((x) => x._id) } },
-      { $set: { status: "applied", appliedToSession: session._id } }
-    );
+    // Mark existing pending CARRY residuals as applied to this session
+    const toCarry = await prisma.residual.findMany({
+      where: {
+        action: RES_ACTION.CARRY,
+        status: "pending",
+      },
+      select: { id: true },
+    });
+
+    if (toCarry.length) {
+      await prisma.residual.updateMany({
+        where: { id: { in: toCarry.map((r) => r.id) } },
+        data: { status: "applied", appliedToSession: session.id },
+      });
+    }
 
     return session;
   }
 
+  /** Update a session (merge items initialQuantity with guards) */
   async updateSession(sessionId, data = {}) {
-    const sId = toObjectId(sessionId);
-    if (!sId) throw new Error('Invalid sessionId');
+    const id = toIntId(sessionId);
+    if (!id) throw new Error("Invalid sessionId");
 
-    const session = await SessionModel.findById(sId);
-    if (!session) throw new Error('Session not found');
-    if (session.status !== 'open') {
-      const e = new Error('Session is not open');
-      e.code = 'SESSION_NOT_OPEN';
+    const session = await prisma.session.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (!session) throw new Error("Session not found");
+    if (session.status !== "open") {
+      const e = new Error("Session is not open");
+      e.code = "SESSION_NOT_OPEN";
       throw e;
     }
 
@@ -83,89 +119,100 @@ class SessionService {
 
     // If no items provided, update other fields and return
     if (items == null) {
-      Object.entries(data).forEach(([k, v]) => { if (k !== 'items') session.set(k, v); });
-      await session.save();
-      return session;
+      const patch = {};
+      // Only allow status change here if desired; otherwise ignore non-items
+      if (data.status) patch.status = String(data.status);
+      const updated = await prisma.session.update({
+        where: { id },
+        data: patch,
+        include: { items: true },
+      });
+      return updated;
     }
 
     if (!Array.isArray(items)) {
-      throw new Error('Items should be an array');
+      throw new Error("Items should be an array");
     }
 
-    // Normalize incoming items (only fields you allow to update)
+    // Normalize incoming items
     const incoming = items.map((it, idx) => {
-      const mid = toObjectId(it.menu_id);
+      const mid = toIntId(it.menuId);
       const init = Number(it.initialQuantity);
-      if (!mid) throw new Error(`items[${idx}].menu_id is invalid`);
+      if (!mid) throw new Error(`items[${idx}].menuId is invalid`);
       if (!Number.isFinite(init) || init < 0) {
         throw new Error(`items[${idx}].initialQuantity must be >= 0`);
       }
-      return { menu_id: mid, initialQuantity: init };
+      return { menuId: mid, initialQuantity: init };
     });
 
-    // Build quick lookup for incoming
-    const incomingMap = new Map(incoming.map(it => [String(it.menu_id), it.initialQuantity]));
-
-    // Global pending guard for these menu_ids (until orders have session_id)
-    const uniqueMenuIds = Array.from(new Set(incoming.map(x => String(x.menu_id)))).map(toObjectId);
+    const incomingMap = new Map(incoming.map((it) => [String(it.menuId), it.initialQuantity]));
+    const uniqueMenuIds = Array.from(new Set(incoming.map((x) => x.menuId)));
+    // global pending check
     const globalPendingMap = await getGlobalPendingQtyByMenu(uniqueMenuIds);
 
-    // Merge into existing items while preserving soldQuantity; validate
+    // Build next items + collect violations
     const violations = [];
     const existing = session.items || [];
-    const nextItems = existing.map((ex) => {
-      const key = String(ex.menu_id);
-      if (!incomingMap.has(key)) return ex; // not touched
+    const nextItems = [];
+
+    // Update existing ones present in incoming
+    for (const ex of existing) {
+      const key = String(ex.menuId);
+      if (!incomingMap.has(key)) {
+        // untouched
+        nextItems.push(ex);
+        continue;
+      }
 
       const proposedInitial = incomingMap.get(key);
       const sold = Number(ex.soldQuantity || 0);
 
-      // 1) cannot go below what is already sold in this session
       if (proposedInitial < sold) {
         violations.push({
-          menu_id: key,
-          reason: 'LESS_THAN_SOLD',
+          menuId: key,
+          reason: "LESS_THAN_SOLD",
           soldQuantity: sold,
           proposedInitial,
           message: `initialQuantity (${proposedInitial}) < soldQuantity (${sold})`,
         });
       }
 
-      // 2) cannot go below globally pending orders for this menu (until session link exists)
-      const pendingNeed = globalPendingMap.get(key) || 0;
+      const pendingNeed = Number(globalPendingMap.get(Number(key)) || 0);
       if (proposedInitial < pendingNeed) {
         violations.push({
-          menu_id: key,
-          reason: 'LESS_THAN_GLOBAL_PENDING',
+          menuId: key,
+          reason: "LESS_THAN_GLOBAL_PENDING",
           pendingRequired: pendingNeed,
           proposedInitial,
           message: `initialQuantity (${proposedInitial}) < global pending need (${pendingNeed})`,
         });
       }
 
-      // merge: keep soldQuantity, only change initialQuantity (and whatever else you allow)
-      return {
-        ...ex.toObject?.() ?? ex,
+      nextItems.push({
+        ...ex,
         initialQuantity: proposedInitial,
-      };
-    });
+      });
+    }
 
-    // Items present only in incoming (newly added) — add them with soldQuantity=0
+    // Add new items that are not in existing
+    const existingSet = new Set(existing.map((ex) => String(ex.menuId)));
     for (const inc of incoming) {
-      const exists = existing.some(ex => String(ex.menu_id) === String(inc.menu_id));
-      if (!exists) {
-        const pendingNeed = globalPendingMap.get(String(inc.menu_id)) || 0;
+      const key = String(inc.menuId);
+      if (!existingSet.has(key)) {
+        const pendingNeed = Number(globalPendingMap.get(inc.menuId) || 0);
         if (inc.initialQuantity < pendingNeed) {
           violations.push({
-            menu_id: String(inc.menu_id),
-            reason: 'LESS_THAN_GLOBAL_PENDING',
+            menuId: key,
+            reason: "LESS_THAN_GLOBAL_PENDING",
             pendingRequired: pendingNeed,
             proposedInitial: inc.initialQuantity,
             message: `initialQuantity (${inc.initialQuantity}) < global pending need (${pendingNeed})`,
           });
         }
         nextItems.push({
-          menu_id: inc.menu_id,
+          id: undefined, // new
+          sessionId: session.id,
+          menuId: inc.menuId,
           initialQuantity: inc.initialQuantity,
           soldQuantity: 0,
         });
@@ -173,184 +220,259 @@ class SessionService {
     }
 
     if (violations.length) {
-      const err = new Error('❌ Ayrim mahsulotlar sotilgan yoki kutilayotgan miqdorlarga nisbatan yaroqsiz');
+      const err = new Error(
+        "❌ Ayrim mahsulotlar sotilgan yoki kutilayotgan miqdorlarga nisbatan yaroqsiz"
+      );
       err.status = 409;
-      err.code = 'INITIAL_QTY_CONFLICT';
+      err.code = "INITIAL_QTY_CONFLICT";
       err.details = violations;
-
       throw err;
     }
 
-    // Apply non-items fields
-    Object.entries(data).forEach(([k, v]) => { if (k !== 'items') session.set(k, v); });
+    // Persist: update existing rows and create new ones
+    await prisma.$transaction(async (tx) => {
+      // Update rows that already exist and changed
+      for (const it of nextItems) {
+        if (it.id) {
+          // existing
+          const existingRow = existing.find((e) => e.id === it.id);
+          if (
+            existingRow &&
+            Number(existingRow.initialQuantity) !== Number(it.initialQuantity)
+          ) {
+            await tx.sessionItem.update({
+              where: { id: it.id },
+              data: { initialQuantity: it.initialQuantity },
+            });
+          }
+        } else {
+          // new
+          await tx.sessionItem.create({
+            data: {
+              sessionId: session.id,
+              menuId: it.menuId,
+              initialQuantity: it.initialQuantity,
+              soldQuantity: 0,
+            },
+          });
+        }
+      }
 
-    // Replace items with merged array (soldQuantity preserved)
-    session.set('items', nextItems);
-    await session.save();
+      // If you want to remove items not present in incoming, you could delete them here.
+      // Your original code did NOT delete unspecified items, so we keep them.
+    });
 
-    return session;
+    // Return fresh session
+    return prisma.session.findUnique({
+      where: { id: session.id },
+      include: { items: true },
+    });
   }
 
-  async recordSale(menuId, delta = 0, { session } = {}) {
-    const s = await SessionModel
-      .findOne({ status: 'open', 'items.menu_id': menuId })
-      .session(session);
+  /** Increase/decrease soldQuantity for a menu inside the open session */
+  async recordSale(menuIdRaw, delta = 0, { session } = {}) {
+    const menuId = toIntId(menuIdRaw);
+    if (!menuId) throw new CustomError("Invalid menu id", 400, "BadRequest");
+
+    // Find open session that has this menu item
+    const s = await prisma.session.findFirst({
+      where: { status: "open", items: { some: { menuId } } },
+      include: { items: true },
+    });
 
     if (!s) throw new CustomError("Open session not found", 404, "NotFoundError");
 
-    const it = s.items.find(i => i.menu_id.equals(menuId));
+    const it = s.items.find((i) => i.menuId === menuId);
     if (!it) throw new CustomError("Menu item not in this session", 409, "ConflictException");
 
-    const next = it.soldQuantity + Number(delta);
-
+    const next = Number(it.soldQuantity) + Number(delta);
     if (next < 0) throw new CustomError("SoldQuantity < 0 bo‘lib qoladi", 400, "BadRequest");
-    if (next > it.initialQuantity) throw new CustomError("Qolganidan ko‘p sotilmoqda", 400, "BadRequest");
+    if (next > Number(it.initialQuantity)) throw new CustomError("Qolganidan ko‘p sotilmoqda", 400, "BadRequest");
 
-    it.soldQuantity = next;
-    await s.save({ session });
-    return { menu_id: it.menu_id, soldQuantity: it.soldQuantity, remaining: it.initialQuantity - it.soldQuantity };
+    const updated = await prisma.sessionItem.update({
+      where: { id: it.id },
+      data: { soldQuantity: next },
+    });
+
+    return {
+      menuId: updated.menuId,
+      soldQuantity: Number(updated.soldQuantity),
+      remaining: Number(updated.initialQuantity) - Number(updated.soldQuantity),
+    };
   }
 
-
+  /** Close a session and create residuals/expenses as per actions payload */
   async close(sessionId, payload = {}) {
-    const s = await SessionModel.findById(sessionId);
-    if (!s) throw new Error('Session not found');
-    if (s.status !== 'open') throw new Error('Session is not open');
+    const id = toIntId(sessionId);
+    if (!id) throw new Error("Invalid session id");
 
-    // Make actions map: menu_id => { carry_to_next_qty, write_off_qty }
+    const s = await prisma.session.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+    if (!s) throw new Error("Session not found");
+    if (s.status !== "open") throw new Error("Session is not open");
+
+    // Build actions map { menuId -> { carry, write, note, unitCost } }
     const actionsByMenu = new Map();
     for (const a of Array.isArray(payload.actions) ? payload.actions : []) {
-      if (!a || !a.menu_id) continue;
+      if (!a || !a.menuId) continue;
+      const mid = toIntId(a.menuId);
+      if (!mid) throw new Error(`Invalid menuId in actions: ${a.menuId}`);
 
-      const product = await getProductByMenuId(toObjectId(a.menu_id));
-      if (!product) {
-        throw new Error(`Invalid menu_id in actions: ${a.menu_id}`);
-      }
+      // fetch product for unitCost fallback
+      const product = await getProductByMenuId(mid); // make sure it returns { price }
+      const unitCost = Number.isFinite(+product?.price) ? +product.price : 0;
 
-      const unitCost = Number.isFinite(+product.price) ? +product.price : 0;
-
-      actionsByMenu.set(String(a.menu_id), {
+      actionsByMenu.set(String(mid), {
         carry: Number.isFinite(+a.carry_to_next_qty) ? +a.carry_to_next_qty : 0,
         write: Number.isFinite(+a.write_off_qty) ? +a.write_off_qty : 0,
-        note: a.note ?? '',
+        note: a.note ?? "",
         unitCost,
       });
     }
 
-    // 1) Qoldiqni hisoblash
+    // 1) leftovers
     const leftovers = [];
     for (const it of s.items || []) {
       const initial = Number(it.initialQuantity || 0);
       const sold = Number(it.soldQuantity || 0);
       const remaining = Math.max(0, initial - sold);
-      if (remaining > 0) {
-        leftovers.push({ menu_id: it.menu_id, remaining });
-      }
+      if (remaining > 0) leftovers.push({ menuId: it.menuId, remaining });
     }
 
-    // 2) Taqsimlash: carry / write-off
+    // 2) distribute carry/write-off
+    const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
     const residualResults = [];
     const expenseResults = [];
 
-    // helper clamp
-    const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-
     for (const lf of leftovers) {
-      const key = String(lf.menu_id);
+      const key = String(lf.menuId);
       const user = actionsByMenu.get(key);
 
       let carryQty = 0;
       let writeQty = 0;
-      let note, unitCost;
+      let note = "";
+      let unitCost = 0;
 
       if (user) {
-
-        // foydalanuvchi kiritgan qiymatlar
         carryQty = clamp(Number(user.carry || 0), 0, lf.remaining);
         writeQty = clamp(Number(user.write || 0), 0, lf.remaining - carryQty);
-        note = user.note ?? '';
-        unitCost = user.unitCost;
-        // agar ikkalasi ham 0 bo‘lsa — default: hammasi carry
-        if (carryQty === 0 && writeQty === 0) {
-          carryQty = lf.remaining;
-        }
+        note = user.note ?? "";
+        unitCost = Number.isFinite(user.unitCost) ? user.unitCost : 0;
+
+        // if both 0 → default all carry
+        if (carryQty === 0 && writeQty === 0) carryQty = lf.remaining;
       } else {
-        // default: hammasi carry
+        // default all carry
         carryQty = lf.remaining;
-        note = '';
       }
 
-      // --- CARRY QISMI ---
+      // --- CARRY PART ---
       if (carryQty > 0) {
-        // Har action uchun alohida hujjat saqlash uchun filter ga action ham qo‘shamiz
-        const rCarry = await ResidualModel.findOneAndUpdate(
-          { session_id: s._id, menu_id: lf.menu_id, action: RES_ACTION.CARRY },
-          {
-            $set: {
-              session_id: s._id,
-              menu_id: lf.menu_id,
+        // We need to "upsert" by (sessionId, menuId, action)
+        const existingCarry = await prisma.residual.findFirst({
+          where: { sessionId: s.id, menuId: lf.menuId, action: RES_ACTION.CARRY },
+        });
+
+        let rCarry;
+        if (existingCarry) {
+          rCarry = await prisma.residual.update({
+            where: { id: existingCarry.id },
+            data: {
+              quantity: carryQty,
+              status: "pending",
+              expenseId: null,
+              appliedToSession: null,
+              note: note || "",
+            },
+          });
+        } else {
+          rCarry = await prisma.residual.create({
+            data: {
+              sessionId: s.id,
+              menuId: lf.menuId,
               quantity: carryQty,
               action: RES_ACTION.CARRY,
-              status: 'pending',
-              expense_id: null,
+              status: "pending",
+              expenseId: null,
               appliedToSession: null,
-              note: note || '',
+              note: note || "",
             },
-          },
-          { upsert: true, new: true }
-        );
+          });
+        }
         residualResults.push(rCarry);
       }
 
-      // --- WRITE-OFF QISMI ---
+      // --- WRITE-OFF PART ---
       if (writeQty > 0) {
-        const exp = await ExpensesModel.create({
-          session_id: s._id,
-          menu_id: lf.menu_id,
-          type: 'residual_writeoff',
-          quantity: writeQty,
-          unitCost: Number.isFinite(unitCost) ? unitCost : 0,
-          amount: (Number.isFinite(unitCost) ? unitCost : 0) * writeQty,
-          note: note || '',
+        // create expense
+        const exp = await prisma.expense.create({
+          data: {
+            sessionId: s.id,
+            menuId: lf.menuId,
+            type: "residual_writeoff",
+            quantity: writeQty,
+            unitCost: unitCost,
+            amount: unitCost * writeQty,
+            note: note || "",
+          },
         });
-        
-        const rWO = await ResidualModel.findOneAndUpdate(
-          { session_id: s._id, menu_id: lf.menu_id, action: RES_ACTION.WRITE_OFF },
-          {
-            $set: {
-              session_id: s._id,
-              menu_id: lf.menu_id,
+
+        // upsert residual for WRITE_OFF
+        const existingWO = await prisma.residual.findFirst({
+          where: { sessionId: s.id, menuId: lf.menuId, action: RES_ACTION.WRITE_OFF },
+        });
+
+        let rWO;
+        if (existingWO) {
+          rWO = await prisma.residual.update({
+            where: { id: existingWO.id },
+            data: {
               quantity: writeQty,
               action: RES_ACTION.WRITE_OFF,
-              status: 'applied',
-              expense_id: exp._id,
-              note: note || '',
+              status: "applied",
+              expenseId: exp.id,
+              note: note || "",
             },
-          },
-          { upsert: true, new: true }
-        );
+          });
+        } else {
+          rWO = await prisma.residual.create({
+            data: {
+              sessionId: s.id,
+              menuId: lf.menuId,
+              quantity: writeQty,
+              action: RES_ACTION.WRITE_OFF,
+              status: "applied",
+              expenseId: exp.id,
+              note: note || "",
+            },
+          });
+        }
 
         expenseResults.push(exp);
         residualResults.push(rWO);
       }
     }
 
-    // 3) Sessionni yopish (pre-save hook closedAt ni set qiladi)
-    s.status = 'closed';
-    await s.save();
+    // 3) close the session (also set closedAt)
+    const closed = await prisma.session.update({
+      where: { id: s.id },
+      data: { status: "closed", closedAt: new Date() },
+    });
 
-    // 4) Summary
+    // 4) summary
     const itemsWithLeftovers = leftovers.length;
     const totalCarry = residualResults
-      .filter(r => r.action === RES_ACTION.CARRY)
+      .filter((r) => r.action === RES_ACTION.CARRY)
       .reduce((sum, r) => sum + Number(r.quantity || 0), 0);
     const totalWrite = residualResults
-      .filter(r => r.action === RES_ACTION.WRITE_OFF)
+      .filter((r) => r.action === RES_ACTION.WRITE_OFF)
       .reduce((sum, r) => sum + Number(r.quantity || 0), 0);
 
     return {
-      session_id: s._id,
-      closedAt: s.closedAt,
+      sessionId: closed.id,
+      closedAt: closed.closedAt,
       residuals: residualResults,
       expenses: expenseResults,
       summary: {
@@ -363,9 +485,17 @@ class SessionService {
     };
   }
 
-  /** (Optional) Delete a session */
+  /** Delete a session (simple) */
   async delete(sessionId) {
-    return SessionModel.findByIdAndDelete(sessionId);
+    const id = toIntId(sessionId);
+    if (!id) return null;
+    try {
+      return await prisma.session.delete({ where: { id } });
+    } catch (err) {
+      // If not found, P2025
+      if (err?.code === "P2025") return null;
+      throw err;
+    }
   }
 }
 

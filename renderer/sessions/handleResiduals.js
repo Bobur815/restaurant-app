@@ -10,19 +10,19 @@ export function unwrapResidualItems(residuals) {
 }
 
 // --- helper: jadvalda bor bo'lsa jamlash, bo'lmasa selectProduct bilan qo'shish
-export async function addOrMergeRowFromResidual({ menu_id, quantity }) {
+export async function addOrMergeRowFromResidual({ menuId, quantity }) {
     // menu ma'lumotini olib kelamiz (nom, rasm)
-    const menuItem = await getMenuItemById(menu_id);
-    const id = (menu_id?._id ?? menu_id); // ObjectId yoki string
+    const menuItem = await getMenuItemById(menuId);
+    const id = (menuId?.id ?? menuId); // ObjectId yoki string
     const rowId = `order-item-${id}`;
     let row = document.getElementById(rowId);
 
     if (!row) {
         // yangi qator qo'shish (sizda bor selectProduct ishlatamiz)
         const item = {
-            _id: id,
+            id: id,
             name: menuItem?.name ?? '—',
-            image_url: menuItem?.image_url ?? '',
+            imageUrl: menuItem?.imageUrl ?? '',
         };
         await selectProduct(item);
         row = document.getElementById(rowId);

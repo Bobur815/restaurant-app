@@ -1,172 +1,191 @@
-import mongoose from 'mongoose';
-import ResidualModel from '../models/Residual.model.js';
+// backend/services/residual.service.js
+import prisma from "../database/prisma.js";
 
-const DIR = { asc: 1, desc: -1 };
-const BY_WHITELIST = new Set(['createdAt', 'quantity']);
-const ACTIONS = new Set(['CARRY_TO_NEXT', 'WRITE_OFF']);
-const STATUSES = new Set(['pending', 'applied']);
+const DIR = { asc: "asc", desc: "desc" };
+const BY_WHITELIST = new Set(["createdAt", "quantity"]);
+const ACTIONS = new Set(["CARRY_TO_NEXT", "WRITE_OFF"]);
+const STATUSES = new Set(["pending", "applied"]);
 
-function toObjectIdMaybe(v) {
-  if (!v) return undefined;
-  const s = String(v);
-  return mongoose.Types.ObjectId.isValid(s) ? new mongoose.Types.ObjectId(s) : undefined;
-}
+const toIntId = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
 
-class ResidualService {
+export default new (class ResidualService {
   /**
-   * Query (hammasi ixtiyoriy):
-   * - start, end (ISO yoki yyyy-mm-dd)
-   * - session_id, appliedToSession, menu_id (ObjectId)
+   * Query (all optional):
+   * - start, end (ISO or yyyy-mm-dd)
+   * - sessionId, appliedToSession, menuId (numbers as strings or numbers)
    * - status: pending|applied
    * - action: CARRY_TO_NEXT|WRITE_OFF
-   * - q: note bo‘yicha regex qidiruv
+   * - q: search in note (case-insensitive)
    * - bytype: createdAt|quantity
    * - direction: asc|desc
    * - page, limit
    *
-   * Default: action=CARRY_TO_NEXT, status=pending (ko‘chiriladiganlar ro‘yxati).
+   * Note: your original code's comment says default action/status,
+   * but the implementation only applies them when provided. We keep that behavior.
    */
   async getResiduals(query = {}) {
     const {
       start,
       end,
-      session_id,
+      sessionId,
       appliedToSession,
-      menu_id,
+      menuId,
       status,
       action,
       q,
-      bytype = 'createdAt',
-      direction = 'desc',
+      bytype = "createdAt",
+      direction = "desc",
       page = 1,
       limit = 20,
     } = query;
 
-    const filter = {};
+    // Build where
+    const where = {};
 
-    // Sana oraliq
+    // Date range on createdAt
     if (start || end) {
-      const from = start ? new Date(start) : undefined;
-      const to = end ? new Date(end) : undefined;
-      if (to) to.setHours(23, 59, 59, 999);
-      const createdRange = {};
-      if (from && !isNaN(from)) createdRange.$gte = from;
-      if (to && !isNaN(to)) createdRange.$lte = to;
-      if (Object.keys(createdRange).length) filter.createdAt = createdRange;
+      const createdAt = {};
+      if (start) createdAt.gte = new Date(start);
+      if (end) {
+        const to = new Date(end);
+        to.setHours(23, 59, 59, 999);
+        createdAt.lte = to;
+      }
+      if (Object.keys(createdAt).length) where.createdAt = createdAt;
     }
 
-    // ID filtrlari
-    const sid = toObjectIdMaybe(session_id);
-    if (sid) filter.session_id = sid;
+    // IDs
+    const sid = toIntId(sessionId);
+    if (sid) where.sessionId = sid;
 
-    const aid = toObjectIdMaybe(appliedToSession);
-    if (aid) filter.appliedToSession = aid;
+    const aid = toIntId(appliedToSession);
+    if (aid) where.appliedToSession = aid;
 
-    const mid = toObjectIdMaybe(menu_id);
-    if (mid) filter.menu_id = mid;
+    const mid = toIntId(menuId);
+    if (mid) where.menuId = mid;
 
-    // Action/status (default: ko‘chiriladiganlar)
-    if (action && ACTIONS.has(action)) {
-      filter.action = action;
-    }
-    if (status && STATUSES.has(status)) {
-      filter.status = status;
-    }
+    // Action/status filters (only if provided)
+    if (action && ACTIONS.has(action)) where.action = action;
+    if (status && STATUSES.has(status)) where.status = status;
 
-    // Note regex
-    if (q && q.trim()) {
-      const safe = q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      filter.note = new RegExp(safe, 'i');
+    // Note search (LIKE, case-insensitive)
+    if (q && String(q).trim()) {
+      where.note = { contains: String(q).trim(), mode: "insensitive" };
     }
 
-    // sort
-    const sortField = BY_WHITELIST.has(bytype) ? bytype : 'createdAt';
-    const sortDir = direction === 'asc' ? DIR.asc : DIR.desc;
-    const sortSpec = { [sortField]: sortDir, createdAt: -1, _id: -1 }; // barqaror
+    // Sort – keep stable fallback by createdAt desc & id desc
+    const sortField = BY_WHITELIST.has(bytype) ? bytype : "createdAt";
+    const sortDir = direction === "asc" ? DIR.asc : DIR.desc;
+    const orderBy = [
+      { [sortField]: sortDir },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ];
 
-    // pagination
+    // Pagination
     const p = Math.max(1, parseInt(page, 10) || 1);
     const lim = Math.min(200, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (p - 1) * lim;
 
-    // ma'lumotlar + sanash
+    // Parallel queries
     const [items, totalCount, totalsAgg] = await Promise.all([
-      ResidualModel.find(filter)
-        .sort(sortSpec)
-        .skip(skip)
-        .limit(lim)
-        .select({ // keraklisini oling
-          session_id: 1, menu_id: 1, quantity: 1, action: 1, status: 1,
-          appliedToSession: 1, expense_id: 1, note: 1, createdAt: 1
-        })
-        .populate('menu_id', 'name') // ixtiyoriy
-        .lean(),
-      ResidualModel.countDocuments(filter),
-      ResidualModel.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: '$action',
-            count: { $sum: 1 },
-            sumQuantity: { $sum: '$quantity' },
-          },
+      prisma.residual.findMany({
+        where,
+        orderBy,
+        skip,
+        take: lim,
+        select: {
+          id: true,
+          sessionId: true,
+          menuId: true,
+          quantity: true,
+          action: true,
+          status: true,
+          appliedToSession: true,
+          expenseId: true,
+          note: true,
+          createdAt: true,
+          // populate-like:
+          menu: { select: { name: true } },
         },
-      ]),
+      }),
+      prisma.residual.count({ where }),
+      prisma.residual.groupBy({
+        by: ["action"],
+        where,
+        _count: { _all: true },
+        _sum: { quantity: true },
+      }),
     ]);
 
     const totalPages = Math.max(1, Math.ceil(totalCount / lim));
+
+    // Build sumByAction hash to mirror your output
     const sumByAction = {};
     for (const r of totalsAgg) {
-      sumByAction[r._id || 'unknown'] = {
-        count: r.count,
-        quantity: r.sumQuantity || 0,
+      sumByAction[r.action || "unknown"] = {
+        count: r._count?._all ?? 0,
+        quantity: r._sum?.quantity ? Number(r._sum.quantity) : 0,
       };
     }
 
+    // Match your previous items shape: include menu name under menuId?name or separate?
+    // We'll keep it simple: { menuId, menuName }
+    const shapedItems = items.map((it) => ({
+      ...it,
+      menuName: it.menu?.name ?? null,
+    }));
+
     return {
-      items,
+      items: shapedItems,
       pagination: { page: p, limit: lim, totalCount, totalPages },
       totals: { sumByAction },
-      sort: { by: sortField, direction: sortDir === 1 ? 'asc' : 'desc' },
-      filterApplied: filter,
+      sort: { by: sortField, direction: sortDir },
+      // filterApplied: where, // enable for debugging if you like
     };
   }
 
+  /**
+   * Mark selected residuals as applied to a target session.
+   * - Only updates residuals that are (status='pending' AND action='CARRY_TO_NEXT')
+   * - residualIds: array of ids (number or string)
+   * - targetSessionId: number or string (session id)
+   */
   async applyResidualsToSession(residualIds = [], targetSessionId) {
-    if (!Array.isArray(residualIds) || !residualIds.length) {
-      throw new Error('No residual IDs provided');
-    }
-    const tsid = toObjectIdMaybe(targetSessionId);
-    if (!tsid) {
-      throw new Error('Invalid target session ID');
+    if (!Array.isArray(residualIds) || residualIds.length === 0) {
+      throw new Error("No residual IDs provided");
     }
 
-    // Faqat pending va CARRY_TO_NEXT larni qabul qilamiz
-    const residuals = await ResidualModel.find({
-      _id: { $in: residualIds.map(id => toObjectIdMaybe(id)).filter(id => id) },
-      action: 'CARRY_TO_NEXT',
-      status: 'pending',
+    const tsid = toIntId(targetSessionId);
+    if (!tsid) {
+      throw new Error("Invalid target session ID");
+    }
+
+    // Normalize & filter valid id ints
+    const ids = residualIds
+      .map(toIntId)
+      .filter((n) => Number.isInteger(n) && n > 0);
+
+    if (ids.length === 0) {
+      throw new Error("No valid residuals found to apply");
+    }
+
+    // Single guarded update (pending + CARRY_TO_NEXT)
+    const res = await prisma.residual.updateMany({
+      where: {
+        id: { in: ids },
+        action: "CARRY_TO_NEXT",
+        status: "pending",
+      },
+      data: {
+        status: "applied",
+        appliedToSession: tsid,
+      },
     });
 
-    if (!residuals.length) {
-      throw new Error('No valid residuals found to apply');
-    }    
-
-    const bulkOps = residuals.map(r => ({
-      updateOne: {
-        filter: { _id: r._id },
-        update: {
-          $set: {
-            status: 'applied',
-            appliedToSession: tsid,
-          },
-        },
-      },
-    }));
-
-    const res = await ResidualModel.bulkWrite(bulkOps);
-    return { modifiedCount: res.modifiedCount || 0 };
+    return { modifiedCount: res.count || 0 };
   }
-}
-
-export default new ResidualService();
+})();

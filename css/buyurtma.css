@@ -4,7 +4,7 @@
     display: flex;
     align-items: center;
     gap: 15px;
-    margin: 10px 20px;
+    margin: 10px 0;
 }
 
 .order-header h1 {
@@ -369,6 +369,8 @@ body {
 }
 
 .decrement,
+.weight-decrement,
+.weight-increment,
 .increment {
     background-color: #28a745;
     /* Yashil rang */
@@ -383,6 +385,8 @@ body {
 }
 
 .decrement:hover,
+.weight-decrement:hover,
+.weight-increment:hover,
 .increment:hover {
     background-color: #218838;
     /* Biroz to'qroq yashil hover effekti */
@@ -487,6 +491,12 @@ body {
     font-weight: bold;
     background-color: #fff;
     cursor: pointer;
+}
+
+.weight-input::-webkit-inner-spin-button,
+.weight-input::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
 }
 
 .total-input{

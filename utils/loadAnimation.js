@@ -43,12 +43,12 @@ async function withActionAnimation(promiseFactory, { type = 'open', title = 'Pro
         const p = promiseFactory(); // create the promise now
         const [res] = await Promise.all([
             p,
-            new Promise(r => setTimeout(r, 2000)), // minimum 2s
+            new Promise(r => setTimeout(r, 1500)), // minimum 1.5s
         ]);
         return res;
     } finally {
         const elapsed = Date.now() - start;
-        const rest = Math.max(0, 2000 - elapsed); // safety (usually 0)
+        const rest = Math.max(0, 1500 - elapsed); // safety (usually 0)
         setTimeout(hideActionAnim, rest);
     }
 }

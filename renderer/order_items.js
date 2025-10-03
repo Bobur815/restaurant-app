@@ -3,11 +3,13 @@ import cancelOrder from "./cancelOrder.js";
 import { showAlert, showConfirm } from "../utils/alert.js";
 import { renderTables, renderMenuItems, attachOrderButtons } from "./orderPageHelpers.js";
 import { categoryOptions } from "./add-load-category.js";
+import { roundN } from "../utils/roundN.js";
+import { getOrderByQuery } from "./getOrderByQuery.js";
 
 
 
 let table_count = parseInt(localStorage.getItem('table_count'), 10) || 10;;
-let table_number;
+let tableNumber;
 let grandTotal = 0;
 
 let payBtn, orderBtn, cancelBtn;
@@ -19,121 +21,84 @@ export function selectProduct(item) {
     return new Promise((resolve) => {
         const tableBody = document.getElementById('orderTableBody');
 
-        // ==== existing merge: faqat dona (soldByWeight=false) va portions=false bo'lsa ====
-        let existingRow = document.getElementById(`order-item-${item._id}`);
-        if (existingRow && !item.soldByWeight && !item.portions) {
-            const qtyInput = existingRow.querySelector('.quantity');
-            const current = parseInt(qtyInput.value || '0', 10);
-            const maxLeft = (item.remainingQuantity ?? item.quantity ?? Infinity);
-            if (current + 1 > maxLeft) return showAlert('Mahsulot yetarli emas');
-            qtyInput.value = current + 1;
-
-            const portionSel = existingRow.querySelector('.portionSelect');
-            const portionMul = portionSel ? parseFloat(portionSel.value) : 1;
-            const totalEl = existingRow.querySelector('.total');
-            const unitPrice = Number(item.price) || 0;
-
-            totalEl.textContent = ((current + 1) * unitPrice * portionMul).toFixed(2);
-            updateGrandTotal();
-            return resolve();
-        }
-
-        if (item.soldByWeight || item.portions) {
-            const safeNum = (v, d = 0) => {
-                const n = Number(v);
-                return Number.isFinite(n) ? n : d;
-            };
-
-            const maxLeft = safeNum(item.remainingQuantity ?? item.quantity ?? Infinity, Infinity);
-
-            // Default factor before a row exists:
-            const defaultFactor =
-                item.soldByWeight
-                    ? safeNum(item.weight_kg, 1)
-                    : (typeof item.portions === 'number' ? Number(item.portions) : 1);
-
-            const currentQty = existingRow
-                ? parseInt((existingRow.querySelector('.quantity')?.value || '0'), 10)
-                : 0;
-
-            const nextEff = (currentQty + 1) * defaultFactor;
-
-            // If default factor doesn't fit (e.g., left = 0.7 but default=1),
-            // try to auto-pick a smaller factor for portioned items.
-            if (nextEff > maxLeft) {
-                if (!item.soldByWeight) {
-                    const candidates = [1, 0.7, 0.5];
-                    const viable = candidates.find(v => (currentQty + 1) * v <= maxLeft);
-                    if (viable) {
-                        item.portions = viable; // set starting portion to a viable one
-                    } else {
-                        return showAlert('Mahsulot yetarli emas');
-                    }
-                } else {
-                    // soldByWeight: set starting weight to the remaining (or whatever fits)
-                    if ((currentQty + 1) * 0.01 <= maxLeft) {
-                        item.weight_kg = Math.min(defaultFactor, maxLeft / (currentQty + 1));
-                    } else {
-                        return showAlert('Mahsulot yetarli emas');
-                    }
-                }
-            }
-
-            // If a row already exists, MERGE instead of creating a duplicate row
-            if (existingRow) {
-                const qtyInput = existingRow.querySelector('.quantity');
-                qtyInput.value = (currentQty + 1).toString();
-
-                const portionSelect = existingRow.querySelector('.portionSelect');
-                const weightInput = existingRow.querySelector('.weight-input');
-                const unitPrice = Number(item.unit_price ?? item.price) || 0;
-
-                // Recalculate effective total
-                const portionFactor = () => {
-                    if (item.soldByWeight) return Math.max(0, Number(weightInput?.value || item.weight_kg || 1));
-                    if (portionSelect) return Math.max(0, Number(portionSelect.value || 1));
-                    return 1;
-                };
-
-                const qty = parseInt(qtyInput.value || '0', 10);
-                const eff = qty * portionFactor();
-                if (eff > maxLeft) {
-                    // revert increment if this step exceeds stock
-                    qtyInput.value = currentQty.toString();
-                    return showAlert('Mahsulot yetarli emas');
-                }
-
-                const totalSpan = existingRow.querySelector('.total');
-                const totalInput = existingRow.querySelector('.total-input');
-                const total = item.soldByWeight ? (qty * portionFactor() * unitPrice) : (qty * portionFactor() * unitPrice);
-
-                if (totalSpan) totalSpan.textContent = (Number.isFinite(total) ? total : 0).toFixed(2);
-                if (totalInput) totalInput.value = (Number.isFinite(total) ? total : 0).toFixed(2);
-
-                // keep your dataset & grand total updates
-                if (typeof updateGrandTotal === 'function') updateGrandTotal();
-                return resolve();
-            }
-        }
-
-
-
-        // ==== Helpers ====
+        // ---------- Helpers ----------
+        const EPS = 1e-9;
         const safeNum = (v, d = 0) => {
             const n = Number(v);
             return Number.isFinite(n) ? n : d;
         };
+
         const fixed2 = (n) => safeNum(n, 0).toFixed(2);
         const clampNonNeg = (x) => (x < 0 || Number.isNaN(x)) ? 0 : x;
 
-        // ==== Yangi qator ====
-        const row = document.createElement('tr');
-        row.id = `order-item-${item._id}`;
+        const getMaxLeft = (it) => {
 
+            const ml = safeNum(it.remainingQuantity ?? it.quantity ?? Infinity, Infinity);
+            return Number.isFinite(ml) ? ml : Infinity;
+        };
+
+        // id -> row id
+        const rowId = `order-item-${item.id}`;
+        let existingRow = document.getElementById(rowId);
+
+        // Agar qator allaqachon bor bo‘lsa, faqat MERGE qilish (yangi qator yaratmaymiz)
+        if (existingRow) {
+            const qtyInput = existingRow.querySelector('.quantity');
+            const portionSelect = existingRow.querySelector('.portionSelect');
+            const weightInput = existingRow.querySelector('.weight-input');
+            const totalSpan = existingRow.querySelector('.total');
+            const totalInput = existingRow.querySelector('.total-input');
+
+            const unitPrice = safeNum(item.unit_price ?? item.price, 0);
+            const maxLeft = getMaxLeft(item);
+
+            const getQty = () => clampNonNeg(parseInt(qtyInput?.value || '0', 10));
+            const getFactor = () => {
+                if (weightInput) return clampNonNeg(safeNum(weightInput.value, 0)); // kg
+                if (portionSelect) return clampNonNeg(safeNum(portionSelect.value, 1)); // 1/0.7/0.5
+                return 1;
+            };
+            const setTotal = () => {
+                const qty = getQty();
+                const factor = getFactor();
+                const total = qty * factor * unitPrice;
+                if (totalSpan) totalSpan.textContent = fixed2(total);
+                if (totalInput) totalInput.value = fixed2(total);
+                if (typeof updateGrandTotal === 'function') updateGrandTotal();
+            };
+
+            // “Bitta bosishda bitta birlik qo‘shish” — yetarli bo‘lsa oshiramiz
+            const currentQty = getQty();
+            const factor = getFactor();
+            const nextEff = roundN((currentQty + 1) * factor, 3);
+            const ml = roundN(maxLeft, 3);
+
+            if (nextEff > ml + EPS) {
+                return showAlert('Mahsulot yetarli emas');
+            }
+
+            qtyInput.value = String(currentQty + 1);
+            setTotal();
+            return resolve();
+        }
+
+        // ---------- Yangi qator yaratish ----------
         const unitPrice = safeNum(item.unit_price ?? item.price, 0);
         const startQty = safeNum(item.soldByWeight ? (item.units ?? 1) : (item.quantity ?? 1), 1);
+        const maxLeft = getMaxLeft(item);
 
-        // Soni (har doim): - [qty] +
+        // Porsiya startini moslab qo‘yish
+        if (!item.soldByWeight && (item.portions === true || typeof item.portions === 'number')) {
+            const start = typeof item.portions === 'number' ? item.portions : 1;
+            const candidates = [start, 1, 0.7, 0.5];
+            const pick = candidates.find(v => (startQty * v) <= maxLeft + EPS) || candidates.find(v => v <= maxLeft + EPS);
+            item.portions = pick ?? 1;
+        }
+        
+
+        const row = document.createElement('tr');
+        row.id = rowId;
+
         const qtyHTML = `
       <div class="incdec">
         <button class="decrement">-</button>
@@ -142,27 +107,16 @@ export function selectProduct(item) {
       </div>
     `;
 
-        // right before you build portionCellHTML:
-        const maxLeft = Number(item.remainingQuantity ?? item.quantity ?? Infinity) || Infinity;
-        if (!item.soldByWeight && (item.portions === true || typeof item.portions === 'number')) {
-            const start = typeof item.portions === 'number' ? item.portions : 1;
-            const candidates = [start, 1, 0.7, 0.5]; // try the given first, then fallbacks
-            const pick = candidates.find(v => (startQty * v) <= maxLeft) || candidates.find(v => v <= maxLeft);
-            item.portions = pick ?? 1; // last resort 1; increment guard will still protect
-        }
-        if (item.soldByWeight) {
-            const w = Number.isFinite(item.weight_kg) ? Number(item.weight_kg) : 1;
-            item.weight_kg = Math.min(w, maxLeft / startQty);
-        }
-
-
-        // Porsiya/Weight ustuni
         const portionCellHTML = (() => {
             if (item.soldByWeight) {
-                const weightVal = safeNum(item.weight_kg, 1);
+                const startWeight = Number.isFinite(item.weightKg) ? Number(item.weightKg) : 1;
+                const weightVal = startWeight;
+
                 return `
-          <div class="weight-box">
+          <div class="incdec">
+            <button class="weight-decrement">-</button>
             <input type="number" class="weight-input" min="0" step="0.1" value="${weightVal}" />
+            <button class="weight-increment">+</button>
           </div>
         `;
             }
@@ -180,15 +134,11 @@ export function selectProduct(item) {
             return '';
         })();
 
-        // Narx (unit price)
-        const priceCellHTML = `<span class="price">${unitPrice}</span>`;
-
-        // Total ustuni
         const totalCellHTML = (() => {
             if (item.soldByWeight) {
-                const w = safeNum(item.weight_kg, 1);
+                const w = safeNum(item.weightKg, 1);
                 const t = startQty * w * unitPrice;
-                return `<input type="number" class="total-input" min="0" step="1000.0" value="${fixed2(t)}" />`;
+                return `<input type="number" class="total-input" min="0" step="1000.0" value="${t}" />`;
             } else {
                 const p = (typeof item.portions === 'number') ? item.portions : 1;
                 const t = startQty * p * unitPrice;
@@ -197,9 +147,9 @@ export function selectProduct(item) {
         })();
 
         row.innerHTML = `
-      <td><img src="../img/${item.image_url ?? ''}" width="40" height="40" style="border-radius:5px;"></td>
-      <td class="name">${item.name}</td>
-      <td class="price-cell">${priceCellHTML}</td>
+      <td><img src="../img/${item.imageUrl ?? item.menu.imageUrl ?? 'placeholder.jpg'}" width="40" height="40" style="border-radius:5px;"></td>
+      <td class="name">${item.name ?? item.menu.name ?? '-'}</td>
+      <td class="price-cell"><span class="price">${unitPrice}</span></td>
       <td class="qty-cell">${qtyHTML}</td>
       <td class="portion-cell">${portionCellHTML}</td>
       <td class="total-group">${totalCellHTML}</td>
@@ -208,107 +158,140 @@ export function selectProduct(item) {
 
         tableBody.appendChild(row);
 
-        // ==== Elementlar ====
+        // --------- Elementlar (faqat shu qator ichidan) ----------
         const decrementBtn = row.querySelector('.decrement');
         const incrementBtn = row.querySelector('.increment');
         const qtyInput = row.querySelector('.quantity');
-        const portionSelect = row.querySelector('.portionSelect'); // non-weight
-        const weightInput = row.querySelector('.weight-input');  // weight
-        const totalSpan = row.querySelector('.total');         // non-weight total
-        const totalInput = row.querySelector('.total-input');   // weight total
+        const portionSelect = row.querySelector('.portionSelect');
+        const weightInput = row.querySelector('.weight-input');
+        const wDecBtn = row.querySelector('.weight-decrement');
+        const wIncBtn = row.querySelector('.weight-increment');
+        const totalSpan = row.querySelector('.total');
+        const totalInput = row.querySelector('.total-input');
         const deleteBtn = row.querySelector('.delete-btn');
 
-        // ==== Helpers (borlariga qo'shimcha) ====
-        const portionFactor = () => {
-            // weight bo'lsa -> weightInput qiymati (kg), porsiya bo'lsa -> select qiymati, oddiy bo'lsa -> 1
-            if (item.soldByWeight) return clampNonNeg(safeNum(weightInput?.value, 0));
+        // --------- Hisob-funktsiyalar ----------
+        const getQty = () => clampNonNeg(parseInt(qtyInput?.value || '0', 10));
+        const getFactor = () => {
+            if (weightInput) return clampNonNeg(safeNum(weightInput.value, 0)); // kg
             if (portionSelect) return clampNonNeg(safeNum(portionSelect.value, 1));
             return 1;
         };
+        const effNow = () => roundN(getQty() * getFactor(), 3);
 
-        const getQty = () => clampNonNeg(parseInt(qtyInput.value || '0', 10));
-
-        // UI/submit uchun effekt miqdorni saqlab boramiz
-        const updateEffectiveDataset = () => {
-            const eff = getQty() * portionFactor();
-            row.dataset.effectiveQty = eff.toFixed(3);
-            // portions: weight bo'lsa ham shu joyga weight_kg ni yozamiz (float), oddiyda null
-            const p = item.soldByWeight ? portionFactor()
-                : (portionSelect ? portionFactor() : null);
-            row.dataset.portions = (p ?? '').toString();
-        };
-
-        // ==== Hisoblashlar ====
-        function recalcNonWeight() {
-            const qty = getQty();
-            const factor = portionFactor();                // 1 yoki 0.7/0.5
-            const total = qty * factor * unitPrice;        // <-- qty × portion
+        const setTotal = () => {
+            const total = getQty() * getFactor() * unitPrice;
             if (totalSpan) totalSpan.textContent = fixed2(total);
-            updateEffectiveDataset();
-            updateGrandTotal();
-        }
-
-        function recalcFromWeight() {
-            // Forward: qty & weight_kg -> total
-            const qty = getQty();
-            const wKg = portionFactor();                   // weightInput qiymati (kg)
-            const total = qty * wKg * unitPrice;           // <-- qty × weight_kg
-            if (totalInput) totalInput.value = fixed2(total);
-            updateEffectiveDataset();
-            updateGrandTotal();
-        }
-
-        function recalcFromTotal() {
-            // Reverse: total -> weight_kg (qty va unitPrice bo'yicha)
-            const qty = getQty();
-            const t = clampNonNeg(safeNum(totalInput?.value, 0));
-            const denom = qty * unitPrice;
-            const newW = denom > 0 ? (t / denom) : 0;     // <-- weight_kg ni qayta hisob
-            if (weightInput) weightInput.value = newW.toFixed(2);
-            updateEffectiveDataset();
-            updateGrandTotal();
-        }
-
-        // ==== Boshlang'ich hisob ====
-        if (item.soldByWeight) recalcFromWeight();
-        else recalcNonWeight();
-
-        const canIncrement = () => {
-            const nextQty = getQty() + 1;
-            const effNext = nextQty * portionFactor();
-            return effNext <= maxLeft;
+            if (typeof updateGrandTotal === 'function') updateGrandTotal();
         };
 
-        // ==== Eventlar ====
+        // Boshlang‘ich hisob
+        setTotal();
+
+        const canBumpQty = () => {
+            const next = roundN((getQty() + 1) * getFactor(), 3);
+            return next <= roundN(maxLeft, 3) + EPS;
+        };
+
+        // --------- Eventlar ----------
         incrementBtn?.addEventListener('click', () => {
             clickSound.currentTime = 0; clickSound.play().catch(() => { });
-            if (!canIncrement()) return showAlert('Mahsulot yetarli emas');
-            qtyInput.value = (getQty() + 1).toString();
-            item.soldByWeight ? recalcFromWeight() : recalcNonWeight();
+            if (!canBumpQty()) return showAlert('Mahsulot yetarli emas');
+            qtyInput.value = String(getQty() + 1);
+            setTotal();
         });
 
         decrementBtn?.addEventListener('click', () => {
             clickSound.currentTime = 0; clickSound.play().catch(() => { });
-            const current = parseInt(qtyInput.value || '0', 10);
-            if (current > 1) {
-                qtyInput.value = current - 1;
-                item.soldByWeight ? recalcFromWeight() : recalcNonWeight();
+            const cur = getQty();
+            if (cur > 1) {
+                qtyInput.value = String(cur - 1);
+                setTotal();
             }
         });
 
-        portionSelect?.addEventListener('change', recalcNonWeight);
+        portionSelect?.addEventListener('change', () => {
+            clickSound.currentTime = 0; clickSound.play().catch(() => { });
+            // qty o‘zgarmaydi; eff <= maxLeft shartini tekshiramiz
+            if (effNow() > roundN(maxLeft, 3) + EPS) {
+                // agar yangi portion sig‘masa — eski qoldiriladi (rollback)
+                // select’ni eski qiymatga qaytaring: eng yaqin mosini tanlaymiz
+                const candidates = [1, 0.7, 0.5];
+                const qty = getQty();
+                const viable = candidates.find(v => roundN(qty * v, 3) <= roundN(maxLeft, 3) + EPS);
+                if (viable != null) portionSelect.value = String(viable);
+                else portionSelect.value = "1";
+                showAlert('Mahsulot yetarli emas');
+            }
+            setTotal();
+        });
 
-        weightInput?.addEventListener('input', recalcFromWeight);
-        totalInput?.addEventListener('input', recalcFromTotal);
+        // Weight - step tugmalari
+        wDecBtn?.addEventListener('click', () => {
+            clickSound.currentTime = 0; clickSound.play().catch(() => { });
+            if (!weightInput) return;
+            const cur = safeNum(weightInput.value, 0);
+            const next = Math.max(0.01, roundN(cur - 0.1, 2));
+            const qty = getQty();
+            if (roundN(qty * next, 3) > roundN(maxLeft, 3) + EPS) {
+                return; // o‘zgartirmaymiz
+            }
+            weightInput.value = next.toFixed(2);
+            setTotal();
+        });
+
+        wIncBtn?.addEventListener('click', () => {
+            clickSound.currentTime = 0; clickSound.play().catch(() => { });
+            if (!weightInput) return;
+            const cur = safeNum(weightInput.value, 0);
+            const next = roundN(cur + 0.1, 2);
+            const qty = getQty();
+            if (roundN(qty * next, 3) > roundN(maxLeft, 3) + EPS) {
+                return showAlert('Mahsulot yetarli emas');
+            }
+            weightInput.value = next.toFixed(2);
+            setTotal();
+        });
+
+        // Qo‘lda weight/total tahrirlash
+        weightInput?.addEventListener('input', () => {
+            const qty = getQty();
+            const w = getFactor(); // weightInput value
+            if (roundN(qty * w, 3) > roundN(maxLeft, 3) + EPS) {
+                // rollback: eng ko‘p ruxsat etilganini qo‘yish
+                const allowed = roundN(Math.max(0, maxLeft / Math.max(1, qty)), 2);
+                weightInput.value = allowed.toFixed(2);
+                showAlert('Mahsulot yetarli emas');
+            }
+            setTotal();
+        });
+
+        totalInput?.addEventListener('input', () => {
+            // reverse: total -> weight (qty, unitPrice orqali)
+            const qty = getQty();
+            const t = clampNonNeg(safeNum(totalInput.value, 0));
+            const denom = qty * unitPrice;
+            const newW = denom > 0 ? (t / denom) : 0;
+            if (roundN(qty * newW, 3) > roundN(maxLeft, 3) + EPS) {
+                const allowed = roundN(Math.max(0, maxLeft / Math.max(1, qty)), 2);
+                if (weightInput) weightInput.value = allowed.toFixed(2);
+                // total ham qayta hisob
+                const corr = qty * allowed * unitPrice;
+                totalInput.value = fixed2(corr);
+                return showAlert('Mahsulot yetarli emas');
+            }
+            if (weightInput) weightInput.value = roundN(newW, 2).toFixed(2);
+            setTotal();
+        });
 
         deleteBtn.addEventListener('click', async () => {
             clickSound.currentTime = 0; clickSound.play().catch(() => { });
             row.remove();
-            updateGrandTotal();
+            if (typeof updateGrandTotal === 'function') updateGrandTotal();
 
             if (tableBody.querySelectorAll('tr').length === 0) {
                 if (await showConfirm("Stoldagi barcha buyurtmalar o‘chirildi. Buyurtmani bekor qilmoqchimisiz?")) {
-                    await cancelOrder(table_number);
+                    await cancelOrder(tableNumber);
                     goingBack();
                     cancelBtn.disabled = true;
                 }
@@ -341,7 +324,6 @@ function updateGrandTotal() {
 
 async function selectTable(tableNumber) {
     try {
-        table_number = tableNumber;
 
         const tableBody = document.getElementById('orderTableBody');
         tableBody.innerHTML = '';
@@ -358,11 +340,13 @@ async function selectTable(tableNumber) {
 
         // 2) Normalize: grouped (order.items[]) yoki flat bo'lsa ham bir xil ishlasin
         const items = Array.isArray(orders[0]?.items)
-            ? orders.flatMap(o => o.items)
+            ? orders[0].items
             : orders;
+
 
         // 3) Har bir itemni selectProduct bilan chizamiz
         for (const it of items) {
+
             // selectProduct ichida unit_price || price ni o'zi tekshiradi
             await selectProduct(it);
         }
@@ -384,7 +368,8 @@ async function selectTable(tableNumber) {
 
         // 7) Header UI
         const backBtn = document.getElementById('backButton');
-        backBtn.style.display = 'inline-flex';
+
+        backBtn.style.display = 'flex';
         backBtn.onclick = () => {
             clickSound.currentTime = 0;
             clickSound.play().catch(() => { });
@@ -430,7 +415,7 @@ export async function loadOrderPage(newTableCount) {
     categorySelect.innerHTML = ''
     await categoryOptions(categorySelect)
     // Render the tables
-    renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfTable, selectTable, goingBack);
+    renderTables(table_count, payBtn, cancelBtn, getOrdersOfTable, selectTable, goingBack);
 
     // Initial render
     const updateMenu = async () => {

@@ -1,5 +1,6 @@
 export async function getOrderByQuery(query) {
     try {
+        
         const qs = new URLSearchParams(query).toString();
         const response = await fetch(`http://localhost:3000/api/orders?${qs}`);
 

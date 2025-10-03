@@ -6,9 +6,16 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: 'build/brand_logo.png',
+    icon: 'build/brand_logo',           // Electron will use .ico on Windows, .png on Linux
+    asarUnpack: [
+      '**/node_modules/.prisma/**',
+      '**/node_modules/@prisma/**'
+    ],
+    appBundleId: 'com.savdochef.app',   // optional (mac), good to set consistently
+    appCopyright: '© 2025 SavdoChef',
   },
   makers: [
+    // ---------- Linux ----------
     {
       name: '@pengx17/electron-forge-maker-appimage',
       platforms: ['linux'],
@@ -25,6 +32,7 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-deb',
+      platforms: ['linux'],
       config: {
         options: {
           productName: 'SavdoChef',
@@ -37,7 +45,22 @@ module.exports = {
         }
       }
     },
-    { name: '@electron-forge/maker-zip', platforms: ['linux'] }
+    { name: '@electron-forge/maker-zip', platforms: ['linux'] },
+
+    // ---------- Windows ----------
+    {
+      name: '@electron-forge/maker-squirrel',
+      platforms: ['win32'],
+      config: {
+        name: 'SavdoChef',
+        setupExe: 'SavdoChef-Setup.exe',
+        setupIcon: 'build/brand_logo.ico',   // <-- add .ico file to /build
+        iconUrl: 'https://example.com/icon.ico', // optional (code signing servers)
+        loadingGif: 'build/installer-loading.gif', // optional
+        noMsi: true,                        
+      },
+    },
+    { name: '@electron-forge/maker-zip', platforms: ['win32'] },
   ],
   plugins: [
     { name: '@electron-forge/plugin-auto-unpack-natives', config: {} },

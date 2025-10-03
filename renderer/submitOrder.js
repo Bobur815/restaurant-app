@@ -6,7 +6,7 @@ async function submitOrder(order) {
         document.querySelector('.pay-btn').disabled = true;
         document.querySelector('.cancel-order').disabled = true;
         
-        const method = await handleOrderMethod(order.table_number);
+        const method = await handleOrderMethod(order.tableNumber);
         const url = 'http://localhost:3000/api/orders';
         const response = await fetch(url, {
             method,
@@ -36,8 +36,8 @@ async function submitOrder(order) {
     }
 }
 
-async function handleOrderMethod(table_number) {
-    const orders = await getOrdersOfTable(table_number);
+async function handleOrderMethod(tableNumber) {
+    const orders = await getOrdersOfTable(tableNumber);
     return orders.length ? "PUT" : "POST";
 }
 

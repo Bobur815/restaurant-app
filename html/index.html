@@ -5,9 +5,11 @@
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
     content=" connect-src 'self' http://localhost:3000; img-src 'self' data: file:; script-src 'self'">
-  <title>Cafe CRM</title>
+    <title>SavdoChef</title>
   <link rel="stylesheet" href="../css/main.css">
   <link rel="stylesheet" href="../css/template.css">
+  <link rel="stylesheet" href="../css/settings.css">
+
 </head>
 
 <body>
@@ -29,10 +31,10 @@
         <li id="settings">⚙️ Settings</li>
         <li id="chiqish">🚪 Chiqish</li>
       </ul>
+      <span id="copyright"></span>
     </div>
 
     <div class="main-content">
-      <h1>Welcome to Cafe CRM</h1>
     </div>
   </div>
 
@@ -44,11 +46,11 @@
       <div class="anim-bar"><span></span></div>
     </div>
   </div>
-
   <div id="alert-placeholder"></div>
   <script type="module" src="../utils/loadAlert.js"></script>
   <script type="module" src="../utils/alert.js"></script>
   <script type="module" src="../renderer/mainrenderer.js"></script>
+  
 </body>
 
 </html>

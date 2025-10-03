@@ -2,7 +2,7 @@
 import { app, ipcMain, BrowserWindow, dialog } from 'electron';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-
+import squirrelStartup from 'electron-squirrel-startup';
 // Window factories (split files are optional; see below)
 import { createLoginWindow } from './login.page.js';
 import { createMainWindow } from './main.page.js';
@@ -11,6 +11,67 @@ import { createSessionWindow } from './sessionAdd-window.js';
 import { getPreloadPath, htmlPath } from './paths.js';
 import { loadEnv } from './config.env.js';
 import { printReceipt } from './printer.js';
+// ---- DB path resolver (put near the top of main.js) ----
+import fs from "node:fs";
+import os from "node:os";
+
+// choose a nice filename
+const DB_FILENAME = "savdochef.db";
+
+if (process.platform === 'win32' && squirrelStartup) {
+  app.quit();
+}
+
+function getDevDbPath() {
+  // your current dev db location
+  return path.join(process.cwd(), "backend", "data", "app.db");
+}
+
+function getProdDbPath() {
+  // user-writable location
+  return path.join(app.getPath("userData"), DB_FILENAME);
+}
+
+function getPackagedSeedDbPath() {
+  // optional seed shipped inside the app (read-only)
+  // e.g. you can package backend/data/app.db as a seed
+  const appRoot = app.getAppPath();
+  return path.join(appRoot, "backend", "data", "app.db");
+}
+
+/** Ensure DB exists in a writable place; copy from packaged seed if present. */
+function ensureWritableDb() {
+  if (!app.isPackaged) {
+    const dev = getDevDbPath();
+    fs.mkdirSync(path.dirname(dev), { recursive: true });
+    return dev; // dev writes directly to backend/data/app.db
+  }
+
+  const target = getProdDbPath();
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+
+  if (!fs.existsSync(target)) {
+    const seed = getPackagedSeedDbPath();
+    if (fs.existsSync(seed)) {
+      try {
+        fs.copyFileSync(seed, target);
+      } catch (e) {
+        console.warn("[db] Seed copy failed, Prisma will create tables on first run:", e.message);
+      }
+    } else {
+      // no seed — Prisma will create the file/tables on migrate/db push
+    }
+  }
+  return target;
+}
+
+/** Build a Prisma DATABASE_URL from an absolute file path */
+function buildSqliteUrl(absPath) {
+  // Prisma expects a file: URL; make sure we escape Windows backslashes
+  // simplest: prefix with file:
+  return `file:${absPath}`;
+}
+
 
 // IMPORTANT: base origin without /api
 const API_PORT = process.env.API_PORT || '3000';
@@ -22,23 +83,22 @@ const __dirname = path.dirname(__filename);
 
 async function startBackendInline() {
   const appRoot = app.isPackaged ? app.getAppPath() : process.cwd();
-  const entryPath = path.join(appRoot, 'backend', 'server.js'); // ✅ now inside app.asar in prod
+  const entryPath = path.join(appRoot, 'backend', 'server.js');
   const entryUrl = pathToFileURL(entryPath).href;
+
+  // decide DB file location and export to backend env
+  const dbPath = ensureWritableDb();
+  process.env.DATABASE_URL = buildSqliteUrl(dbPath);
 
   process.env.PORT = process.env.PORT || '3000';
   process.env.NODE_ENV = process.env.NODE_ENV || (app.isPackaged ? 'production' : 'development');
 
   try {
     await import(entryUrl);
-    console.log('[backend] started from', entryPath);
   } catch (e) {
     console.error('[backend] failed to start:', e);
   }
 }
-
-
-
-
 
 async function waitForApi(origin, { retries = 40, interval = 250 } = {}) {
   for (let i = 0; i < retries; i++) {
@@ -256,6 +316,20 @@ ipcMain.handle('open-add-window', (event, dish) => {
   return true;
 });
 
+ipcMain.handle('dialog:openImage', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: 'Rasm tanlash',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] }
+    ]
+  });
+
+  if (canceled || !filePaths || !filePaths[0]) return null;
+  // Return absolute path (renderer can do `file://` preview)
+  return filePaths[0];
+});
+
 ipcMain.handle('open-category-window', (event) => {
   const parent = BrowserWindow.fromWebContents(event.sender) || mainWindow;
   createCategoryWindow(parent);
@@ -274,9 +348,12 @@ ipcMain.on('session-updated', (e) => {
   if (parent) parent.webContents.send('session-updated');
 });
 
-ipcMain.on('menu-updated', () => {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('reload-menu');
+ipcMain.on('menu-updated', (event) => {
+  // Use the parent of the Add window if present; fallback to mainWindow
+  const child  = BrowserWindow.fromWebContents(event.sender);
+  const parent = child?.getParentWindow() || mainWindow;
+  if (parent && !parent.isDestroyed()) {
+    parent.webContents.send('reload-menu');
   }
 });
 
@@ -289,7 +366,7 @@ ipcMain.on("window:close", (event) => {
 ipcMain.on('print-receipt', async (evt, payload) => {
   try {
     const { order, paymentMethod } = payload || {};
-    await printReceipt(order, paymentMethod); 
+    await printReceipt(order, paymentMethod);
     evt.reply('print-receipt:done', { ok: true });
   } catch (err) {
     console.error('print-receipt failed:', err);
@@ -300,12 +377,6 @@ ipcMain.on('print-receipt', async (evt, payload) => {
 /* ----------------------------- App lifecycle ---------------------------- */
 app.whenReady().then(async () => {
   loadEnv();
-  // Optional sane default if not set
-  if (!process.env.MONGO_URL) {
-    process.env.MONGO_URL = 'mongodb://127.0.0.1:27017/savdochef';
-    console.warn('[env] MONGO_URL was missing, defaulting to', process.env.MONGO_URL);
-  }
-
   await startBackendInline();            // ⬅️ start API in the same process
   const up = await waitForApi(API_ORIGIN);
   // decide which window to show first
@@ -313,12 +384,15 @@ app.whenReady().then(async () => {
   if (!setupComplete) {
     openSetupWindow();
   } else {
-    createLoginWindow(); // your existing login flow
+    createMainWindow();
+    // createLoginWindow();
   }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      createLoginWindow();
+    createMainWindow();
+      
+      // createLoginWindow();
     }
   });
 });
@@ -336,6 +410,8 @@ app.on('browser-window-created', (_e, win) => {
     });
   }
 });
+
+app.setAppUserModelId('com.savdochef.app');
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

@@ -24,9 +24,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 5px 20px;
+  padding: 0 20px;
   background-color: #ffffff;
-  border-bottom: 1px solid #ddd;
 }
 
 .logo {
@@ -45,24 +44,38 @@ body {
   background-color: #343a40;
   color: white;
   padding-top: 20px;
-  overflow-y: auto;       /* ✅ Scroll only here */
-  height: 100%;           /* ✅ Required for scroll to activate */
+  overflow-y: auto;
+  height: 100%;               /* ensure full viewport height */
   min-width: 0;
-  flex-shrink: 0;    
-  flex: 0 0 220px; 
+  flex-shrink: 0;
+  flex: 0 0 220px;
+  display: flex;               /* NEW */
+  flex-direction: column;      /* NEW */
 }
 
 .sidebar ul {
   list-style: none;
   padding: 0;
   margin: 0;
+  display: flex;               /* NEW */
+  flex-direction: column;      /* NEW */
+  flex: 1 1 auto;              /* take remaining height */
 }
 
 .sidebar li {
   font-size: 25px;
   padding: 15px 20px;
   cursor: pointer;
-   font-weight: bold;
+  font-weight: bold;
+}
+
+#copyright {
+  margin-top: auto; 
+  margin-bottom: 20px;       /* pastga itaradi */
+  padding: 12px 20px;
+  font-size: 12px;
+  opacity: .8;
+  border-top: 1px solid rgba(255,255,255,.12);
 }
 
 .sidebar li.active {
@@ -85,7 +98,8 @@ body {
   flex-grow: 1;
   padding: 20px;
   background: #f8f9fa;
-  overflow: auto;    /* only our inner .table-wrapper scrolls */
+  overflow-y: auto; 
+  overflow-x: hidden;   /* only our inner .table-wrapper scrolls */
   min-height: 0;       /* allow flex-child to shrink */
 }
 
@@ -182,3 +196,8 @@ body {
 tr.flash { animation: flicker 800ms ease-out; }
 
 
+#alert-placeholder {
+  margin: 0 !important;
+  height: 0;
+  overflow: hidden;
+}

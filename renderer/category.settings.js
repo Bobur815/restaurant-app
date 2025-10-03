@@ -70,7 +70,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         btnEdit.addEventListener('click', () => {
             clickSound.currentTime = 0;
             clickSound.play().catch(() => { });
-            editCategoryId = category._id;
+            editCategoryId = category.id;
             categoryNameInput.value = category.name;
             modalTitle.textContent = "Kategoriya tahrirlash";
             categoryModal.classList.remove('hidden');
@@ -87,7 +87,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             }
 
             try {
-                const res = await fetch(`http://localhost:3000/api/category/delete/${category._id}`, {
+                const res = await fetch(`http://localhost:3000/api/category/delete/${category.id}`, {
                     method: 'DELETE'
                 });
 

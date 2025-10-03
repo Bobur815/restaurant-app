@@ -5,7 +5,8 @@ class OrderController{
 
     async getOrders(req,res,next){
         try {
-            const orders = await orderService.getOrdersOfTable(req.params.table_number)
+            const orders = await orderService.getOrdersOfTable(req.params.tableNumber)
+
             res.status(200).json(orders)
         } catch (error) {
             next(error)
@@ -14,6 +15,7 @@ class OrderController{
 
     async getOneOrder(req,res,next){
         try {
+            
             const order = await orderService.getOrder(req.query)
             res.status(200).json(order)
         } catch (error) {
@@ -47,7 +49,7 @@ class OrderController{
 
     async deleteOrder(req,res,next){
         try {
-            const result = await orderService.cancelOrder(req.params.table_number)
+            const result = await orderService.cancelOrder(req.params.tableNumber)
             res.status(200).json({
                 message: result
             });

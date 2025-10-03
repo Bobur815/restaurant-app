@@ -1,12 +1,12 @@
 import { showAlert } from "../utils/alert.js";
 import { withActionAnimation } from "../utils/loadAnimation.js";
 
-async function confirmPayment(orderData, payment_method) {
-    let status = payment_method === 'debt' ? 'pending' : 'paid'
+async function confirmPayment(orderData, paymentMethod) {
+    let status = paymentMethod === 'debt' ? 'pending' : 'paid'
     let paymentData = {
-        payment_method,
-        order_id: orderData.order_id,
-        amount: orderData.total_amount,
+        paymentMethod,
+        orderId: orderData.orderId,
+        amount: orderData.totalAmount,
         status
     }
 

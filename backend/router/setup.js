@@ -1,37 +1,40 @@
 // router/setup.js
 import { Router } from "express";
-import bcrypt from "bcrypt";
-import Settings from "../models/Settings.js";
-import UsersModel from "../models/Users.model.js";
-import RecieptSettingsModel from "../models/RecieptSetting.model.js";
+import prisma from "../database/prisma.js";
 
 const setupRouter = Router();
 
-/** Frontendga holat qaytarish */
+
+/**
+ * GET /api/setup/status
+ * - setupComplete = flag.value === true OR (adminExists && receiptExists)
+ */
 setupRouter.get("/status", async (req, res) => {
   try {
-    const flag = await Settings.findOne({ key: "setup_complete" }).lean();
-    const adminExists = await UsersModel.exists({ role: "ADMIN" });
-    const receiptExists = await RecieptSettingsModel.exists({}); // bitta bo‘lsa ham yetarli
+    const flag = await prisma.setting.findUnique({ where: { key: "setup_complete" } });
+    const adminCount = await prisma.user.count({ where: { role: "ADMIN" } });
+    const receiptCount = await prisma.recieptSettings.count();
 
-    // Setup tugagan deb 2 ta shart ham qanoatlantirilsa bo‘ladi:
-    const setupComplete = Boolean((flag?.value === true) || (adminExists && receiptExists));
+    const adminExists = adminCount > 0;
+    const receiptExists = receiptCount > 0;
+    const setupComplete = Boolean(flag?.value === true || (adminExists && receiptExists));
 
-    return res.json({
-      adminExists: Boolean(adminExists),
-      receiptExists: Boolean(receiptExists),
-      setupComplete
-    });
+    return res.json({ adminExists, receiptExists, setupComplete });
   } catch (e) {
+    console.error("GET /setup/status error:", e);
     return res.status(500).json({ message: "Ichki server xatosi" });
   }
 });
 
-/** Admin yaratish (faqat admin yo‘q bo‘lsa) */
+/**
+ * POST /api/setup
+ * Create initial ADMIN only if setup not finished
+ */
 setupRouter.post("/", async (req, res) => {
   try {
-    const flag = await Settings.findOne({ key: "setup_complete" }).lean();
-    const adminExists = await UsersModel.exists({ role: "ADMIN" });
+    const flag = await prisma.setting.findUnique({ where: { key: "setup_complete" } });
+    const adminExists = (await prisma.user.count({ where: { role: "ADMIN" } })) > 0;
+
     if (flag?.value === true || adminExists) {
       return res.status(403).json({ message: "Setup allaqachon tugallangan." });
     }
@@ -40,34 +43,38 @@ setupRouter.post("/", async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ message: "Iltimos, foydalanuvchi nomi va parolni kiriting" });
     }
-    if (String(username).length < 3) {
+    if (String(username).trim().length < 3) {
       return res.status(400).json({ message: "Foydalanuvchi nomi kamida 3 ta belgidan iborat bo'lishi kerak" });
     }
     if (String(password).length < 6) {
       return res.status(400).json({ message: "Parol kamida 6 ta belgidan iborat bo'lishi kerak" });
     }
 
-    const rounds = Number(process.env.BCRYPT_ROUNDS || 10);
-    const passwordHash = await bcrypt.hash(password, rounds);
-
-    const admin = await UsersModel.create({
-      username,
-      password: passwordHash,
-      role: "ADMIN",
+    const admin = await prisma.user.create({
+      data: {
+        username: String(username).trim(),
+        password: password,
+        role: "ADMIN",             // matches enum UserRole
+        is_active: true,
+        full_name: String(username).trim(),
+      },
+      select: { id: true, username: true, role: true },
     });
 
-    // setup_complete ni alohida settings’da saqlashni davom ettirsangiz ham bo‘ladi.
-    // Uni faqat ikkala qadam (admin + receipt) tugagach true qilishingiz mumkin.
+    // Do NOT set setup_complete here — your flow says it becomes "complete"
+    // after both admin and receipt settings exist.
+    // You can set it in your receipt settings save endpoint.
 
     return res.status(201).json({
       message: "Admin muvaffaqiyatli yaratildi",
-      admin: { id: admin._id, username: admin.username, role: admin.role },
+      admin,
     });
   } catch (e) {
-    if (e?.code === 11000) {
-      return res.status(409).json({ message: "Admin allaqachon mavjud" });
+    // Unique username
+    if (e?.code === "P2002") {
+      return res.status(409).json({ message: "Bu username allaqachon mavjud" });
     }
-    console.error(e);
+    console.error("POST /setup error:", e);
     return res.status(500).json({ message: "Ichki server xatosi" });
   }
 });

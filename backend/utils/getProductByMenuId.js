@@ -1,7 +1,9 @@
-import MenuModel from "../models/Menu.model.js";
+import prisma from "../database/prisma.js";
 
 const getProductByMenuId = async (menuId) => {
-  const product = await MenuModel.findById(menuId).lean();
+  const product = await prisma.menu.findUnique({
+    where: { id: menuId },
+  });
   return product;
 };
 export default getProductByMenuId;

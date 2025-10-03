@@ -133,14 +133,15 @@
           setText(footNote, "");
         }
       })();
-
+      console.log(orderData);
+      
 
       // ---- Header meta ----
       const meta = document.createElement('div');
       meta.className = 'meta';
       meta.innerHTML = `
-        <div><b>Stol:</b> ${orderData.table_number}</div>
-        <div style="text-align:right;"><b>Buyurtma:</b> #${orderData.orderId}</div>
+        <div><b>Stol:</b> ${orderData.tableNumber}</div>
+        <div style="text-align:right;"><b>Buyurtma:</b> #${orderData.orderNumber}</div>
         <div><b>Sana:</b> ${dateStr}</div>
         <div style="text-align:right;"><b>Soat:</b> ${timeStr}</div>
       `;
@@ -225,7 +226,7 @@
       preview.appendChild(document.createElement('hr'));
       preview.appendChild(document.createElement('hr'));
       preview.appendChild(footNote)
-
+      
       // ---- Confirm handler ----
       confirmBtn.addEventListener("click", async () => {
         const checkedRadio = document.querySelector('input[name="payment"]:checked');
@@ -239,8 +240,8 @@
           orderData.brand = brandName.textContent;
           orderData.address = addr.textContent;
           orderData.phone = phone.textContent;
-          orderData.footNote = footNote.textContent;
-
+          orderData.footerNote = footNote.textContent;
+          
           window.electronAPI.sendPrint({ order: orderData, paymentMethod });
         }
         window.electronAPI.confirmPayment();

@@ -1,4 +1,5 @@
 import { showAlert, showConfirm } from "../../utils/alert.js";
+import { roundN } from "../../utils/roundN.js";
 import { formatYMD } from "../../utils/setReportDate.js";
 import { getOrderByQuery } from "../getOrderByQuery.js";
 import { getOrdersOfTable } from "../ordersOfTable.js";
@@ -63,7 +64,7 @@ export async function renderAllSessions(filter = {}) {
 async function getOpenSessionId() {
   const open = await renderAllSessions({ status: 'open' });
   if (!Array.isArray(open) || open.length === 0) return null;
-  return open[0]?._id ?? null;
+  return open[0]?.id ?? null;
 }
 
 
@@ -368,19 +369,20 @@ function renderSessionRowsGrouped(sessions, tbody, headerTr) {
 
     hasRows = true;
     
+    
     // O‘sha kunning itemlari
     for (const item of items) {
-      const menu = item.menu_id || {};
+      const menu = item.menu || {};
       const initial = Number(item.initialQuantity || 0);
       const sold = Number(item.soldQuantity || 0);
-      const remain = initial - sold;
-
+      const remain = roundN(Number(initial) - Number(sold), 2);
+      
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${rowIndex++}</td>
         <td>
           <img
-            src="../img/${menu.image_url || 'placeholder.png'}"
+            src="../img/${menu.imageUrl || 'placeholder.jpg'}"
             alt="${menu.name || ''}"
             width="40" height="40"
             style="border-radius:5px;"
@@ -453,7 +455,7 @@ function buildSessionCard(session, index) {
 
   let row = 1;
   for (const item of items) {
-    const menu = item.menu_id || {};
+    const menu = item.menu || {};
     const initial = Number(item.initialQuantity || 0);
     const sold = Number(item.soldQuantity || 0);
     const remain = initial - sold;
@@ -461,7 +463,7 @@ function buildSessionCard(session, index) {
     const tr = el('tr', {}, [
       el('td', {}, String(row++)),
       el('td', {}, el('img', {
-        src: `../img/${menu.image_url || 'placeholder.png'}`,
+        src: `../img/${menu.imageUrl || 'placeholder.png'}`,
         alt: menu.name || '',
         width: '40',
         height: '40',
@@ -483,11 +485,11 @@ function buildSessionCard(session, index) {
   const footer = el('div', { class: 'session-card__footer' }, [
     el('button', {
       class: 'delete-btn closed-delete-btn',
-      dataset: { id: session._id }
+      dataset: { id: session.id }
     }, '🗑️ O‘chirish'),
     el('button', {
       class: 'print-btn closed-print-btn',
-      dataset: { id: session._id }
+      dataset: { id: session.id }
     }, '🖨️ Chop etish'),
   ]);
 

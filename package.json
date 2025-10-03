@@ -7,12 +7,14 @@
   "author": "Boburmirzo Ergashev",
   "license": "ISC",
   "scripts": {
-    "test": "node main.js",
+    "premake": "npm --prefix backend run generate",
+    "prepackage": "npm --prefix backend run generate",
     "start": "electron-forge start",
     "dev": "nodemon --watch . --ext js,html,css --exec electron .",
     "package": "electron-forge package",
     "make": "electron-forge make",
-    "deploy:appimage": "electron-forge make && cp -f out/make/*.AppImage ~/Apps/SavdoChef.AppImage"
+    "deploy:appimage": "electron-forge make && cp -f out/make/*.AppImage ~/Apps/SavdoChef.AppImage",
+    "make:win": "electron-forge make --platform=win32 --arch=x64"
   },
   "config": {
     "forge": "./forge.config.cjs"

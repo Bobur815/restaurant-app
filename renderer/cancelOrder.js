@@ -1,8 +1,8 @@
 import { showAlert } from "../utils/alert.js";
 
-async function cancelOrder(table_number) {
+async function cancelOrder(tableNumber) {
     try {
-        const response = await fetch(`http://localhost:3000/api/orders/${table_number}`, {
+        const response = await fetch(`http://localhost:3000/api/orders/${tableNumber}`, {
             method: 'DELETE'
         });
 

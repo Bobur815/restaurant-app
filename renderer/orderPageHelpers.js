@@ -4,12 +4,13 @@ import { getOrderByQuery } from "./getOrderByQuery.js";
 import { showAlert, showConfirm } from "../utils/alert.js";
 import { renderAllSessions } from "./sessions/render.sessions.js";
 import { selectProduct } from "./order_items.js";
+import { roundN } from "../utils/roundN.js";
 
 const clickSound = new Audio('../sounds/mixkit.wav');
 clickSound.preload = 'auto';
 
 // Extracted helper: Render the tables
-function renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfTable, selectTable, goingBack) {
+function renderTables(table_count, payBtn, cancelBtn, getOrdersOfTable, selectTable, goingBack) {
     const tableGrid = document.getElementById('tableGrid');
     tableGrid.textContent = "";
 
@@ -21,7 +22,7 @@ function renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfT
             addBox.addEventListener('click', () => {
                 table_count += 1;
                 localStorage.setItem('table_count', table_count);
-                loadOrderPage(table_count)
+                loadOrderPage(table_count);
             });
             tableGrid.appendChild(addBox);
 
@@ -41,7 +42,7 @@ function renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfT
                     localStorage.setItem('table_count', table_count);
                     loadOrderPage(table_count)
                 } else {
-                    alert("Bitta ham stol qolmadi!");
+                    showAlert("Bitta ham stol qolmadi!");
                 }
             });
             tableGrid.appendChild(deleteBox);
@@ -51,6 +52,7 @@ function renderTables(table_count, table_number, payBtn, cancelBtn, getOrdersOfT
             table.textContent = `${i} - Stol`;
 
             getOrdersOfTable(i).then(orders => {
+                
                 if (orders.length) {
                     table.classList.toggle('busy');
                     payBtn.disabled = false;
@@ -99,10 +101,10 @@ async function renderMenuItems(params, menuList, opts = {}) {
 
         if (active.items?.length) {
             for (const it of active.items) {
-                const id = it.menu_id?._id ?? it.menu_id;
+                const id = it.menuId?.id ?? it.menuId;
                 const initial = Number(it.initialQuantity || 0);
                 const sold = Number(it.soldQuantity || 0);
-                const remain = Math.max(0, initial - sold);
+                const remain = roundN(initial - sold, 2);
                 remainByMenuId.set(id, { remain, initial, sold });
             }
         }
@@ -131,7 +133,7 @@ async function renderMenuItems(params, menuList, opts = {}) {
         menuList.innerHTML = '';
 
         menuItems.forEach(item => {
-            const stat = remainByMenuId.get(item._id) || null;
+            const stat = remainByMenuId.get(item.id) || null;
             const remain = stat?.remain ?? null;
             const initial = stat?.initial ?? 0;
             const sold = stat?.sold ?? 0;
@@ -173,7 +175,7 @@ async function renderMenuItems(params, menuList, opts = {}) {
             li.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;">
           <img
-            src="../img/${item.image_url}"
+            src="../img/${item.imageUrl}"
             alt="${item.name}"
             width="40" height="40"
             style="vertical-align:middle;border-radius:6px;object-fit:cover;border:1px solid #e5e7eb;"
@@ -219,7 +221,7 @@ async function renderMenuItems(params, menuList, opts = {}) {
     }
 }
 
-function attachOrderButtons(cancelBtn, orderBtn, payBtn, table_number, cancelOrder, goingBack, getOrdersOfTable, showAlert) {
+function attachOrderButtons(cancelBtn, orderBtn, payBtn, tableNumber, cancelOrder, goingBack, getOrdersOfTable, showAlert) {
     const categorySelect = document.getElementById('productCategory');
     const searchInput = document.getElementById('search-input');
 
@@ -261,26 +263,26 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, table_number, cancelOrd
             const name = (row.querySelector('.name')?.textContent || '').trim();
 
             grandTotal += totalVal;
-            items.push({ menu_id: menuId, name, quantity, weightValue, portions, price });
+            items.push({ menu: menuId, name, quantity, weightValue, portions, unitPrice:price, price });
         });
 
         if (!items.length) return showAlert("Mahsulot tanlanmagan!");
-        
-        const query = { table_number, status: "pending" };
+
+        const query = { tableNumber, status: "pending" };
         const orderData = await getOrderByQuery(query);
         if (!orderData || Object.keys(orderData).length === 0) {
             return showAlert("Hali hech qanday pending buyurtma mavjud emas!");
         }
-
-        const { order_number, _id: order_id } = orderData;
+        
+        const { orderNumber, id: orderId } = orderData;
         const order = {
-            table_number,
-            orderId: order_number,
-            order_id,
-            total_amount: grandTotal,
+            tableNumber,
+            orderNumber,
+            orderId,
+            totalAmount: grandTotal,
             items
         };
-
+        
         const result = await window.electronAPI.openPaymentWindow(order);
         if (result.success) goingBack();
     };
@@ -290,104 +292,145 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, table_number, cancelOrd
         clickSound.currentTime = 0;
         clickSound.play().catch(() => { });
         if (await showConfirm("Buyurtmani bekor qilmoqchimisiz?")) {
-            await cancelOrder(table_number);
-            await getOrdersOfTable(table_number);
+            await cancelOrder(tableNumber);
+            await getOrdersOfTable(tableNumber);
             goingBack();
         }
     };
-    
+
     // ORDER
     orderBtn.onclick = async () => {
         clickSound.currentTime = 0;
         clickSound.play().catch(() => { });
-        
+
         const toNum = (v, d = 0) => {
-            const n = parseFloat(v);
+            const n = Number(v);
             return Number.isFinite(n) ? n : d;
         };
         const round2 = (x) => Math.round(x * 100) / 100;
-        const round3 = (x) => Math.round(x * 1000) / 1000;
 
-        let grandTotal = 0;
-        let items = [];
+        // prevent double submit
+        if (orderBtn.disabled) return;
+        orderBtn.disabled = true;
 
-        document.querySelectorAll("tr[id^='order-item-']").forEach(row => {
-            const menuId = row.id.replace('order-item-', '');
+        try {
+            // 1) Build remainingByMenu from the single open session
+            const openSessions = (await renderAllSessions({ status: "open" })) || [];
+            const active = Array.isArray(openSessions) ? openSessions[0] : openSessions;
+            const remainingByMenu = new Map(
+                (active?.items ?? []).map((si) => [
+                    String(si.menuId),
+                    toNum(si.initialQuantity, 0) - toNum(si.soldQuantity, 0),
+                ])
+            );
 
-            // qty (span yoki input)
-            const qtyEl = row.querySelector('.quantity');
-            const qty = toNum(qtyEl?.value ?? qtyEl?.textContent ?? '0');
+            // 2) Collect items with strict stock guards
+            let grandTotal = 0;
+            const items = [];
+            const EPS = 1e-9;
 
-            // unit price (span yoki input) — sizda class '.price'
-            const priceEl = row.querySelector('.price');
-            const unitPrice = toNum(priceEl?.value ?? priceEl?.textContent ?? '0');
+            const rows = document.querySelectorAll("tr[id^='order-item-']");
+            for (const row of rows) {
+                const menuId = row.id.replace("order-item-", "");
+                const remaining = remainingByMenu.has(menuId)
+                    ? remainingByMenu.get(menuId)
+                    : Infinity;
 
-            // portion / weight
-            const portionSelect = row.querySelector('.portionSelect'); // porsiya (0.5/0.7/1)
-            const weightInput = row.querySelector('.weight-input');  // kg (faqat kg, birlik yo'q)
+                // qty
+                const qtyEl = row.querySelector(".quantity");
+                const qty = Math.max(1, Math.trunc(toNum(qtyEl?.value ?? qtyEl?.textContent, 0)));
 
-            // total (span yoki input)
-            const totalEl = row.querySelector('.total, .total-input');
-            const totalVal = toNum(totalEl?.value ?? totalEl?.textContent ?? '0');
+                // unit price
+                const priceEl = row.querySelector(".price");
+                const unitPrice = toNum(priceEl?.value ?? priceEl?.textContent, 0);
 
-            // default payload
-            const payload = {
-                menu_id: menuId,
-                soldByWeight: false,
-                quantity: 0,
-                portions: null,
-                unit_price: round2(unitPrice),
-                total_price: round2(totalVal),
-            };
+                // controls
+                const portionSelect = row.querySelector(".portionSelect");
+                const weightInput = row.querySelector(".weight-input");
 
-            if (weightInput) {
-                // === Kilolik mahsulot ===
-                const unitsCount = Math.max(1, Math.trunc(qty));          // masalan: qty=2
-                const weightKgPerUnit = parseFloat(weightInput.value || '0'); // masalan: 0.5
-                const effectiveKg = unitsCount * weightKgPerUnit;         // 1.0 kg
+                // total (UI)
+                const totalSpan = row.querySelector(".total");
+                const totalInput = row.querySelector(".total-input");
+                const totalVal = toNum(totalInput?.value ?? totalSpan?.textContent, 0);
 
-                payload.soldByWeight = true;
-                payload.units = unitsCount;            // ✅ NEW
-                payload.weight_kg = weightKgPerUnit;   // ✅ NEW
+                // Build payload + compute effective usage
+                const payload = {
+                    menuId,
+                    soldByWeight: false,
+                    quantity: qty,
+                    portions: null,
+                    unitPrice: round2(unitPrice),
+                    totalPrice: round2(totalVal),
+                };
 
-                payload.quantity = round3(effectiveKg); // inventar uchun
-                payload.portions = null;
-            } else if (portionSelect) {
-                // === Porsiyali mahsulot (soldByWeight = false) ===
-                const portion = toNum(portionSelect.value, 1);        // 1 / 0.7 / 0.5
-                payload.soldByWeight = false;
-                payload.quantity = Math.max(1, Math.trunc(qty));      // non-weight: qty butun
-                payload.portions = portion;                           // 0.5 yoki 0.7 (float)
-            } else {
-                // === Oddiy dona mahsulot ===
-                payload.soldByWeight = false;
-                payload.quantity = Math.max(1, Math.trunc(qty));      // butun
-                payload.portions = null;
+                let effectiveUse = qty; // default for simple items
+
+                if (weightInput) {
+                    // weight product
+                    const w = Math.max(0, toNum(weightInput.value, 0));
+                    
+                    payload.soldByWeight = true;
+                    payload.weightKg = w;
+                    payload.portions = null;
+                    // server stores `quantity` as units count for weight items
+                    payload.quantity = qty; // keep your UI qty as units
+                    effectiveUse = qty * w;
+                } else if (portionSelect) {
+                    // portion product
+                    const portion = toNum(portionSelect.value, 1);
+                    payload.soldByWeight = false;
+                    payload.portions = portion;
+                    effectiveUse = qty * portion;
+                }
+                
+                // Stock guard – STOP on first violation
+                if (!(effectiveUse <= remaining + EPS)) {
+                    const label =
+                        weightInput
+                            ? `kg`
+                            : portionSelect
+                                ? `porsiya`
+                                : `dona`;
+                    await showAlert(`❌ Mahsulot yetarli emas (qolgan: ${round2(remaining)} ${label})`);
+                    orderBtn.disabled = false;
+                    return;
+                }
+
+                grandTotal += totalVal;
+                items.push(payload);
             }
 
-            grandTotal += totalVal;
-            items.push(payload);
-        });
+            if (!items.length) {
+                await showAlert("Mahsulot tanlanmagan!");
+                orderBtn.disabled = false;
+                return;
+            }
 
-        if (!items.length) return showAlert("Mahsulot tanlanmagan!");
+            // 3) Submit
+            const newOrder = {
+                tableNumber,
+                totalAmount: round2(grandTotal),
+                paymentMethod: "cash", // UIda keyin tanlansa, shu yerga qo'ying
+                items,
+            };
 
-        const newOrder = {
-            table_number,
-            total_amount: round2(grandTotal),
-            payment_method: 'cash',
-            items
-        };
+            await submitOrder(newOrder);
 
-        await submitOrder(newOrder);
+            // 4) UI refresh
+            await renderMenuItems(
+                { category: categorySelect.value, search: searchInput.value.trim() },
+                document.getElementById("menuList"),
+                { mode: "order", payBtn, selectProduct }
+            );
 
-        renderMenuItems(
-            { category: categorySelect.value, search: searchInput.value.trim() },
-            document.getElementById('menuList'),
-            { mode: 'order', payBtn, selectProduct }
-        );
+            await showAlert("✅ Buyurtma saqlandi", { duration: 2000 });
+        } catch (err) {
+            console.error(err);
+            await showAlert("❌ Buyurtmani saqlashda xatolik");
+        } finally {
+            orderBtn.disabled = false;
+        }
     };
-
-
 
 }
 

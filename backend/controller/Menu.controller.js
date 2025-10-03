@@ -40,13 +40,17 @@ class MenuController {
 
     async createItem(req, res, next) {
         try {
-            const { error, value } = Validators.menuValidator.validate(req.body);
-
+            const { error, value } = Validators.menuValidator.validate(req.body, {
+                convert: true,
+                abortEarly: false,
+            });
+            console.log(value);
+            
             if (error) {
                 throw new CustomError(error.details[0].message, 400, "ValidationError");
             }
 
-            const createdItem = await menuService.createMenuItem(req.body)
+            const createdItem = await menuService.createMenuItem(value)
             res.status(201).json({
                 message: "✅ Menu item qo'shildi!",
                 data: createdItem

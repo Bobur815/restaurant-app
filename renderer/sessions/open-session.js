@@ -136,7 +136,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         const errors = [];
 
         orderTableBody.querySelectorAll('tr').forEach(tr => {
-            const menu_id = tr.dataset.menuId;
+            const menuId = tr.dataset.menuId;
             const rem = Number(tr.dataset.remaining || 0);
             const carry = Number(tr.querySelector('.qty-carry')?.value || 0);
             const write = Number(tr.querySelector('.qty-writeoff')?.value || 0);
@@ -145,11 +145,11 @@ window.addEventListener('DOMContentLoaded', async () => {
 
             // Validate per-row
             if (carry < 0 || write < 0 || carry + write !== rem) {
-                errors.push(menu_id);
+                errors.push(menuId);
                 tr.classList.add('row-error');
             } else {
                 tr.classList.remove('row-error');
-                actions.push({ menu_id, carry_to_next_qty: carry, write_off_qty: write });
+                actions.push({ menuId, carry_to_next_qty: carry, write_off_qty: write });
             }
         });
 
@@ -162,7 +162,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
         if (items.length) {
             for (const r of items) {
-                await addOrMergeRowFromResidual({ menu_id: (r.menu_id?._id ?? r.menu_id), quantity: r.quantity - 1 || 0 });
+                await addOrMergeRowFromResidual({ menuId: (r.menuId?.id ?? r.menuId), quantity: r.quantity - 1 || 0 });
             }
             await showAlert(`Oldingi smenadan ${items.length} ta mahsulotning qoldiqlari qo'shildi`);
         }
@@ -209,16 +209,16 @@ window.addEventListener('DOMContentLoaded', async () => {
             const session = await res.json();
 
             (session.items || []).forEach(async (it) => {
-                const menuItem = await getMenuItemById(it.menu_id);
+                const menuItem = await getMenuItemById(it.menuId);
                 const item = {
-                    _id: (it.menu_id?._id ?? it.menu_id),
+                    id: (it.menuId?.id ?? it.menuId),
                     name: menuItem?.name ?? '—',
-                    image_url: menuItem?.image_url ?? '',
+                    imageUrl: menuItem?.imageUrl ?? '',
                 };
                 // create/edit rejimida item qo‘shish:
                 selectProduct(item);
                 // qiymatni aniq qo‘yish
-                const row = document.getElementById(`order-item-${item._id}`);
+                const row = document.getElementById(`order-item-${item.id}`);
                 if (row) {
                     const qtyEl = row.querySelector('.quantity');
                     qtyEl.value = parseInt(it.initialQuantity || 1, 10);
@@ -258,9 +258,9 @@ window.addEventListener('DOMContentLoaded', async () => {
             let ind = 1;
 
             for (const it of (session.items || [])) {
-                const menuItem = await getMenuItemById(it.menu_id);
+                const menuItem = await getMenuItemById(it.menuId);
                 const name = menuItem?.name ?? '—';
-                const id = (it.menu_id?._id ?? it.menu_id);
+                const id = (it.menuId?.id ?? it.menuId);
 
                 const initial = Number(it.initialQuantity || 0);
                 const sold = Number(it.soldQuantity || 0);
@@ -273,7 +273,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
                 tr.innerHTML = `
     <td class="index" style="font-weight:bold;">${ind++}</td>
-    <td class="cell-image"><img src="../img/${menuItem?.image_url ?? ''}" alt="${name}" width="60" height="60" style="border-radius:5px;"/></td>
+    <td class="cell-image"><img src="../img/${menuItem?.imageUrl ?? ''}" alt="${name}" width="60" height="60" style="border-radius:5px;"/></td>
     <td class="cell-name">${name}</td>
     <td class="cell-initial">${initial}</td>
     <td class="cell-sold">${sold}</td>
@@ -418,7 +418,7 @@ window.addEventListener('DOMContentLoaded', async () => {
         // CREATE / EDIT rejimi:
         // 1) Gather items from table
         const items = Array.from(document.querySelectorAll("tr[id^='order-item-']")).map(row => {
-            const menu_id = row.id.replace('order-item-', '');
+            const menuId = row.id.replace('order-item-', '');
 
             const qtyEl = row.querySelector('.quantity');
             // .value mavjud bo'lmasa .textContent dan olamiz; vergulni nuqtaga aylantiramiz
@@ -431,7 +431,7 @@ window.addEventListener('DOMContentLoaded', async () => {
             // manfiy bo'lmasin va 3 xonagacha yaxlitlaymiz (kg uchun qulay)
             initialQuantity = Math.max(0, Math.round(initialQuantity * 1000) / 1000);
 
-            return { menu_id, initialQuantity };
+            return { menuId, initialQuantity };
         });
 
 
@@ -463,7 +463,7 @@ export function selectProduct(item) {
     return new Promise(resolve => {
         const tableBody = document.getElementById('orderTableBody');
 
-        const existing = document.getElementById(`order-item-${item._id}`);
+        const existing = document.getElementById(`order-item-${item.id}`);
         if (existing) {
             const qtyEl = existing.querySelector('.quantity');
             qtyEl.value = parseInt(qtyEl.value, 10) + 1;
@@ -472,11 +472,11 @@ export function selectProduct(item) {
         }
 
         const row = document.createElement('tr');
-        row.id = `order-item-${item._id}`;
+        row.id = `order-item-${item.id}`;
         row.innerHTML = `
       <td class="index" style="font-weight: bold;"></td>
       <td>
-        <img src="../img/${item.image_url || ''}" alt="${item.name}" width="60" height="60" style="border-radius:5px;">
+        <img src="../img/${item.imageUrl || ''}" alt="${item.name}" width="60" height="60" style="border-radius:5px;">
       </td>
       <td class="name" style="font-size: 18px; font-weight:bold;">${item.name}</td>
       <td>

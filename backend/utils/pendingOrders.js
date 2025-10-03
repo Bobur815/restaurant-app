@@ -1,25 +1,48 @@
-import Order_itemsModel from "../models/Order_items.model.js";
-import OrdersModel from "../models/Orders.model.js";
+// backend/utils/pendingOrders.js
+import prisma from "../database/prisma.js";
 
-export  async function getGlobalPendingQtyByMenu(menuIds) {
-  if (!menuIds?.length) return new Map();
+const toInt = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : null;
+};
 
-  // 1) find pending order IDs
-  const pendingOrders = await OrdersModel.find(
-    { status: 'pending' },
-    { _id: 1 }
-  ).lean();
+const toIntArray = (arr) =>
+  (arr || [])
+    .map(toInt)
+    .filter((n) => Number.isInteger(n));
+
+/**
+ * Sum of quantities for each menuId across ALL pending orders.
+ * @param {number[]|string[]} menuIds
+ * @returns {Promise<Map<number, number>>} Map(menuId -> totalQty)
+ */
+export async function getGlobalPendingQtyByMenu(menuIds) {
+  const ids = toIntArray(menuIds);
+  if (!ids.length) return new Map();
+
+  // 1) Find all pending order IDs
+  const pendingOrders = await prisma.order.findMany({
+    where: { status: "pending" },
+    select: { id: true },
+  });
   if (!pendingOrders.length) return new Map();
 
-  const orderIds = pendingOrders.map(o => o._id);
+  const orderIds = pendingOrders.map((o) => o.id);
 
-  // 2) aggregate items by menu_id
-  const agg = await Order_itemsModel.aggregate([
-    { $match: { order_id: { $in: orderIds }, menu_id: { $in: menuIds } } },
-    { $group: { _id: '$menu_id', totalQty: { $sum: '$quantity' } } },
-  ]);
+  // 2) Group order items by menuId, limited to pending orders + requested menuIds
+  const grouped = await prisma.orderItem.groupBy({
+    by: ["menuId"],
+    where: {
+      orderId: { in: orderIds },
+      menuId: { in: ids },
+    },
+    _sum: { quantity: true },
+  });
 
+  // 3) Build Map(menuId -> totalQty)
   const map = new Map();
-  for (const r of agg) map.set(String(r._id), Number(r.totalQty || 0));
+  for (const row of grouped) {
+    map.set(row.menuId, Number(row._sum.quantity || 0));
+  }
   return map;
 }

@@ -1,380 +1,416 @@
-import ExpensesModel from "../models/Expenses.model.js";
-import OrdersModel from "../models/Orders.model.js";
-import PaymentsModel from "../models/Payments.model.js";
-import CustomError from "../utils/CustomError.js";
-import orderService from "./Order.service.js";
-import sessionService from "./Session.service.js";
+// backend/services/payment.service.js
+import prisma from "../database/prisma.js";
+import CustomError from "../utils/CustomError.js";    // if you prefer to reuse changeStatus; else update directly here
+import sessionService from "./Session.service.js";   // keep your existing API
 
-class PaymentService {
-  constructor() { }
+const toInt = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) ? n : null;
+};
 
-  async getChecksByQuery(filter) {
+const normalizeMethod = (m) => {
+  const x = String(m || "").toLowerCase();
+  if (x === "klik") return "click";
+  if (x === "nasiya" || x === "credit") return "debt";
+  return x; // cash | card | click | debt
+};
 
-    let sortKey;
-    if (filter.orderByType === 'table_number') {
-      sortKey = 'order.table_number';
-    } else if (filter.orderByType === 'payment_date') {
-      sortKey = 'payment_date';
-    } else if (filter.orderByType === 'amount') {
-      sortKey = 'amount';
-    } else {
-      // agar noto‘g‘ri kelgan bo‘lsa, default bo‘yicha sana bo‘yicha ko'payish
-      sortKey = 'payment_date';
-    }
+const dayKey = (d) => {
+  const date = new Date(d);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+
+export default new (class PaymentService {
+  /**
+   * Filters:
+   *  - startDate, endDate (YYYY-MM-DD)
+   *  - paymentMethod ('all' to ignore)
+   *  - status ('all' to ignore)
+   *  - tableNumber
+   * Sorting:
+   *  - orderByType: 'tableNumber' | 'payment_date' | 'amount'
+   *  - orderDirection: 'asc' | 'desc'
+   */
+  async getChecksByQuery(filter = {}) {
     const start = new Date(filter.startDate);
     const end = new Date(filter.endDate);
     end.setHours(23, 59, 59, 999);
 
-    const tableNum = filter.table_number != null
-      ? parseInt(filter.table_number, 10)
-      : null;
-
-    const pipeline = [];
-
-    const rootMatch = {
-      payment_date: { $gte: start, $lte: end }
+    const where = {
+      paymentDate: { gte: start, lte: end },
     };
 
-    if (filter.payment_method && filter.payment_method !== 'all') {
-      rootMatch.payment_method = filter.payment_method;
+    if (filter.paymentMethod && filter.paymentMethod !== "all") {
+      where.paymentMethod = String(filter.paymentMethod);
     }
-    if (filter.status && filter.status !== 'all') {
-      rootMatch.status = filter.status;
+    if (filter.status && filter.status !== "all") {
+      where.status = String(filter.status);
     }
-    pipeline.push({ $match: rootMatch });
-    pipeline.push({
-      $lookup: {
-        from: 'orders',
-        localField: 'order_id',
-        foreignField: '_id',
-        as: 'order'
-      }
-    });
-    pipeline.push({ $unwind: '$order' });
 
-    // 3c. if they asked to filter by table_number, match on the populated field
+    const tableNum =
+      filter.tableNumber != null ? toInt(filter.tableNumber) : null;
     if (tableNum != null) {
-      pipeline.push({ $match: { 'order.table_number': tableNum } });
+      where.order = { tableNumber: tableNum };
     }
 
-    // 3d. sort however you like
-    const sortDir = filter.orderDirection === 'desc' ? -1 : 1;
+    // Sorting
+    const orderDir = filter.orderDirection === "asc" ? "asc" : "desc";
+    let orderBy = [{ paymentDate: orderDir }];
 
-    // Sort obyektini dinamik to‘ldiramiz
-    const sortStage = { [sortKey]: sortDir };
-    // Faqat stol bo‘yicha yoki summa bo‘yicha sort qilar ekansiz, ikkinchi darajali sana sortini ham qo‘shish mumkin
-    if (sortKey !== 'payment_date') {
-      sortStage.payment_date = -1;
+    if (filter.orderByType === "tableNumber") {
+      // Prefer tableNumber, then date desc to stabilize
+      orderBy = [{ order: { tableNumber: orderDir } }, { paymentDate: "desc" }];
+    } else if (filter.orderByType === "amount") {
+      orderBy = [{ amount: orderDir }, { paymentDate: "desc" }];
+    } else if (filter.orderByType === "payment_date") {
+      orderBy = [{ paymentDate: orderDir }];
     }
 
-    pipeline.push({ $sort: sortStage });
-
-    // 3e. project exactly the fields you need
-    pipeline.push({
-      $project: {
-        order_number: '$order.order_number',
-        table_number: '$order.table_number',
-        amount: 1,
-        payment_method: 1,
-        status: 1,
-        payment_date: 1
-      }
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        order: { select: { orderNumber: true, tableNumber: true } },
+      },
+      orderBy,
     });
 
-    // 4. run the aggregation
-    const payments = await PaymentsModel.aggregate(pipeline);
-
-    // 5. you already have flat fields, so just return them
-    return payments.map(p => ({
-      order_number: p.order_number,
-      table_number: p.table_number,
-      amount: p.amount,
-      payment_method: p.payment_method,
+    // Project flat fields (match your old $project)
+    return payments.map((p) => ({
+      orderNumber: p.order?.orderNumber ?? null,
+      tableNumber: p.order?.tableNumber ?? null,
+      amount: Number(p.amount ?? 0),
+      paymentMethod: p.paymentMethod,
       status: p.status,
-      payment_date: p.payment_date
+      payment_date: p.paymentDate,
     }));
   }
 
-
-  async getReports(query) {
-    const { start, end, bytype = 'payment_date', direction = 'asc' } = query;
-    if (!start || !end) throw new CustomError("start and end required", 400, "BadRequest");
+  /**
+   * Build reports for a date range:
+   * - productsByDate: [{ date, products: [{ productName, quantitySold }] }]
+   * - daily: [{ payment_date, numberOfOrders, totalSumOfEachDay, cashSum, cardSum, clickSum, plasticSum, creditSum, expense* fields }]
+   *
+   * Sort controls:
+   *  bytype: 'payment_date' | 'amount'
+   *  direction: 'asc' | 'desc'
+   */
+  async getReports(query = {}) {
+    const { start, end, bytype = "payment_date", direction = "asc" } = query;
+    if (!start || !end)
+      throw new CustomError("start and end required", 400, "BadRequest");
 
     const startDate = new Date(start);
     const endDate = new Date(end);
     endDate.setHours(23, 59, 59, 999);
 
-    const dateMatch = { payment_date: { $gte: startDate, $lte: endDate } };
-
-    // --- whitelist & mapping ---
-    const byWhitelist = new Set(['payment_date', 'amount']);
-    const dir = direction === 'desc' ? -1 : 1;
-    const by = byWhitelist.has(bytype) ? bytype : 'payment_date';
-
-    // qaysi maydon bo‘yicha sort qilamiz?
-    // 'amount' => totalSumOfEachDay; 'payment_date' => payment_date
-    const sortField = by === 'amount' ? 'totalSumOfEachDay' : 'payment_date';
-
-
-    // ---- sortSpec ni to‘g‘ri quramiz
-    const sortSpec = {};
-    sortSpec[sortField] = dir;
-    // faqat amount bo‘lsa ikkilamchi tartib sifatida sanani qo‘shamiz
-    if (sortField !== 'payment_date') {
-      sortSpec['payment_date'] = 1;
-    }
-    // 1) Mahsulotlar bo‘yicha (o‘zizdagi kabi)
-    const productsByDate = await PaymentsModel.aggregate([
-      { $match: dateMatch },
-      {
-        $lookup: {
-          from: 'orderitems',
-          localField: 'order_id',
-          foreignField: 'order_id',
-          as: 'items'
-        }
-      },
-      { $unwind: '$items' },
-      {
-        $group: {
-          _id: {
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$payment_date' } },
-            menuId: '$items.menu_id'
+    // --- Pull all payments in range, with order + order.items + menu
+    const payments = await prisma.payment.findMany({
+      where: { paymentDate: { gte: startDate, lte: endDate } },
+      include: {
+        order: {
+          select: {
+            id: true,
+            items: {
+              select: {
+                menuId: true,
+                quantity: true,
+              },
+            },
           },
-          quantitySold: { $sum: '$items.quantity' }
-        }
+        },
       },
-      {
-        $lookup: {
-          from: 'menus',
-          localField: '_id.menuId',
-          foreignField: '_id',
-          as: 'menu'
-        }
-      },
-      { $unwind: '$menu' },
-      {
-        $project: {
-          _id: 0,
-          date: '$_id.date',
-          productName: '$menu.name',
-          quantitySold: 1
-        }
-      },
-      {
-        $group: {
-          _id: '$date',
-          products: { $push: { productName: '$productName', quantitySold: '$quantitySold' } }
-        }
-      },
-      { $project: { _id: 0, date: '$_id', products: 1 } },
-      { $sort: { date: 1 } } // bu qismini o‘zgartirmadik
-    ]);
+      orderBy: { paymentDate: "asc" },
+    });
 
-    // 2) Kunlik umumiy + breakdown (+ expenses)
-    const daily = await PaymentsModel.aggregate([
-      { $match: dateMatch },
-      {
-        $group: {
-          _id: { $dateToString: { format: '%Y-%m-%d', date: '$payment_date' } },
+    // --- PRODUCTS BY DATE (aggregate in JS)
+    // Build: { 'YYYY-MM-DD': { menuId: qty, ... } }
+    const productDayMap = new Map(); // day -> Map(menuId -> qty)
+    for (const p of payments) {
+      const day = dayKey(p.paymentDate);
+      if (!productDayMap.has(day)) productDayMap.set(day, new Map());
+      const bucket = productDayMap.get(day);
+      for (const it of p.order?.items || []) {
+        const mid = it.menuId;
+        const prev = bucket.get(mid) || 0;
+        bucket.set(mid, prev + Number(it.quantity || 0));
+      }
+    }
 
-          numberOfPayments: { $sum: 1 },
-          totalSumOfEachDay: { $sum: '$amount' },
+    // Resolve menu names for all involved menuIds
+    const allMenuIds = new Set();
+    for (const bucket of productDayMap.values()) {
+      for (const mid of bucket.keys()) allMenuIds.add(mid);
+    }
+    const menuIdList = [...allMenuIds];
+    const menus = menuIdList.length
+      ? await prisma.menu.findMany({
+          where: { id: { in: menuIdList } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const menuNameById = new Map(menus.map((m) => [m.id, m.name]));
 
-          cashSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'cash'] }, '$amount', 0] } },
-          cardSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'card'] }, '$amount', 0] } },
-          clickSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'click'] }, '$amount', 0] } },
-          creditSum: { $sum: { $cond: [{ $eq: ['$payment_method', 'debt'] }, '$amount', 0] } },
-        }
-      },
-      { $addFields: { plasticSum: { $add: ['$cardSum', '$clickSum'] } } },
-      {
-        $project: {
-          _id: 0,
-          payment_date: '$_id',
-          numberOfOrders: '$numberOfPayments',
-          totalSumOfEachDay: 1,
-          cashSum: 1,
-          cardSum: 1,
-          clickSum: 1,
-          plasticSum: 1,
-          creditSum: 1
-        }
-      },
+    const productsByDate = [...productDayMap.entries()]
+      .map(([date, bucket]) => {
+        const products = [...bucket.entries()].map(([menuId, quantitySold]) => ({
+          productName: menuNameById.get(menuId) ?? `#${menuId}`,
+          quantitySold,
+        }));
+        return { date, products };
+      })
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 
-      // ---- attach expenses (same day) -----------------------------
-      {
-        $lookup: {
-          from: 'expenses',
-          let: { theDay: '$payment_date' },
-          pipeline: [
-            // 1) date range
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $gte: ['$createdAt', startDate] },
-                    { $lte: ['$createdAt', endDate] }
-                  ]
-                }
-              }
-            },
-            // 2) compute day key
-            {
-              $addFields: {
-                d: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }
-              }
-            },
-            // 3) join menu to fallback price
-            {
-              $lookup: {
-                from: 'menus',
-                localField: 'menu_id',
-                foreignField: '_id',
-                as: 'menu'
-              }
-            },
-            { $unwind: { path: '$menu', preserveNullAndEmptyArrays: true } },
+    // --- DAILY (payments breakdown) ---------------------------------
+    const dailyMap = new Map(); // day -> accum
+    const accDay = (d) => {
+      if (!dailyMap.has(d)) {
+        dailyMap.set(d, {
+          payment_date: d,
+          numberOfOrders: 0,
+          totalSumOfEachDay: 0,
+          cashSum: 0,
+          cardSum: 0,
+          clickSum: 0,
+          creditSum: 0,
+          // expenses to be attached later:
+          expenseSum: 0,
+          residualWriteoffSum: 0,
+          wasteSum: 0,
+          breakageSum: 0,
+          expenseQtyTotal: 0,
+        });
+      }
+      return dailyMap.get(d);
+    };
 
-            // 4) effective unit cost & amount with multi-level fallback
-            {
-              $addFields: {
-                unitCostEff: {
-                  $cond: [{ $gt: ['$unitCost', 0] }, '$unitCost', { $ifNull: ['$menu.price', 0] }]
-                },
-                amountEff: {
-                  $cond: [
-                    { $gt: ['$amount', 0] },
-                    '$amount',
-                    { $multiply: [{ $cond: [{ $gt: ['$unitCost', 0] }, '$unitCost', { $ifNull: ['$menu.price', 0] }] }, '$quantity'] }
-                  ]
-                }
-              }
-            },
+    for (const p of payments) {
+      const d = dayKey(p.paymentDate);
+      const row = accDay(d);
+      row.numberOfOrders += 1;
+      const amt = Number(p.amount || 0);
+      row.totalSumOfEachDay += amt;
+      switch (p.paymentMethod) {
+        case "cash":
+          row.cashSum += amt;
+          break;
+        case "card":
+          row.cardSum += amt;
+          break;
+        case "click":
+          row.clickSum += amt;
+          break;
+        case "debt":
+          row.creditSum += amt;
+          break;
+        default:
+          break;
+      }
+    }
 
-            // 5) keep only the expenses for this payment day
-            { $match: { $expr: { $eq: ['$d', '$$theDay'] } } },
+    // --- EXPENSES (range) with menu fallback price -> attach per day
+    const expenses = await prisma.expense.findMany({
+      where: { createdAt: { gte: startDate, lte: endDate } },
+      include: { menu: { select: { price: true } } },
+    });
 
-            // 6) group & sum
-            {
-              $group: {
-                _id: null,
-                expenseSum: { $sum: '$amountEff' },
-                residualWriteoffSum: {
-                  $sum: { $cond: [{ $eq: ['$type', 'residual_writeoff'] }, '$amountEff', 0] }
-                },
-                wasteSum: {
-                  $sum: { $cond: [{ $eq: ['$type', 'waste'] }, '$amountEff', 0] }
-                },
-                breakageSum: {
-                  $sum: { $cond: [{ $eq: ['$type', 'breakage'] }, '$amountEff', 0] }
-                },
-                expenseQtyTotal: { $sum: '$quantity' }
-              }
-            }
-          ],
-          as: 'expenses'
-        }
-      },
-      // flatten defaults...
-      {
-        $addFields: {
-          expenseSum: { $ifNull: [{ $arrayElemAt: ['$expenses.expenseSum', 0] }, 0] },
-          residualWriteoffSum: { $ifNull: [{ $arrayElemAt: ['$expenses.residualWriteoffSum', 0] }, 0] },
-          wasteSum: { $ifNull: [{ $arrayElemAt: ['$expenses.wasteSum', 0] }, 0] },
-          breakageSum: { $ifNull: [{ $arrayElemAt: ['$expenses.breakageSum', 0] }, 0] },
-          expenseQtyTotal: { $ifNull: [{ $arrayElemAt: ['$expenses.expenseQtyTotal', 0] }, 0] }
-        }
-      },
-      { $project: { expenses: 0 } },
+    for (const e of expenses) {
+      const d = dayKey(e.createdAt);
+      const row = accDay(d);
 
+      // Effective unit cost
+      const unitCost =
+        Number(e.unitCost || 0) > 0
+          ? Number(e.unitCost || 0)
+          : Number(e.menu?.price || 0);
 
-      // --- dynamic sort (same logic you had)
-      { $sort: sortSpec }
-    ]);
+      // Effective amount
+      const amountEff =
+        Number(e.amount || 0) > 0
+          ? Number(e.amount || 0)
+          : unitCost * Number(e.quantity || 0);
 
+      row.expenseSum += amountEff;
+      row.expenseQtyTotal += Number(e.quantity || 0);
+
+      // Type breakdowns
+      if (e.type === "residual_writeoff") row.residualWriteoffSum += amountEff;
+      else if (e.type === "waste") row.wasteSum += amountEff;
+      else if (e.type === "breakage") row.breakageSum += amountEff;
+    }
+
+    // Calculate plasticSum, build array, sort
+    const daily = [...dailyMap.values()].map((r) => ({
+      ...r,
+      plasticSum: r.cardSum + r.clickSum,
+      // normalize numbers to two decimals if you want:
+      // totalSumOfEachDay: Math.round(r.totalSumOfEachDay * 100) / 100,
+      // cashSum: Math.round(r.cashSum * 100) / 100,
+      // ...
+    }));
+
+    // Sorting (same idea as your sortSpec)
+    const byWhitelist = new Set(["payment_date", "amount"]);
+    const sortBy = byWhitelist.has(bytype) ? bytype : "payment_date";
+    const dir = direction === "desc" ? -1 : 1;
+
+    const sortField = sortBy === "amount" ? "totalSumOfEachDay" : "payment_date";
+    daily.sort((a, b) => {
+      const aa = sortField === "payment_date" ? a.payment_date : a.totalSumOfEachDay;
+      const bb = sortField === "payment_date" ? b.payment_date : b.totalSumOfEachDay;
+      if (aa < bb) return -1 * dir;
+      if (aa > bb) return 1 * dir;
+      // secondary by date asc
+      if (sortField !== "payment_date") {
+        if (a.payment_date < b.payment_date) return -1;
+        if (a.payment_date > b.payment_date) return 1;
+      }
+      return 0;
+    });
 
     return { daily, productsByDate };
   }
 
-
-
+  /**
+   * Update payment by orderNumber.
+   * data: partial { amount?, paymentMethod?, status?, payment_date? }
+   */
   async updatePayment(orderId, data) {
-    // 1) Verify the order exists
-    const order = await OrdersModel
-      .findOne({ order_number: orderId })
-      .select('_id');              // we only need the _id
+    const order = await prisma.order.findUnique({
+      where: { orderNumber: String(orderId) },
+      select: { id: true },
+    });
     if (!order) {
       throw new CustomError(`Order ${orderId} not found`, 404, "NotFoundError");
     }
 
-    // 2) Atomically update the payment for that order
-    const updatedPayment = await PaymentsModel.findOneAndUpdate(
-      { order_id: order._id },    // filter
-      { $set: data },             // apply only the provided fields
-      {
-        new: true,                // return the updated document
-        runValidators: true       // ensure your schema validators still run
-      }
-    );
+    const res = await prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: {
+        amount:
+          data.amount != null ? Number(data.amount) : undefined,
+        paymentMethod:
+          data.paymentMethod != null ? String(data.paymentMethod) : undefined,
+        status:
+          data.status != null ? String(data.status) : undefined,
+        paymentDate:
+          data.payment_date != null ? new Date(data.payment_date) : undefined,
+      },
+    });
 
-    // 3) If there was no matching payment, error out
-    if (!updatedPayment) {
+    if (res.count === 0) {
       throw new CustomError(`Payment for order ${orderId} not found`, 404, "NotFoundError");
     }
 
-    // 4) Return the updated payment (or you could return a message)
-    return updatedPayment;
+    // return updated row (fetch one)
+    const updated = await prisma.payment.findFirst({
+      where: { orderId: order.id },
+    });
+    return updated;
   }
 
+  async createPayment(data = {}) {
+  // --- Resolve orderId from several shapes the UI may send ---
+  
+  let orderId =
+    toInt(data.orderId) ??
+    toInt(data.order?.orderId);
 
-  async createPayment(data) {
-    // 1) create the payment record
-    const result = await PaymentsModel.create(data);
-
-    // 2) mark the order completed
-    const order = await orderService.changeStatusofOrder(
-      data.order_id,
-      "completed"
-    );
-
-    // 3) re-fetch the fully-populated order
-    const fullOrder = await orderService.getOrder({ _id: order.data._id });
-
-    // 4) for each item, bump the session’s soldQuantity
-    if (data.sessionId && Array.isArray(fullOrder.items)) {
-      await Promise.all(
-        fullOrder.items.map(item =>
-          sessionService.recordSale(
-            data.sessionId,
-            // item.menu_id is now an object, so grab its _id
-            item.menu_id._id || item.menu_id,
-            item.quantity
-          )
-        )
-      );
-    }
-
-    return result;
+  if (!orderId && data.orderNumber) {
+    const o = await prisma.order.findUnique({
+      where: { orderNumber: String(data.orderNumber) },
+      select: { id: true },
+    });
+    orderId = o?.id ?? null;
+  }
+  if (!orderId && data.order?.orderNumber) {
+    const o = await prisma.order.findUnique({
+      where: { orderNumber: String(data.order.orderNumber) },
+      select: { id: true },
+    });
+    orderId = o?.id ?? null;
+  }
+  if (!orderId) {
+    throw new CustomError("Order not found for payment", 404, "NotFoundError");
   }
 
+  // --- Validate/normalize fields ---
+  const amount = Number(data.amount);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new CustomError("Invalid amount", 400, "BadRequest");
+  }
+  const paymentMethod = normalizeMethod(data.paymentMethod);
+  if (!["cash", "card", "click", "debt"].includes(paymentMethod)) {
+    throw new CustomError("Invalid payment method", 400, "BadRequest");
+  }
+  const status = String(data.status ?? "paid");
+  if (!["paid", "pending", "refunded"].includes(status)) {
+    throw new CustomError("Invalid payment status", 400, "BadRequest");
+  }
+  const paymentDate = data.payment_date ? new Date(data.payment_date) : new Date();
+
+  // --- One transaction: create payment + complete order ---
+  const result = await prisma.$transaction(
+    async (tx) => {
+      // ensure order exists (and optionally guard against already-completed)
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, status: true },
+      });
+      if (!order) {
+        throw new CustomError("Order not found", 404, "NotFoundError");
+      }
+
+      const p = await tx.payment.create({
+        data: {
+          orderId,
+          amount,
+          paymentMethod, // Prisma enum
+          status,        // Prisma enum
+          paymentDate,
+        },
+      });
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: "completed",
+          paymentMethod,       // persist final method on the order too
+          updateDate: new Date(),
+        },
+      });
+
+      return p;
+    },
+    { timeout: 15000, maxWait: 10000 }
+  );
+
+  return result;
+}
+
+  /**
+   * Delete payment by orderNumber.
+   */
   async deletePayment(orderNumber) {
-    const order = await OrdersModel.findOne({ order_number: orderNumber });
+    const order = await prisma.order.findUnique({
+      where: { orderNumber: String(orderNumber) },
+      select: { id: true },
+    });
 
     if (!order) {
       throw new CustomError(`Buyurtma topilmadi: ${orderNumber}`, 404, "NotFoundError");
     }
 
-    const result = await PaymentsModel.findOneAndDelete({ order_id: order._id });
+    const res = await prisma.payment.deleteMany({
+      where: { orderId: order.id },
+    });
 
-    if (!result) {
+    if (res.count === 0) {
       throw new CustomError("To‘lov topilmadi yoki allaqachon o‘chirilgan", 404, "NotFoundError");
     }
 
     return "✅ Check muvaffaqqiyatli o'chirildi";
   }
-
-}
-
-let paymentService = new PaymentService()
-export default paymentService
+})();

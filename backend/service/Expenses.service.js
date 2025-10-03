@@ -1,33 +1,28 @@
-import mongoose from "mongoose";
-import ExpensesModel from "../models/Expenses.model.js";
+// backend/services/expense.service.js
+import prisma from "../database/prisma.js";
+import { Prisma } from "@prisma/client";
 
 const BY_WHITELIST = new Set(["createdAt", "amount"]);
-const DIR = { asc: 1, desc: -1 };
 
-function toObjectIdMaybe(v) {
-  if (!v) return undefined;
-  return mongoose.Types.ObjectId.isValid(v) ? new mongoose.Types.ObjectId(v) : undefined;
-}
-
-class ExpenseService {
+export default new (class ExpenseService {
   /**
-   * Query params (barchasi ixtiyoriy):
+   * Query params (all optional):
    * - start, end (YYYY-MM-DD)
-   * - type (string | csv)
-   * - session_id, menu_id
+   * - type (string | "csv,of,types")
+   * - sessionId, menuId (numbers or numeric strings)
    * - minAmount, maxAmount (number)
-   * - q (search in note/reason)
+   * - q (search in note)  // add 'reason' below if you have that column
    * - bytype = createdAt | amount
    * - direction = asc | desc
    * - page (default 1), limit (default 20)
    */
-  async getAllExpenses(query) {
+  async getAllExpenses(query = {}) {
     const {
       start,
       end,
       type,
-      session_id,
-      menu_id,
+      sessionId,
+      menuId,
       minAmount,
       maxAmount,
       q,
@@ -37,115 +32,112 @@ class ExpenseService {
       limit = 20,
     } = query;
 
-    // ---- filter build
-    const filter = {};
-
-    // Sana (createdAt) oraliği
-    if (start || end) {
-      const from = start ? new Date(start) : undefined;
-      const to = end ? new Date(end) : undefined;
-      if (to) to.setHours(23, 59, 59, 999);
-      filter.createdAt = {};
-      if (from) filter.createdAt.$gte = from;
-      if (to)   filter.createdAt.$lte = to;
-      if (Object.keys(filter.createdAt).length === 0) delete filter.createdAt;
-    }
-
-    // Tip (bitta yoki CSV ro‘yxat)
-    if (type) {
-      const parts = String(type)
-        .split(",")
-        .map(s => s.trim())
-        .filter(Boolean);
-      if (parts.length === 1) filter.type = parts[0];
-      else if (parts.length > 1) filter.type = { $in: parts };
-    }
-
-    // IDlar
-    const sId = toObjectIdMaybe(session_id);
-    const mId = toObjectIdMaybe(menu_id);
-    if (sId) filter.session_id = sId;
-    if (mId) filter.menu_id = mId;
-
-    // Summaga ko‘ra filter
-    const minA = Number(minAmount);
-    const maxA = Number(maxAmount);
-    if (!Number.isNaN(minA) || !Number.isNaN(maxA)) {
-      filter.amount = {};
-      if (!Number.isNaN(minA)) filter.amount.$gte = minA;
-      if (!Number.isNaN(maxA)) filter.amount.$lte = maxA;
-      if (Object.keys(filter.amount).length === 0) delete filter.amount;
-    }
-
-    // Qidiruv (note/reason)
-    if (q && q.trim()) {
-      const rx = new RegExp(q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
-      filter.$or = [{ note: rx }, { reason: rx }];
-    }
-
-    // ---- sort
-    const sortField = BY_WHITELIST.has(bytype) ? bytype : "createdAt";
-    const sortDir = direction === "asc" ? DIR.asc : DIR.desc;
-    const sortSpec = { [sortField]: sortDir, createdAt: -1 }; // barqarorlik uchun 2-darajali
-
     // ---- pagination
     const p = Math.max(1, parseInt(page, 10) || 1);
     const lim = Math.min(200, Math.max(1, parseInt(limit, 10) || 20));
     const skip = (p - 1) * lim;
 
-    // ---- parallel query: items + counters
+    // ---- sorting (stable: primary + fallback by createdAt desc)
+    const sortField = BY_WHITELIST.has(bytype) ? bytype : "createdAt";
+    const sortDir = direction === "asc" ? "asc" : "desc";
+    const orderBy = [{ [sortField]: sortDir }, { createdAt: "desc" }];
+
+    // ---- filters -> Prisma where
+    const where = {};
+
+    // Date range on createdAt
+    if (start || end) {
+      const createdAt = {};
+      if (start) createdAt.gte = new Date(start);
+      if (end) {
+        const to = new Date(end);
+        to.setHours(23, 59, 59, 999);
+        createdAt.lte = to;
+      }
+      if (Object.keys(createdAt).length) where.createdAt = createdAt;
+    }
+
+    // Type (single or CSV)
+    if (type) {
+      const parts = String(type)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (parts.length === 1) {
+        where.type = parts[0];
+      } else if (parts.length > 1) {
+        where.type = { in: parts };
+      }
+    }
+
+    // IDs (INT). If your schema uses Int, convert safely.
+    const sId = Number(sessionId);
+    if (!Number.isNaN(sId) && sId > 0) where.sessionId = sId;
+
+    const mId = Number(menuId);
+    if (!Number.isNaN(mId) && mId > 0) where.menuId = mId;
+
+    // Amount range (Decimal)
+    const minA = Number(minAmount);
+    const maxA = Number(maxAmount);
+    if (!Number.isNaN(minA) || !Number.isNaN(maxA)) {
+      where.amount = {};
+      if (!Number.isNaN(minA)) where.amount.gte = new Prisma.Decimal(minA);
+      if (!Number.isNaN(maxA)) where.amount.lte = new Prisma.Decimal(maxA);
+    }
+
+    // Search in note (and reason if you have it)
+    if (q && q.trim()) {
+      const needle = q.trim();
+      // If you also store 'reason' in Expense, uncomment below and add an OR:
+      where.OR = [
+        { note: { contains: needle, mode: "insensitive" } },
+        // { reason: { contains: needle, mode: "insensitive" } },
+      ];
+    }
+
+    // ---- parallel queries: items + count + totals
     const [items, totalCount, totalsAgg] = await Promise.all([
-      ExpensesModel.find(filter)
-        .sort(sortSpec)
-        .skip(skip)
-        .limit(lim)
-        .lean(),
-
-      ExpensesModel.countDocuments(filter),
-
-      ExpensesModel.aggregate([
-        { $match: filter },
-        {
-          $group: {
-            _id: "$type",
-            count: { $sum: 1 },
-            sumAmount: { $sum: "$amount" },
-            sumQuantity: { $sum: "$quantity" },
-          },
-        },
-      ]),
+      prisma.expense.findMany({
+        where,
+        orderBy,
+        skip,
+        take: lim,
+        // include: { menu: { select: { name: true } } } // uncomment if needed
+      }),
+      prisma.expense.count({ where }),
+      prisma.expense.groupBy({
+        by: ["type"],
+        where,
+        _count: { _all: true },
+        _sum: { amount: true, quantity: true },
+      }),
     ]);
 
     const totalPages = Math.max(1, Math.ceil(totalCount / lim));
-    const totalAmount =
-      totalsAgg.reduce((s, r) => s + (r.sumAmount || 0), 0) || 0;
 
-    // hash ko‘rinishida sumByType
+    // totalAmount across all types
+    const totalAmount = totalsAgg.reduce((acc, r) => {
+      const a = r._sum.amount ? Number(r._sum.amount) : 0;
+      return acc + a;
+    }, 0);
+
+    // sumByType as a hash
     const sumByType = {};
     for (const r of totalsAgg) {
-      sumByType[r._id || "unknown"] = {
-        count: r.count,
-        amount: r.sumAmount || 0,
-        quantity: r.sumQuantity || 0,
+      sumByType[r.type || "unknown"] = {
+        count: r._count._all || 0,
+        amount: r._sum.amount ? Number(r._sum.amount) : 0,
+        quantity: r._sum.quantity ? Number(r._sum.quantity) : 0,
       };
     }
 
     return {
       items,
-      pagination: {
-        page: p,
-        limit: lim,
-        totalCount,
-        totalPages,
-      },
-      totals: {
-        totalAmount,
-        sumByType,
-      },
-      sort: { by: sortField, direction: sortDir === 1 ? "asc" : "desc" },
-      filterApplied: filter, // debug uchun foydali; prod’da o‘chirishingiz mumkin
+      pagination: { page: p, limit: lim, totalCount, totalPages },
+      totals: { totalAmount, sumByType },
+      sort: { by: sortField, direction: sortDir },
+      // filterApplied: where, // enable if you want to debug
     };
   }
-}
-
-export default new ExpenseService();
+})();

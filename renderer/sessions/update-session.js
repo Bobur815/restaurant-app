@@ -19,11 +19,11 @@ async function formatDetails(details, getMenuItemById) {
   // Har bir elementni matnga aylantiramiz
   const promises = details.map(async (d) => {
     if (d && typeof d === 'object') {
-      // Backend obyekt maydonlari: menu_id, soldQuantity, proposedInitial, name (ixtiyoriy)
+      // Backend obyekt maydonlari: menuId, soldQuantity, proposedInitial, name (ixtiyoriy)
       const nameFromObj = d.name ?? null;
-      const nameFromDb = !nameFromObj && d.menu_id ? await safeGetNameByMenuId(getMenuItemById, d.menu_id) : null;
+      const nameFromDb = !nameFromObj && d.menuId ? await safeGetNameByMenuId(getMenuItemById, d.menuId) : null;
 
-      const name = nameFromObj || nameFromDb || d.menu_id || "Noma'lum mahsulot";
+      const name = nameFromObj || nameFromDb || d.menuId || "Noma'lum mahsulot";
       const sold = d.soldQuantity ?? '?';
       const proposed = d.proposedInitial ?? d.expected ?? '?';
       return `• ${name}: allaqachon sotilgan ${sold}, kiritilgan ${proposed}`;

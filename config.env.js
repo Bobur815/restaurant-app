@@ -24,7 +24,6 @@ export function loadEnv() {
   for (const p of locations) {
     if (fs.existsSync(p)) {
       dotenv.config({ path: p });
-      console.log('[env] loaded:', p);
       return p;
     }
   }

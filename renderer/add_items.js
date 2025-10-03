@@ -28,7 +28,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   const nameInput = document.getElementById('productName');
   const priceInput = document.getElementById('productPrice');
-  const image_url = document.getElementById('productImage');
+  const imageUrl = document.getElementById('productImage');
   const category = document.getElementById('productCategory');
   const setCategory = document.getElementById('setCategory');
   const description = document.getElementById('productDesc');
@@ -54,6 +54,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
+  
+
   setCategory.addEventListener('click', () => {
     clickSound.currentTime = 0;
     clickSound.play().catch(() => { });
@@ -62,7 +64,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   preview.src = `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`
   await categoryOptions(category, 'add_item');
-
+  
+category.addEventListener('change', () => {
+    const selectedCategory = category.value;
+  });
 
   if (!saveBtn || !cancelBtn) {
     console.warn('Add-item UI not found; skipping setup.');
@@ -73,16 +78,17 @@ window.addEventListener('DOMContentLoaded', async () => {
     // exactly like your old openModal('edit', dish):
 
     modalTitle.textContent = "Mahsulotni Tahrirlash";
-    saveBtn.dataset.dishId = dish._id;
+    saveBtn.dataset.dishId = dish.id;
     nameInput.value = dish.name;
     priceInput.value = dish.price;
-    image_url.value = dish.image_url;
-    category.value = dish.categoryId._id
-
+    imageUrl.value = dish.imageUrl;
+    category.value = dish.category.id
+    
     description.value = dish.description;
-    preview.src = dish.image_url
-      ? `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`
-      : `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
+    
+    preview.src = dish.imageUrl
+      ? `file:///home/boburmirzo/Desktop/restaurant-app/img/${dish.imageUrl}`
+      : `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`;
 
     // if you want to change button text:
     saveBtn.textContent = "O'zgartirish";
@@ -157,15 +163,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     const newItem = {
       name: nameInput.value.trim(),
       price: parseInt(priceInput.value, 10),
-      image_url: image_url.value.trim(),
+      imageUrl: imageUrl.value.trim(),
       description: description.value.trim(),
       categoryId: category.value,
       portions: normalizedPortions,
       soldByWeight: soldByWeight,
     };
-
+    
     let response, data;
     try {
+      
       response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },

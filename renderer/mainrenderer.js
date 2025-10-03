@@ -20,6 +20,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const sidebarItems = document.querySelectorAll('.sidebar li');
     const maincontent = document.querySelector(".main-content");
     const logo = document.querySelector('.logo')
+    const holder = document.getElementById('copyright');
+
+    if (holder) {
+        const year = new Date().getFullYear();
+        holder.innerHTML = `&copy; ${year} SavdoChef`;
+    }
 
     let date = document.querySelector("#current-date");
 
@@ -29,8 +35,9 @@ window.addEventListener('DOMContentLoaded', () => {
                 headers: { "Accept": "application/json" }
             });
             const data = res.ok ? await res.json() : null;
+
             logo.textContent = data?.restaurantName ?? "Shoxona"
-            
+
         } catch (e) {
             await showAlert(e.message || "Brand nomi yuklashda xatolik")
         }
@@ -140,9 +147,20 @@ window.addEventListener('DOMContentLoaded', () => {
             window.electronAPI.closeMainWindow();
         }
     })
-    window.electronAPI.onMenuReload(() => {
-        loadMenuData();
+    // Register once on startup
+    window.electronAPI.onMenuReload(async () => {
+        // If user is on Menu page, fully reload that fragment.
+        // If they’re elsewhere, you can either ignore, or prefetch, or badge—your call.
+        const menuLi = document.querySelector('.sidebar li#menu');
+        const isMenuActive = menuLi?.classList.contains('active');
+        if (isMenuActive) {
+            await loadTemplate('menu'); // full re-render of the menu fragment
+        } else {
+            // Optional: if you want a hot update even when not on menu, do nothing or cache.
+            // console.log('[reload-menu] received while not on Menu, ignoring');
+        }
     });
+
 });
 
 export async function loadMenuData() {
@@ -153,10 +171,12 @@ export async function loadMenuData() {
     fetch('http://localhost:3000/api/menu/all')
         .then(res => res.json())
         .then(data => {
+
             grid.innerHTML = '';
 
             categories.forEach(category => {
-                const categoryItems = data.filter(item => item.categoryId.name === category.name);
+                const categoryItems = data.filter(item => item.category.name === category.name);
+
 
                 if (categoryItems.length) {
                     // Create category section
@@ -174,8 +194,8 @@ export async function loadMenuData() {
                     categoryItems.forEach(dish => {
                         let imgPath;
 
-                        if (dish.image_url) {
-                            imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/${dish.image_url}`;
+                        if (dish.imageUrl) {
+                            imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/${dish.imageUrl}`;
                         } else {
                             // fallback if image is missing
                             imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`;
@@ -262,14 +282,14 @@ export async function loadMenuData() {
                         editBtn.addEventListener('click', () => {
                             clickSound.currentTime = 0;
                             clickSound.play().catch(() => {/*ignore*/ });
-                            editDish(dish._id);
+                            editDish(dish.id);
                         })
 
                         const deleteBtn = card.querySelector('.delete-btn');
                         deleteBtn.addEventListener('click', () => {
                             clickSound.currentTime = 0;
                             clickSound.play().catch(() => {/*ignore*/ });
-                            deleteDish(dish._id)
+                            deleteDish(dish.id)
                         });
 
                         catGrid.appendChild(card);
@@ -341,15 +361,15 @@ export function openModal(mode, dish = null) {
     if (mode === 'edit' && dish) {
         modalTitle.textContent = "Mahsulotni Tahrirlash";
         saveBtn.textContent = "O'zgartirish";
-        saveBtn.dataset.dishId = dish._id;
+        saveBtn.dataset.dishId = dish.id;
 
-        preview.src = dish.image_url
-            ? `file:///home/boburmirzo/restaurant-app/img/${dish.image_url}`
+        preview.src = dish.imageUrl
+            ? `file:///home/boburmirzo/restaurant-app/img/${dish.imageUrl}`
             : `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
 
         document.getElementById('productName').value = dish.name;
         document.getElementById('productPrice').value = dish.price;
-        document.getElementById('productImage').value = dish.image_url;
+        document.getElementById('productImage').value = dish.imageUrl;
         document.getElementById('productCategory').value = dish.category;
         document.getElementById('productDesc').value = dish.description;
     }
