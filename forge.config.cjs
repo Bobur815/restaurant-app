@@ -6,7 +6,7 @@ const { FuseV1Options, FuseVersion } = require('@electron/fuses');
 module.exports = {
   packagerConfig: {
     asar: true,
-    icon: 'build/brand_logo',           // Electron will use .ico on Windows, .png on Linux
+    // icon: 'build/brand_logo',        // Uncomment when you have build/brand_logo.ico
     asarUnpack: [
       '**/node_modules/.prisma/**',
       '**/node_modules/@prisma/**',
@@ -52,16 +52,17 @@ module.exports = {
     { name: '@electron-forge/maker-zip', platforms: ['linux'] },
 
     // ---------- Windows ----------
-    {
-      name: '@electron-forge/maker-squirrel',
-      platforms: ['win32'],
-      config: {
-        name: 'savdochef',
-        setupExe: 'SavdoChef-Setup.exe',
-        setupIcon: 'build/brand_logo.ico',  
-        noMsi: true,                        
-      },
-    },
+    // Squirrel disabled due to rcedit issues - using ZIP instead
+    // {
+    //   name: '@electron-forge/maker-squirrel',
+    //   platforms: ['win32'],
+    //   config: {
+    //     name: 'savdochef',
+    //     setupExe: 'SavdoChef-Setup.exe',
+    //     // setupIcon: 'build/brand_logo.ico',
+    //     noMsi: true,
+    //   },
+    // },
     { name: '@electron-forge/maker-zip', platforms: ['win32'] },
   ],
   plugins: [

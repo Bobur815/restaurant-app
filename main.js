@@ -68,7 +68,7 @@ const API_ORIGIN = `http://${API_HOST}:${API_PORT}`;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 const RES_DIR    = app.isPackaged ? process.resourcesPath : process.cwd();
-const BASE_IMG_PATH = path.join(app.isPackaged ? app.getAppPath() : process.cwd(), 'img');
+const BASE_IMG_PATH = path.join(app.isPackaged ? app.getPath('userData') : process.cwd(), 'img');
 
 // ---------------- database url (sqlite) ----------------
 function ensureDatabaseUrl() {
@@ -278,10 +278,28 @@ ipcMain.handle('dialog:openImage', async () => {
     filters: [{ name: 'Images', extensions: ['jpg','jpeg','png','gif','webp'] }]
   });
   if (canceled || !filePaths?.length) return null;
+
   const filePath = filePaths[0];
-  const fileName = path.basename(filePath);
-  const fileUrl  = pathToFileURL(filePath).href;
-  return { filePath, fileName, fileUrl };
+  const ext = path.extname(filePath);
+  const baseName = path.basename(filePath, ext);
+
+  // Sanitize filename: replace spaces with underscores, remove special chars
+  const sanitized = baseName
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_\-]/g, '');
+
+  // Add timestamp to avoid overwrites
+  const fileName = `${sanitized}_${Date.now()}${ext}`;
+
+  // Ensure img directory exists
+  fs.mkdirSync(BASE_IMG_PATH, { recursive: true });
+
+  // Copy file to img folder
+  const destPath = path.join(BASE_IMG_PATH, fileName);
+  fs.copyFileSync(filePath, destPath);
+
+  const fileUrl = pathToFileURL(destPath).href;
+  return { filePath: destPath, fileName, fileUrl };
 });
 
 ipcMain.handle('open-category-window', (event) => {
