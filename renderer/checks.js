@@ -109,10 +109,8 @@ export function loadCheklarPage(table_count = 10) {
       deleteModal.classList.remove("hidden");
     } else if (btn.classList.contains('print-btn')) {
       const orderItems = await getOrderByQuery({ orderNumber });
-      console.log(orderItems);
       
-      if (!await showConfirm("Chekni chop etishni tasdiqlaysizmi?")) return;
-
+      
       if (!orderItems) return showAlert("❌ Buyurtma topilmadi");
       
       const receiptSettings = await getReceiptSetting();
@@ -130,13 +128,14 @@ export function loadCheklarPage(table_count = 10) {
         phone,
         footerNote,
       };
-
+      
+      if (!await showConfirm("Chekni chop etishni tasdiqlaysizmi?")) return;
       // prevent double-clicks while printing (optional)
       btn.disabled = true;
       
       try {
         await withActionAnimation(
-          () => window.electronAPI.printReceipt({ order, paymentMethod: payment_method }),
+          () => window.electronAPI.sendPrint({ order, paymentMethod: payment_method }),
           { type: 'open', title: "Chek chop etilmoqda…", icon: '🧾' }
         );
         await showAlert("✅ Chek chop etildi");

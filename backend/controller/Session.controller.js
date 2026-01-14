@@ -15,15 +15,7 @@ class SessionController {
             }
             
             const sessions = await sessionService.getAll(filter);
-            for (const sess of sessions) {
-                if(sess.status === "open") {
-                   for (const it of sess.items) {
-                    //    console.log(it);
-                        // virtualni chaqirish
-                   }
-                }
-            }
-
+            
             res.status(200).json(sessions);
         } catch (error) {
             next(error);

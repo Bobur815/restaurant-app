@@ -51,6 +51,7 @@
       return Number.isFinite(n) ? n : d;
     };
     const money = (n) => toNum(n).toLocaleString('uz-UZ') + " so'm";
+    const fixed2 = (n) => toNum(n, 0).toFixed(2);
 
     const now = new Date();
     const dateStr = new Intl.DateTimeFormat('uz-UZ', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(now);
@@ -74,13 +75,10 @@
       // o'ng blok — 2 qatordan iborat
       const right = document.createElement('div');
       right.className = 'price';
-
-      const f = (qtyFactor && qtyFactor !== 1) ? qtyFactor : 1;
-      const unitWithFactor = unitPrice * f;
-
+      
       const calc = document.createElement('div');
       calc.className = 'calc';
-      calc.textContent = `${qty} × ${unitWithFactor.toLocaleString('uz-UZ')}`;
+      calc.textContent = `${qty} × ${unitPrice.toLocaleString('uz-UZ')}`;
 
       const sub = document.createElement('div');
       sub.className = 'subtotal';
@@ -133,7 +131,6 @@
           setText(footNote, "");
         }
       })();
-      console.log(orderData);
       
 
       // ---- Header meta ----
@@ -155,22 +152,23 @@
       let total = 0;
 
       (orderData.items || []).forEach((it, index) => {
+        
         const name = String(it.name || '').trim();
         const qty = Math.max(0, toNum(it.quantity, 0));                 // qty (dona yoki kg birligi)
-        const unitPrice = toNum(it.price, 0);
+        const unitPrice = toNum(it.unitPrice, 0);
         const portion = it.portions != null ? toNum(it.portions, 1) : 1; // non-weight: 1/0.7/0.5
         const weight = it.weight_kg != null ? toNum(it.weight_kg, 1) : (it.weightValue != null ? toNum(it.weightValue, 1) : 1);
         // Agar weight_kg mavjud bo'lsa (kilolik), faktor = weight; bo'lmasa portions
-        const factor = (weight && weight !== 1) ? weight : portion;
+        const factor = (weight && weight !== 1) ? fixed2(weight) : portion;
 
         // Subtotal: qty × factor × unit_price
-        const lineSubtotal = qty * factor * unitPrice;
+        const lineSubtotal = qty * unitPrice;
         total += lineSubtotal;
 
         index += 1;  // 1 dan boshlash uchun
         // Chap label: "qty × name" va agar factor ≠ 1 bo'lsa, qo'shimcha "(factor)" ni ko'rsatamiz
         const leftLabel = (factor && factor !== 1)
-          ? `${index}. ${name} (${factor}) \n\t${qty} × ${unitPrice * factor}`
+          ? `${index}. ${name} (${factor}) \n\t${qty} × ${unitPrice}`
           : `${index}. ${name} \n\t${qty} × ${unitPrice}`;
 
         renderLine(itemsBox, leftLabel, unitPrice, qty, (factor !== 1 ? factor : 1), lineSubtotal);
@@ -225,18 +223,16 @@
 
       preview.appendChild(document.createElement('hr'));
       preview.appendChild(document.createElement('hr'));
-      preview.appendChild(footNote)
+      preview.appendChild(footNote);
       
       // ---- Confirm handler ----
       confirmBtn.addEventListener("click", async () => {
         const checkedRadio = document.querySelector('input[name="payment"]:checked');
         const paymentMethod = checkedRadio?.value || 'cash';
 
-        // backendga tasdiqlash
-        await confirmPayment(orderData, paymentMethod);
-
+        
         if (printBox.checked) {
-
+          
           orderData.brand = brandName.textContent;
           orderData.address = addr.textContent;
           orderData.phone = phone.textContent;
@@ -244,6 +240,8 @@
           
           window.electronAPI.sendPrint({ order: orderData, paymentMethod });
         }
+        // backendga tasdiqlash
+        await confirmPayment(orderData, paymentMethod);
         window.electronAPI.confirmPayment();
         window.close();
       });

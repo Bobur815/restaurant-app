@@ -4,7 +4,7 @@
   }
 
   body {
-    background: #f4f4f4;
+    background: #fdfefe;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -87,18 +87,18 @@
     font-size: 14px;
   }
 
-  .input-wrapper button {
+  .input-wrapper img {
     position: absolute;
     top: 50%;
     right: 10px;
     transform: translateY(-50%);
     background: transparent;
-    border: none;
-    font-size: 18px;
     cursor: pointer;
     padding: 0;
     margin: 0;
     line-height: 1;
+    height: 24px;
+    width: 24px;
   }
   .input-error {
     border: 1px solid red !important;
@@ -115,6 +115,7 @@
 .submit-btn {
   position: relative;
   overflow: hidden;
+  margin-bottom: 15px;
 }
 
 .submit-btn .progress-bar {
@@ -140,5 +141,29 @@
   width: 100%;
 }
 
+.remember-me {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+  gap: 5px;
+}
 
+.remember-me label{
+  display: flex;
+  margin-top: 7px;  
+  align-items: center;
+}
+.remember-me label:hover{
+  color: rgb(12, 12, 202);
+  text-decoration: underline;
+}
+
+#message {
+  transition: opacity .2s ease;
+}
+#message.invisible {
+  opacity: 0;
+  visibility: hidden; /* .invisible shuni beradi; joy saqlanadi */
+}
 

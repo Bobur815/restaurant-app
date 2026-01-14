@@ -369,8 +369,6 @@ body {
 }
 
 .decrement,
-.weight-decrement,
-.weight-increment,
 .increment {
     background-color: #28a745;
     /* Yashil rang */
@@ -385,8 +383,6 @@ body {
 }
 
 .decrement:hover,
-.weight-decrement:hover,
-.weight-increment:hover,
 .increment:hover {
     background-color: #218838;
     /* Biroz to'qroq yashil hover effekti */
@@ -394,7 +390,7 @@ body {
 
 .quantity {
     display: inline-block;
-    width: 30px;
+    width: 20px;
     border: none;
     text-align: center;
     font-size: 18px;
@@ -410,9 +406,15 @@ body {
 }
 
 .total {
+    width: 75px;
+    text-align: center;
     font-size: 16px;
     font-weight: bold;
     color: #333;
+}
+
+.total-group{
+    width: 75px;
 }
 
 .delete-btn {
@@ -482,15 +484,22 @@ body {
     width: 100%;
 }
 
+.weight-incdec{
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
 .weight-input {
-    max-width: 45px;    
-    font-size: 12px;
+    width: 28px;
+    font-size: 14px;
     padding: 8px;
     border: 1px solid #ccc;
     border-radius: 5px;
     font-weight: bold;
     background-color: #fff;
-    cursor: pointer;
 }
 
 .weight-input::-webkit-inner-spin-button,
@@ -499,9 +508,9 @@ body {
     margin: 0;
 }
 
-.total-input{
-    max-width: 70px;
-    font-size: 12px;
+.custom-price {
+    width: 75px;
+    font-size: 14px;
     padding: 8px;
     border: 1px solid #ccc;
     border-radius: 5px;
@@ -509,5 +518,10 @@ body {
     background-color: #fff;
     cursor:text;
     align-items: center;
+}
+
+.custom-price:focus{
+    border-color: #66afe9;
+    box-shadow: 0 0 4px rgba(102, 175, 233, 0.5);
 }
 

@@ -2,7 +2,6 @@ import { showAlert, showConfirm } from "../../utils/alert.js";
 import { roundN } from "../../utils/roundN.js";
 import { formatYMD } from "../../utils/setReportDate.js";
 import { getOrderByQuery } from "../getOrderByQuery.js";
-import { getOrdersOfTable } from "../ordersOfTable.js";
 import { friendlyDayLabel, setDateHeader } from "./setDateHeader.js";
 
 const clickSound = new Audio(new URL('../../sounds/mixkit.wav', import.meta.url));
@@ -341,7 +340,7 @@ export async function refreshLists(openListEl, closedListEl, openDateFilter, ope
 
 
 
-function renderSessionRowsGrouped(sessions, tbody, headerTr) {
+async function renderSessionRowsGrouped(sessions, tbody, headerTr) {
   if (!tbody) return;
   tbody.innerHTML = '';
 
@@ -374,15 +373,16 @@ function renderSessionRowsGrouped(sessions, tbody, headerTr) {
     for (const item of items) {
       const menu = item.menu || {};
       const initial = Number(item.initialQuantity || 0);
-      const sold = Number(item.soldQuantity || 0);
+      const sold = menu.soldByWeight ? Number(item.soldQuantity || 0).toFixed(2) : Number(item.soldQuantity || 0);
       const remain = roundN(Number(initial) - Number(sold), 2);
       
       const tr = document.createElement('tr');
+      let imgPath = await window.electronAPI.getImagePath(menu)
       tr.innerHTML = `
         <td>${rowIndex++}</td>
         <td>
           <img
-            src="../img/${menu.imageUrl || 'placeholder.jpg'}"
+            src="${imgPath}"
             alt="${menu.name || ''}"
             width="40" height="40"
             style="border-radius:5px;"
@@ -421,7 +421,7 @@ function el(tag, attrs = {}, children = []) {
   return node;
 }
 
-function buildSessionCard(session, index) {
+async function buildSessionCard(session, index) {
   const created = new Date(session.createdAt);
   const day = formatYMD(created, false);
   const time = created.toLocaleTimeString('uz-Uz', {
@@ -459,11 +459,12 @@ function buildSessionCard(session, index) {
     const initial = Number(item.initialQuantity || 0);
     const sold = Number(item.soldQuantity || 0);
     const remain = initial - sold;
+    let imgPath = await window.electronAPI.getImagePath(menu)
 
     const tr = el('tr', {}, [
       el('td', {}, String(row++)),
       el('td', {}, el('img', {
-        src: `../img/${menu.imageUrl || 'placeholder.png'}`,
+        src: `${imgPath}`,
         alt: menu.name || '',
         width: '40',
         height: '40',
@@ -499,10 +500,9 @@ function buildSessionCard(session, index) {
   return card;
 }
 
-function renderClosedSessionsAsTables(closedSessions, containerEl, headerTr) {
+async function renderClosedSessionsAsTables(closedSessions, containerEl, headerTr) {
   if (!containerEl) return;
 
-  // header (umumiy)
   setDateHeader(headerTr, closedSessions, 6);
 
   containerEl.innerHTML = '';
@@ -512,14 +512,20 @@ function renderClosedSessionsAsTables(closedSessions, containerEl, headerTr) {
   }
 
   // Sana bo‘yicha tushish tartibida
-  const sorted = [...closedSessions].sort((a, b) =>
-    new Date(b.createdAt) - new Date(a.createdAt)
+  const sorted = [...closedSessions].sort(
+    (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
   );
 
-  let i = 1;
+  // 🟢 KARTALARNI PARALLEL YIG'AMIZ
+  const cards = await Promise.all(
+    sorted.map((s, idx) => buildSessionCard(s, idx + 1))
+  );
+
   const frag = document.createDocumentFragment();
-  for (const s of sorted) {
-    frag.appendChild(buildSessionCard(s, i++));
+  for (const card of cards) {
+    // card bu yerda allaqachon Node
+    frag.appendChild(card);
   }
   containerEl.appendChild(frag);
 }
+

@@ -44,7 +44,6 @@ class MenuController {
                 convert: true,
                 abortEarly: false,
             });
-            console.log(value);
             
             if (error) {
                 throw new CustomError(error.details[0].message, 400, "ValidationError");

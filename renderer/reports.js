@@ -1,8 +1,6 @@
 import { showAlert } from "../utils/alert.js";
 import setStartDate from "../utils/setReportDate.js";
 
-
-
 let salesChart = null;
 let productPieChart = null;
 const clickSound = new Audio(new URL('../sounds/mixkit.wav', import.meta.url));

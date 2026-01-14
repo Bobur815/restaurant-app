@@ -1,11 +1,7 @@
-import { BrowserWindow } from 'electron';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { app, BrowserWindow } from 'electron';
 import { getPreloadPath, htmlPath } from './paths.js';
 
-// ESMda __dirname yaratish
-const __filename = fileURLToPath(import.meta.url);
-const __dirname  = dirname(__filename);
+const isProd = app.isPackaged;
 
 export function createCategoryWindow(parent) {
 
@@ -19,7 +15,8 @@ export function createCategoryWindow(parent) {
     webPreferences: {
       preload: getPreloadPath(),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      devTools: !isProd ? true : false,
     }
   });
 

@@ -62,7 +62,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.electronAPI.openCategoryWindow()
   })
 
-  preview.src = `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`
   await categoryOptions(category, 'add_item');
   
 category.addEventListener('change', () => {
@@ -74,7 +73,7 @@ category.addEventListener('change', () => {
     return;
   }
 
-  window.electronAPI.onLoadDish(dish => {
+  window.electronAPI.onLoadDish(async (dish) => {
     // exactly like your old openModal('edit', dish):
 
     modalTitle.textContent = "Mahsulotni Tahrirlash";
@@ -86,25 +85,23 @@ category.addEventListener('change', () => {
     
     description.value = dish.description;
     
-    preview.src = dish.imageUrl
-      ? `file:///home/boburmirzo/Desktop/restaurant-app/img/${dish.imageUrl}`
-      : `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`;
+    preview.src = await window.electronAPI.getImagePath(dish);
 
     // if you want to change button text:
     saveBtn.textContent = "O'zgartirish";
   });
 
-  // Open native dialog to pick an image
-  uploadBtn?.addEventListener('click', async () => {
-    clickSound.currentTime = 0;
-    clickSound.play().catch(() => { });
-    const filePath = await window.electronAPI.selectImage();
-    if (filePath) {
-      const fileName = filePath.split('/').pop();
-      document.getElementById('productImage').value = fileName;
-      document.getElementById('preview').src = `file://${filePath}`;
-    }
-  });
+uploadBtn?.addEventListener("click", async () => {
+  clickSound.currentTime = 0;
+  clickSound.play().catch(() => {});
+
+  const picked = await window.electronAPI.selectImage();
+  if (picked) {
+    // picked = { filePath, fileName, fileUrl }
+    document.getElementById("productImage").value = picked.fileName; // faqat nomini saqlaymiz
+    document.getElementById("preview").src = picked.fileUrl;         // tayyor file:/// URL
+  }
+});
 
   // Fallback HTML input (if ever used)
   realInput?.addEventListener('change', (e) => {

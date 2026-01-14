@@ -1,4 +1,5 @@
 // backend/services/menu.service.js
+import { Prisma } from "@prisma/client";
 import prisma from "../database/prisma.js";
 import CustomError from "../utils/CustomError.js";
 
@@ -147,6 +148,9 @@ class MenuService {
         // record not found
         throw new CustomError("❌ Mahsulot bazada topilmadi", 404, "NotFoundError");
       }
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2003') {
+    throw new CustomError("Ushbu taomga bog‘liq yozuvlar mavjud (buyurtmalar yoki smenalar). Avval ularni tozalang yoki menyuni arxivlang.", 409);
+  }
       throw err;
     }
   }

@@ -1,7 +1,7 @@
 // ------------ Datasource & Generator ------------
 datasource db {
   provider = "sqlite"
-  url      = "file:./data/app.db"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -87,7 +87,7 @@ model Expense {
   unitCost  Decimal     @default(0)
   amount    Decimal     @default(0)
 
-  session   Session?   @relation(fields: [sessionId], references: [id])
+  session   Session?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   menu      Menu?      @relation(fields: [menuId], references: [id])
   residuals Residual[]
 
@@ -243,7 +243,7 @@ model Residual {
   expenseId        Int?          
   note             String?
 
-  session        Session  @relation("ResidualSession", fields: [sessionId], references: [id])
+  session        Session  @relation("ResidualSession", fields: [sessionId], references: [id], onDelete: Cascade)
   menu           Menu     @relation(fields: [menuId], references: [id])
   appliedSession Session? @relation("ResidualAppliedSession", fields: [appliedToSession], references: [id])
   expense        Expense? @relation(fields: [expenseId], references: [id])
@@ -282,7 +282,7 @@ model SessionItem {
   initialQuantity Decimal @default(0) 
   soldQuantity    Decimal @default(0)
 
-  session Session @relation(fields: [sessionId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   menu    Menu    @relation(fields: [menuId], references: [id])
 
   // remainingQuantity is computed in service, not stored

@@ -1,5 +1,5 @@
-import Settings from "../models/Settings.js";
-import UsersModel from "../models/Users.model.js";
+import prisma from "../database/prisma.js";
+
 
 export async function setupStatus(req, res, next) {
   try {
@@ -7,14 +7,14 @@ export async function setupStatus(req, res, next) {
     if (typeof req.isSetupComplete !== "undefined") return next();
 
     // Check flag in settings first
-    const flag = await Settings.findOne({ key: "setup_complete" }).lean();
+    const flag = await prisma.settings.findUnique({ where: { key: "setup_complete" } });
     if (flag?.value === true) {
       req.isSetupComplete = true;
       return next();
     }
 
     // If no flag, check if any ADMIN user exists
-    const adminExists = await UsersModel.exists({ role: "ADMIN" });
+    const adminExists = await prisma.users.findUnique({ where: { role: "ADMIN" } });
     if (adminExists) {
       req.isSetupComplete = true;
       // persist it to settings for faster checks next time

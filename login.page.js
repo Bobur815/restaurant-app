@@ -1,15 +1,16 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { getPreloadPath, htmlPath } from './paths.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const isProd = app.isPackaged;
 
 export function createLoginWindow() {
   const win = new BrowserWindow({
     width: 460,
-    height: 600,
+    height: 650,
     resizable: false,
     show: false,
     autoHideMenuBar: true,
@@ -18,7 +19,7 @@ export function createLoginWindow() {
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
-      devTools: true
+      devTools:  !isProd ? true : false,
     }
   });
   win.setMenuBarVisibility(false);

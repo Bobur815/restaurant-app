@@ -3,6 +3,8 @@ import { showAlert, showConfirm } from "../utils/alert.js";
 import { loadAllCategories } from './add-load-category.js';
 import { loadSessionsPage } from './sessions/render.sessions.js';
 import getMenuItemById from './getMenuItemById.js';
+import { renderCategoryItems } from './renderCategoryItems.js';
+import { httpDelete } from '../utils/httpDelete.js';
 
 const clickSound = new Audio('../sounds/mixkit.wav');
 clickSound.preload = 'auto';
@@ -155,163 +157,78 @@ window.addEventListener('DOMContentLoaded', () => {
         const isMenuActive = menuLi?.classList.contains('active');
         if (isMenuActive) {
             await loadTemplate('menu'); // full re-render of the menu fragment
-        } else {
-            // Optional: if you want a hot update even when not on menu, do nothing or cache.
-            // console.log('[reload-menu] received while not on Menu, ignoring');
         }
     });
 
 });
 
 export async function loadMenuData() {
-    const grid = document.getElementById('menuGrid');
+  const grid = document.getElementById('menuGrid');
+  if (!grid) return;
 
-    const categories = await loadAllCategories();
+  // Optional: show a loading state
+  grid.innerHTML = '<p>Loading menu…</p>';
 
-    fetch('http://localhost:3000/api/menu/all')
-        .then(res => res.json())
-        .then(data => {
+  try {
+    // Fetch categories and menu data in parallel
+    const [categories, menuData] = await Promise.all([
+      loadAllCategories(),
+      fetch('http://localhost:3000/api/menu/all').then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
+    ]);
 
-            grid.innerHTML = '';
+    grid.innerHTML = '';
 
-            categories.forEach(category => {
-                const categoryItems = data.filter(item => item.category.name === category.name);
+    // Optional: build a map from category name → items (O(n) instead of filtering each time)
+    const byCategory = new Map();
+    for (const item of menuData || []) {
+      const catName = item?.category?.name ?? 'Other';
+      if (!byCategory.has(catName)) byCategory.set(catName, []);
+      byCategory.get(catName).push(item);
+    }
 
+    // Render categories one by one (awaiting card render inside)
+    for (const category of categories) {
+      const categoryItems = byCategory.get(category.name) || [];
+      if (!categoryItems.length) continue;
 
-                if (categoryItems.length) {
-                    // Create category section
-                    const section = document.createElement('div');
-                    section.classList.add('category-section');
+      // Create category section
+      const section = document.createElement('div');
+      section.classList.add('category-section');
 
-                    const title = document.createElement('h2');
-                    title.classList.add('category-title');
-                    title.textContent = category.name;
+      const title = document.createElement('h2');
+      title.classList.add('category-title');
+      title.textContent = category.name;
 
-                    const catGrid = document.createElement('div');
-                    catGrid.classList.add('category-grid');
+      const catGrid = document.createElement('div');
+      catGrid.classList.add('category-grid');
 
-                    // Add cards
-                    categoryItems.forEach(dish => {
-                        let imgPath;
+      // Render cards (uses your async renderCategoryItems)
+      await renderCategoryItems(categoryItems, catGrid);
 
-                        if (dish.imageUrl) {
-                            imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/${dish.imageUrl}`;
-                        } else {
-                            // fallback if image is missing
-                            imgPath = `file:///home/boburmirzo/Desktop/restaurant-app/img/placeholder.jpg`;
-                        }
+      const inputLine = document.createElement('input');
+      inputLine.classList.add('input-line');
 
-                        const card = document.createElement('div');
-                        card.classList.add('card');
+      section.appendChild(title);
+      section.appendChild(catGrid);
+      section.appendChild(inputLine);
+      grid.appendChild(section);
+    }
 
-                        let portionHTML = '';
-                        let soldByWeightHtml = '';
-
-                        if (dish.soldByWeight) {
-                            soldByWeightHtml = '<div class="portions"><small>Kg: </small>';
-                            PORTIONS.forEach((p, index) => {
-                                soldByWeightHtml += `<span class="${p.value === 1.0 ? 'active' : ''}">${p.value.toString()}</span> `;
-                                if (index !== PORTIONS.length - 1) {
-                                    soldByWeightHtml += ' | ';
-                                }
-                            });
-                            soldByWeightHtml += '</div>';
-                        }
-
-                        if (dish.portions) {
-
-                            portionHTML = '<div class="portions"><small>Porsiya: </small>';
-                            PORTIONS.forEach((p, index) => {
-                                portionHTML += `<span class="${p.value === 1.0 ? 'active' : ''}">${p.value.toString()}</span> `;
-                                if (index !== PORTIONS.length - 1) {
-                                    portionHTML += ' | ';
-                                }
-                            });
-                            portionHTML += '</div>';
-                        }
-
-
-                        card.innerHTML = `
-                                <img src="${imgPath}" alt="${dish.name}">
-                                <h3>${dish.name}</h3>
-                                <p>${dish.description}</p>
-                                <strong>${dish.price} UZS ${dish.soldByWeight ? '/ kg' : ''}</strong>
-                                ${portionHTML}
-                                ${soldByWeightHtml}
-                                <div class="card-buttons">
-                                    <button class="edit-btn">
-                                        <img src="../img/edit-icon.png">
-                                    </button>
-                                    <button class="delete-btn">
-                                        <img src="../img/delete-icon.png">
-                                    </button>
-                                </div>
-                            `;
-                        card.setAttribute('data-original-price', dish.price);
-                        document.addEventListener('click', function (e) {
-                            clickSound.currentTime = 0;
-                            clickSound.play().catch(() => { });
-                            if (e.target.matches('.portions span')) {
-
-                                // Avvalgi activelarni olib tashlaymiz
-                                const spans = e.target.parentElement.querySelectorAll('span');
-                                spans.forEach(span => span.classList.remove('active'));
-
-                                // Bosilgan span'ga active class qo'shamiz
-                                e.target.classList.add('active');
-
-                                // >>> Narxni o'zgartirish
-                                const portionValue = parseFloat(e.target.textContent); // tanlangan porsiya qiymati (masalan: 0.7)
-
-                                // Narx yozilgan elementni topamiz
-                                const priceElement = e.target.closest('.card').querySelector('strong');
-
-                                // Asl narxni olish uchun (hozirgi narxdan emas, original dan olish kerak => dish.price)
-                                // Dish.price ni saqlash kerak, shuning uchun kartaga atribut qo'shamiz
-                                const originalPrice = parseFloat(e.target.closest('.card').getAttribute('data-original-price'));
-
-                                // Hisoblab yozamiz
-                                const newPrice = Math.round(originalPrice * portionValue);
-
-                                priceElement.textContent = `${newPrice} UZS`;
-                            }
-                        });
-
-                        // Attach event listeners
-                        const editBtn = card.querySelector('.edit-btn');
-                        editBtn.addEventListener('click', () => {
-                            clickSound.currentTime = 0;
-                            clickSound.play().catch(() => {/*ignore*/ });
-                            editDish(dish.id);
-                        })
-
-                        const deleteBtn = card.querySelector('.delete-btn');
-                        deleteBtn.addEventListener('click', () => {
-                            clickSound.currentTime = 0;
-                            clickSound.play().catch(() => {/*ignore*/ });
-                            deleteDish(dish.id)
-                        });
-
-                        catGrid.appendChild(card);
-
-                    });
-                    const inputLine = document.createElement('input')
-                    inputLine.classList.add('input-line')
-
-                    section.appendChild(title);
-                    section.appendChild(catGrid);
-                    section.appendChild(inputLine)
-                    grid.appendChild(section);
-                }
-            });
-        })
-        .catch(err => {
-            console.error(err);
-            grid.innerHTML = '<p>Xatolik yuz berdi! Maʼlumot yuklanmadi.</p>';
-        });
+    // If no categories had items, show a friendly empty state
+    if (!grid.children.length) {
+      grid.innerHTML = '<p>No menu items found.</p>';
+    }
+  } catch (err) {
+    console.error('[loadMenuData] failed:', err);
+    grid.innerHTML = '<p>Xatolik yuz berdi! Maʼlumot yuklanmadi.</p>';
+  }
 }
 
-export function openModal(mode, dish = null) {
+
+export async function openModal(mode, dish = null) {
     const modal = document.getElementById('addModal');
     const modalContent = modal.querySelector('.modal-content');
     const modalTitle = document.getElementById('modalTitle');
@@ -348,7 +265,7 @@ export function openModal(mode, dish = null) {
     if (mode === 'add') {
         modalTitle.textContent = "Yangi Mahsulot Qo'shish";
         saveBtn.textContent = "Saqlash";
-        preview.src = `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
+        preview.src = await window.electronAPI.getImagePath(dish);
 
         document.getElementById('productName').value = '';
         document.getElementById('productName').focus();
@@ -363,9 +280,7 @@ export function openModal(mode, dish = null) {
         saveBtn.textContent = "O'zgartirish";
         saveBtn.dataset.dishId = dish.id;
 
-        preview.src = dish.imageUrl
-            ? `file:///home/boburmirzo/restaurant-app/img/${dish.imageUrl}`
-            : `file:///home/boburmirzo/restaurant-app/img/placeholder.jpg`;
+        preview.src = await window.electronAPI.getImagePath(dish);
 
         document.getElementById('productName').value = dish.name;
         document.getElementById('productPrice').value = dish.price;
@@ -378,7 +293,7 @@ export function openModal(mode, dish = null) {
 
 
 
-async function editDish(dish_id) {
+export async function editDish(dish_id) {
     try {
         const dish = await getMenuItemById(dish_id);
         await window.electronAPI.openAddWindow(dish);
@@ -388,30 +303,21 @@ async function editDish(dish_id) {
     }
 }
 
-async function deleteDish(dish_id) {
+export async function deleteDish(dish_id) {
+  const confirmed = await showConfirm("Shu mahsulotni o'chirib yuborishni tasdiqlaysimi?");
+  if (!confirmed) return;
 
-    const confirmed = await showConfirm("Shu mahsulotni o'chirib yuborishni tasdiqlaysimi?");
-
-    if (!confirmed) return;
-
-    fetch(`http://localhost:3000/api/menu/delete/${dish_id}`, {
-        method: 'DELETE'
-    })
-
-        .then(response => {
-            if (!response.ok) {
-                throw new Error("Mahsulotni o'chirishda xatoli yuz berdi!");
-            }
-            showAlert("✅ Mahsulot muvaffaqqiyatli o'chirildi!");
-
-
-            loadMenuData();
-        })
-        .catch(error => {
-            console.error("Error:", error);
-            showAlert("Mahsulotni o'chirishda xatoli yuz berdi!");
-        });
+try {
+  const data = await httpDelete(`http://localhost:3000/api/menu/delete/${dish_id}`);
+  await showAlert(data?.message || "✅ O'chirildi");
+  await loadMenuData();
+} catch (e) {
+  if (e.status === 409) return showAlert(`❌ Xatolik: ${e.message}`);
+  showAlert(`❌ Xatolik: ${e.message}` || "❌ Xatolik", {duration: 7000});
 }
+
+}
+
 
 function getUzbekFormattedDate(date = new Date()) {
     const day = String(date.getDate()).padStart(2, '0');

@@ -135,3 +135,23 @@ textarea {
     border: 1px solid #fecaca;
     color: #991b1b;
 }
+
+.profile-title{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  /* border: 1px solid black;  // test uchun qoldirishingiz mumkin */
+}
+
+.profile-title h2{
+  margin: 0;        /* default marginni olib tashlaydi */
+  line-height: 1;   /* optik markazni tekislaydi */
+}
+
+.profile-title img{
+  width: 32px;
+  height: 32px;
+  display: block;    /* inline img’dagi bazaviy chiziq ta’sirini yo‘qotadi */
+  object-fit: contain;
+}

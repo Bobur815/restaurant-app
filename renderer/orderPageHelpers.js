@@ -132,7 +132,7 @@ async function renderMenuItems(params, menuList, opts = {}) {
         const menuItems = await res.json();
         menuList.innerHTML = '';
 
-        menuItems.forEach(item => {
+        menuItems.forEach( async (item) => {
             const stat = remainByMenuId.get(item.id) || null;
             const remain = stat?.remain ?? null;
             const initial = stat?.initial ?? 0;
@@ -171,11 +171,12 @@ async function renderMenuItems(params, menuList, opts = {}) {
                  font-size:12px;color:#6b7280;border:1px dashed #d1d5db;
                  padding:4px 8px;border-radius:12px;">0</span>`)
                 : ''; // open-session -> badge yo‘q
+            let imgPath = await window.electronAPI.getImagePath(item)
 
             li.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;">
           <img
-            src="../img/${item.imageUrl}"
+            src="${imgPath}"
             alt="${item.name}"
             width="40" height="40"
             style="vertical-align:middle;border-radius:6px;object-fit:cover;border:1px solid #e5e7eb;"
@@ -247,7 +248,7 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, tableNumber, cancelOrde
 
             // unit price: span yoki input bo'lishi mumkin
             const priceEl = row.querySelector('.price');
-            const price = toNum(priceEl?.value ?? priceEl?.textContent ?? '0');
+            let price = toNum(priceEl?.value ?? priceEl?.textContent ?? '0');
 
             // portions: select bo‘lsa o‘qiymiz (non-weight), aks holda null
             const portionSelect = row.querySelector('.portionSelect');
@@ -256,6 +257,8 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, tableNumber, cancelOrde
             const weightInput = row.querySelector('.weight-input');
             const weightValue = weightInput ? toNum(weightInput.value, 0) : null;
 
+            
+            const unitPrice = price * (weightValue ?? portions ?? 1);
             // total: non-weight -> <span class="total">, weight -> <input class="total-input">
             const totalEl = row.querySelector('.total') || row.querySelector('.total-input');
             const totalVal = toNum(totalEl?.value ?? totalEl?.textContent ?? '0');
@@ -263,9 +266,9 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, tableNumber, cancelOrde
             const name = (row.querySelector('.name')?.textContent || '').trim();
 
             grandTotal += totalVal;
-            items.push({ menu: menuId, name, quantity, weightValue, portions, unitPrice:price, price });
+            items.push({ menu: menuId, name, quantity, weightValue, portions, unitPrice, price });
         });
-
+        
         if (!items.length) return showAlert("Mahsulot tanlanmagan!");
 
         const query = { tableNumber, status: "pending" };
@@ -362,7 +365,7 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, tableNumber, cancelOrde
                     unitPrice: round2(unitPrice),
                     totalPrice: round2(totalVal),
                 };
-
+                
                 let effectiveUse = qty; // default for simple items
 
                 if (weightInput) {
@@ -374,12 +377,14 @@ function attachOrderButtons(cancelBtn, orderBtn, payBtn, tableNumber, cancelOrde
                     payload.portions = null;
                     // server stores `quantity` as units count for weight items
                     payload.quantity = qty; // keep your UI qty as units
+                    payload.unitPrice = unitPrice * w;
                     effectiveUse = qty * w;
                 } else if (portionSelect) {
                     // portion product
                     const portion = toNum(portionSelect.value, 1);
                     payload.soldByWeight = false;
                     payload.portions = portion;
+                    payload.unitPrice = unitPrice * portion;
                     effectiveUse = qty * portion;
                 }
                 

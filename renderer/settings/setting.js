@@ -47,6 +47,7 @@ function safeInit() {
 async function loadProfile() {
   const usernameEl = document.getElementById('username');
   const currentPassword = document.getElementById('current-password');
+
   const res = await fetch(`${API_BASE}${API.me}`, { credentials: 'include' }).then(toJSON).catch(() => null);
 
   if (res && res.username && usernameEl) {

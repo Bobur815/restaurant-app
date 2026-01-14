@@ -76,6 +76,7 @@ export default new (class OrderService {
         quantity: Number(it.quantity ?? 0),
         portions: it.portions != null ? roundN(it.portions) : null,
         soldByWeight: Boolean(it.soldByWeight),
+        unitsPrice: it.unitPrice != null ? roundN(it.unitPrice) : null,
         totalPrice: Number(it.totalPrice ?? 0),
         units: it.units ?? null,
         weightKg: it.weightKg != null ? roundN(it.weightKg) : null,

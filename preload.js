@@ -1,90 +1,56 @@
-// preload.js (CJS is fine here)
+// preload.cjs (CommonJS)
 const { contextBridge, ipcRenderer } = require('electron');
 
-const electronAPI = {
-  // --- Sessions ---
+// --- Birlashtirilgan API (barchasini bitta expose ostida beramiz)
+const api = {
+  // image helper
+  getImagePath: (dish) => {
+    const filename = (dish && (dish.imageUrl || (dish.menu && dish.menu.imageUrl))) || null;
+    return ipcRenderer.invoke("get-image-path", filename);
+  },
+
+  // Sessions
   openSessionCreateWindow: () => ipcRenderer.invoke('open-session-window', { mode: 'create' }),
   openSessionEditWindow: (sessionId) => ipcRenderer.invoke('open-session-window', { mode: 'edit', sessionId }),
   closeSessionWindow: (sessionId) => ipcRenderer.invoke('open-session-window', { mode: 'close', sessionId }),
   emitSessionUpdated: () => ipcRenderer.send('session-updated'),
   onSessionUpdated: (cb) => ipcRenderer.on('session-updated', (_e, ...args) => cb?.(...args)),
 
-  // --- Windows / dialogs ---
+  // Windows / dialogs
   closeMainWindow: () => ipcRenderer.send('window:close'),
   openCategoryWindow: () => ipcRenderer.invoke('open-category-window'),
   openAddWindow: (dish) => ipcRenderer.invoke('open-add-window', dish),
   selectImage: () => ipcRenderer.invoke('dialog:openImage'),
 
-  // --- Menu reload ---
+  // Menu reload
   menuUpdated: () => ipcRenderer.send('menu-updated'),
-  onMenuReload: (cb) => ipcRenderer.on('reload-menu', (_e) => cb?.()),
+  onMenuReload: (cb) => ipcRenderer.on('reload-menu', () => cb?.()),
 
-  // --- Add-item preload comms ---
+  // Add-item preload comms
   onLoadDish: (cb) => ipcRenderer.on('load-dish', (_e, dish) => cb?.(dish)),
 
-  // --- Payment flow ---
+  // Payment flow
   openPaymentWindow: (order) => new Promise((resolve) => {
     ipcRenderer.once('payment-complete', (_e, result) => resolve(result));
     ipcRenderer.send('open-payment-window', order);
   }),
   onLoadOrder: (cb) => ipcRenderer.on('load-order', (_e, data) => cb?.(data)),
   confirmPayment: () => ipcRenderer.send('confirm-payment'),
-  
-  printReceipt(payload, { timeoutMs = 15000 } = {}) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error('Print timeout'));
-      }, timeoutMs);
+  sendPrint: (payload) => ipcRenderer.invoke('print-receipt', payload),
 
-      const done = (_evt, data) => {
-        cleanup();
-        if (data?.ok) resolve(data);
-        else reject(new Error(data?.error || 'Print failed'));
-      };
 
-      const cleanup = () => {
-        clearTimeout(timer);
-        ipcRenderer.removeListener('print-receipt:done', done);
-      };
-
-      ipcRenderer.once('print-receipt:done', done);
-      ipcRenderer.send('print-receipt', payload);
-    });
-  },
-  sendPrint: (payload) => ipcRenderer.send('print-receipt', payload),
-
-  // --- Setup flow (merge these; do NOT expose electronAPI twice) ---
+  // Setup flow
   submitSetup: (payload) => ipcRenderer.invoke('setup:submit', payload),
   setupDone: () => ipcRenderer.send('setup:done'),
   getSetupStatus: () => ipcRenderer.invoke('setup:status'),
-};
 
-// Optional separate namespace (fine to keep distinct)
-const authAPI = {
+  // Auth
   afterLoginSuccess: () => ipcRenderer.send('auth/open-main'),
   attemptLogin: (p) => ipcRenderer.invoke('attempt-login', p),
   me: () => ipcRenderer.invoke('auth:me'),
   logout: () => ipcRenderer.send('auth:logout'),
 };
 
-contextBridge.exposeInMainWorld('printer', {
-  printReceipt: (payload) => ipcRenderer.send('print-receipt', payload)
-});
+// Bitta namespace bilan expose qilamiz (dublikatdan qochish uchun try/catch shart emas)
+contextBridge.exposeInMainWorld('electronAPI', api);
 
-// Guard to avoid double-binding error
-try {
-  if (!Object.prototype.hasOwnProperty.call(globalThis, 'electronAPI')) {
-    contextBridge.exposeInMainWorld('electronAPI', electronAPI);
-  } else {
-    console.warn('[preload] electronAPI already exists; skipping expose.');
-  }
-
-  if (!Object.prototype.hasOwnProperty.call(globalThis, 'authAPI')) {
-    contextBridge.exposeInMainWorld('authAPI', authAPI);
-  } else {
-    console.warn('[preload] authAPI already exists; skipping expose.');
-  }
-} catch (err) {
-  console.error('[preload] expose error:', err);
-}

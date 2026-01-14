@@ -95,9 +95,9 @@ body {
 .main-content {
   display: flex;
   flex-direction: column;
+  background-color: #fdfefe;
   flex-grow: 1;
   padding: 20px;
-  background: #f8f9fa;
   overflow-y: auto; 
   overflow-x: hidden;   /* only our inner .table-wrapper scrolls */
   min-height: 0;       /* allow flex-child to shrink */

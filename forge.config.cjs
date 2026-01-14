@@ -9,7 +9,11 @@ module.exports = {
     icon: 'build/brand_logo',           // Electron will use .ico on Windows, .png on Linux
     asarUnpack: [
       '**/node_modules/.prisma/**',
-      '**/node_modules/@prisma/**'
+      '**/node_modules/@prisma/**',
+      'backend/**'
+    ],
+    extraResource: [
+      'backend' ,
     ],
     appBundleId: 'com.savdochef.app',   // optional (mac), good to set consistently
     appCopyright: '© 2025 SavdoChef',
@@ -52,11 +56,9 @@ module.exports = {
       name: '@electron-forge/maker-squirrel',
       platforms: ['win32'],
       config: {
-        name: 'SavdoChef',
+        name: 'savdochef',
         setupExe: 'SavdoChef-Setup.exe',
-        setupIcon: 'build/brand_logo.ico',   // <-- add .ico file to /build
-        iconUrl: 'https://example.com/icon.ico', // optional (code signing servers)
-        loadingGif: 'build/installer-loading.gif', // optional
+        setupIcon: 'build/brand_logo.ico',  
         noMsi: true,                        
       },
     },

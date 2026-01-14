@@ -1,11 +1,13 @@
-import { BrowserWindow } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { getPreloadPath, htmlPath } from './paths.js';
+
+const isProd = app.isPackaged;
 
 export function createSessionWindow(parent, { mode = 'create', sessionId = null } = {}) {
 
   const win = new BrowserWindow({
     width: 1200,
-    height: 750,
+    height: 800,
     parent,
     modal: true,
     autoHideMenuBar: true,
@@ -14,6 +16,7 @@ export function createSessionWindow(parent, { mode = 'create', sessionId = null 
       preload: getPreloadPath(),
       contextIsolation: true,
       nodeIntegration: false,
+      devTools: !isProd ? true : false,
     },
   });
 
@@ -32,7 +35,7 @@ export function createSessionWindow(parent, { mode = 'create', sessionId = null 
   // DIAGNOSTIKA: renderer yuklangach, u yerda ko‘rayotgan location’ni qayta log qilamiz
   win.webContents.once('did-finish-load', () => {
     win.webContents.executeJavaScript('location.href')
-      .then(href => console.log('[sessionWindow] renderer location.href =', href))
+      .then(href => console.log('Session window loaded:', href))
       .catch(err => console.warn('executeJavaScript err:', err));
   });
 
