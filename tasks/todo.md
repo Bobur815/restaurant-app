@@ -152,14 +152,29 @@ Done 2026-10-18. Verified in the built app: `window.electronAPI` has only the ch
 
 ## Phase 5: renderer without React
 
-- [ ] Single window, hash router (~40 lines: route table, `render(view)`, guard by role), views mounted into `#app`. Modals replace the old child BrowserWindows (payment, add item, session create, category).
-- [ ] `ui/html` tagged template helper that **escapes interpolations by default** (fixes the old `innerHTML` XSS risk), plus `raw()` for trusted markup. Views are `(ctx) => { el, destroy }` functions.
-- [ ] `store/`: typed subscribe/get/set module; keep it small, no framework.
-- [ ] Styling: `tokens.css` (colors, spacing, radius, shadows) + light/dark via `prefers-color-scheme` and a manual toggle; **Bootstrap dropped entirely** (decided 2026-10-18).
-- [ ] i18n: i18next core, every string in both `uz.json` and `ru.json`; Uzbek in Latin script. Menu items and categories get `nameUz` + `nameRu` (decided 2026-10-18; `nameUz` required, `nameRu` optional with fallback to `nameUz`), receipts print in the selected locale.
-- [ ] Port views in this order: setup, login, tables/order screen, payment modal, menu + categories, sessions + residuals, checks, reports (Chart.js), settings, users.
-- [ ] Hardware-style UX details from the current app: click sound, keyboard-friendly quantity entry, weight entry, portion selector.
-- [ ] Accessibility/regression: focus management in modals, Escape to close, no layout break at 1280×720 and 1366×768 (typical POS screens).
+### 5a: foundation + core POS flow (done 2026-10-18)
+
+Verified by driving the built app at 1366x768 and 1280x720 (screenshots): setup (incl. password mismatch on the form), tables without/with a shift, order with plain/portion/weight dishes, save, pay with change, cancel guard, theme and language switch, logout. A dish named `<img src=x onerror=...>` renders as text.
+
+- [x] Single window, hash router (`renderer/router`): route table, guard by setup/login/role (`routes.ts`, tested), views `(ctx) => { el, destroy, canLeave }`, shell kept across shell routes; `canLeave` vetoes navigation (unsaved order).
+- [x] `ui/html.ts`: escapes every interpolation, quoted attributes only, no `on*` interpolation, `javascript:` URLs neutralised, nodes/arrays slotted; the only `innerHTML` in the renderer (lint). Tests include a bug found by the UI run (quote state across chunks) and listener preservation.
+- [x] `store/`: `createStore` (get/set/subscribe); `appStore` with setup, user, settings, receipt, open shift, per-machine language/theme (localStorage, defaults from shop settings).
+- [x] Styling: Bootstrap gone; `tokens.css` (light/dark, manual toggle system/light/dark), `components.css`, `layout.css`, `views.css`; icon-only sidebar at <=1300 px.
+- [x] i18n: i18next core, `uz.json` + `ru.json` (key parity tested); dish/category names via `localName` (ru falls back to uz). Numbers and dates are formatted by our own code: Electron's ICU has no Uzbek data (showed "5,000" and "Sun").
+- [x] Views: setup, login, tables (busy/free, no-shift banner), order (lines with steppers, portion select, weight modal with kg <-> unit price, dish cards with live availability, search + Enter to add, save/pay/cancel, stale-version banner when another device edits, leave guard), payment modal (method, cash received -> change, debt note).
+- [x] Components: `<dialog>` modal (focus in/out, Escape, busy state; tested), confirm, toasts, form field errors from VALIDATION paths.
+- [x] UX from legacy: click sound (setting), keyboard quantity entry, weight entry, portion selector.
+- [x] Every API failure: NOT_AUTHENTICATED anywhere returns to login; change events refresh settings, open shift, current user, tables, the open order.
+
+### 5b: remaining screens
+
+- [ ] Sessions: open (pre-filled from pending carry), edit, close with carry/write-off per dish (legacy close table), list.
+- [ ] Menu + categories (admin): CRUD, image picker, cost price, uz/ru names, deactivate.
+- [ ] Checks: list with filters, order details, admin edit/delete (cancels the order).
+- [ ] Reports (admin): daily table + products by day; Chart.js; residuals/expenses lists.
+- [ ] Settings (admin): app settings, receipt settings; Users (admin): list/create/edit/reset password; own profile/password for everyone.
+- [ ] Accessibility pass on the 5b screens; re-run the UI harness on all routes at 1280x720.
+
 
 ## Phase 6: security and correctness fixes (carry-over from the audit)
 

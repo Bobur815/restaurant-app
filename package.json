@@ -35,6 +35,7 @@
     "eslint": "9.39.2",
     "globals": "17.12.0",
     "jest": "30.5.2",
+    "jest-environment-jsdom": "30.5.2",
     "prettier": "3.8.1",
     "prisma": "6.19.3",
     "sharp": "0.35.5",
@@ -43,29 +44,59 @@
     "vite": "7.3.6"
   },
   "jest": {
-    "preset": "ts-jest",
-    "testEnvironment": "node",
     "maxWorkers": 2,
-    "testMatch": [
-      "<rootDir>/src/**/*.test.ts"
-    ],
-    "moduleNameMapper": {
-      "^@shared/(.*)$": "<rootDir>/src/shared/$1",
-      "^@main/(.*)$": "<rootDir>/src/main/$1"
-    },
-    "transform": {
-      "^.+\\.ts$": [
-        "ts-jest",
-        {
-          "tsconfig": "tsconfig.node.json"
+    "projects": [
+      {
+        "preset": "ts-jest",
+        "moduleNameMapper": {
+          "^@shared/(.*)$": "<rootDir>/src/shared/$1",
+          "^@main/(.*)$": "<rootDir>/src/main/$1",
+          "^@renderer/(.*)$": "<rootDir>/src/renderer/$1"
+        },
+        "displayName": "node",
+        "testEnvironment": "node",
+        "testMatch": [
+          "<rootDir>/src/main/**/*.test.ts",
+          "<rootDir>/src/shared/**/*.test.ts"
+        ],
+        "transform": {
+          "^.+\\.ts$": [
+            "ts-jest",
+            {
+              "tsconfig": "tsconfig.node.json"
+            }
+          ]
         }
-      ]
-    }
+      },
+      {
+        "preset": "ts-jest",
+        "moduleNameMapper": {
+          "^@shared/(.*)$": "<rootDir>/src/shared/$1",
+          "^@main/(.*)$": "<rootDir>/src/main/$1",
+          "^@renderer/(.*)$": "<rootDir>/src/renderer/$1"
+        },
+        "displayName": "renderer",
+        "testEnvironment": "jsdom",
+        "testMatch": [
+          "<rootDir>/src/renderer/**/*.test.ts"
+        ],
+        "transform": {
+          "^.+\\.ts$": [
+            "ts-jest",
+            {
+              "tsconfig": "tsconfig.web.test.json"
+            }
+          ]
+        }
+      }
+    ]
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
     "bcryptjs": "3.0.3",
     "decimal.js": "10.6.0",
+    "i18next": "26.4.2",
+    "lucide": "1.51.0",
     "zod": "4.6.5"
   },
   "prisma": {

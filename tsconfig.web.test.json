@@ -1,0 +1,10 @@
+{
+  // Renderer tests (jsdom): web settings plus jest types. Used by ts-jest only.
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "types": ["jest"]
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "exclude": []
+}
