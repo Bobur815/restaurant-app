@@ -112,3 +112,8 @@ export function localName(
 ): string {
   return lang === 'ru' && item.nameRu ? item.nameRu : item.nameUz;
 }
+
+/** A decimal for an editable field: decimal comma, no grouping ("17,5"). Parsers accept both. */
+export function toInputDecimal(value: DecimalString | null | undefined): string {
+  return value ? value.replace('.', ',') : '';
+}

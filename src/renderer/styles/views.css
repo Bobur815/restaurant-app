@@ -446,3 +446,114 @@
     height: 64px;
   }
 }
+
+/* ── Menu (split: categories | dishes) ───────────────────────────────────────────────────── */
+.split {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+}
+
+.split > .card {
+  margin-bottom: 0;
+}
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: var(--space-3);
+}
+
+.category-row {
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-md);
+}
+
+.category-row.is-active {
+  background: var(--color-primary-soft);
+}
+
+.category-row.is-inactive .category-select span:first-child {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.category-select {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.category-row.is-active .category-select {
+  color: var(--color-primary);
+}
+
+.image-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: var(--space-3) 0;
+}
+
+.image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.field-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.user-chip {
+  color: inherit;
+  text-decoration: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.user-chip:hover {
+  background: var(--color-surface-2);
+}
+
+@media (max-width: 1300px) {
+  .stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .split {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+}

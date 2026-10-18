@@ -94,6 +94,7 @@
   "dependencies": {
     "@prisma/client": "6.19.3",
     "bcryptjs": "3.0.3",
+    "chart.js": "4.5.1",
     "decimal.js": "10.6.0",
     "i18next": "26.4.2",
     "lucide": "1.51.0",

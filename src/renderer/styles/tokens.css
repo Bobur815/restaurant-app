@@ -52,6 +52,13 @@
   --color-info-soft: #e8f0fb;
   --color-backdrop: rgb(15 18 22 / 0.45);
 
+  /* Chart series (dataviz reference palette, slots 1-4; validated on these surfaces). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --chart-grid: #e6e9ed;
+
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.18);
@@ -79,6 +86,11 @@
     --color-warning-soft: #3a2c14;
     --color-info-soft: #1c2a3d;
     --color-backdrop: rgb(0 0 0 / 0.6);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --chart-grid: #2a3038;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-md: 0 4px 12px rgb(0 0 0 / 0.5);
     --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
@@ -105,6 +117,11 @@
   --color-warning-soft: #3a2c14;
   --color-info-soft: #1c2a3d;
   --color-backdrop: rgb(0 0 0 / 0.6);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --chart-grid: #2a3038;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.5);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);

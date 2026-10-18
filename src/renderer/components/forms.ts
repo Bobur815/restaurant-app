@@ -1,6 +1,24 @@
 import { isApiError } from '../api';
 import { errorMessage } from './toast';
 
+let uid = 0;
+/** Unique per element: a modal's form can sit over a page form with the same field names. */
+const fieldId = (name: string) => `f-${name.replace(/\W/g, '-')}-${++uid}`;
+
+function wrapField(id: string, labelText: string, control: HTMLElement): HTMLElement {
+  const wrap = document.createElement('div');
+  wrap.className = 'field';
+  const label = document.createElement('label');
+  label.htmlFor = id;
+  label.textContent = labelText;
+  const error = document.createElement('div');
+  error.className = 'field-error';
+  error.id = `${id}-error`;
+  control.setAttribute('aria-describedby', error.id);
+  wrap.append(label, control, error);
+  return wrap;
+}
+
 /** A labelled input, with an error slot under it. `name` is the zod path joined by dots. */
 export function field(options: {
   name: string;
@@ -13,14 +31,7 @@ export function field(options: {
   max?: number;
   inputmode?: string;
 }): HTMLElement {
-  const id = `f-${options.name.replace(/\W/g, '-')}`;
-  const wrap = document.createElement('div');
-  wrap.className = 'field';
-
-  const label = document.createElement('label');
-  label.htmlFor = id;
-  label.textContent = options.label;
-
+  const id = fieldId(options.name);
   const input = document.createElement('input');
   input.id = id;
   input.name = options.name;
@@ -31,17 +42,78 @@ export function field(options: {
   if (options.min !== undefined) input.min = String(options.min);
   if (options.max !== undefined) input.max = String(options.max);
   if (options.inputmode) input.inputMode = options.inputmode;
+  return wrapField(id, options.label, input);
+}
 
-  const error = document.createElement('div');
-  error.className = 'field-error';
-  error.id = `${id}-error`;
-  input.setAttribute('aria-describedby', error.id);
+export function selectField(options: {
+  name: string;
+  label: string;
+  options: Array<{ value: string; label: string }>;
+  value?: string;
+}): HTMLElement {
+  const id = fieldId(options.name);
+  const select = document.createElement('select');
+  select.id = id;
+  select.name = options.name;
+  for (const o of options.options) {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
+    opt.selected = o.value === options.value;
+    select.append(opt);
+  }
+  return wrapField(id, options.label, select);
+}
 
-  wrap.append(label, input, error);
+export function textareaField(options: {
+  name: string;
+  label: string;
+  value?: string;
+  rows?: number;
+}): HTMLElement {
+  const id = fieldId(options.name);
+  const area = document.createElement('textarea');
+  area.id = id;
+  area.name = options.name;
+  area.rows = options.rows ?? 3;
+  area.value = options.value ?? '';
+  return wrapField(id, options.label, area);
+}
+
+/** A checkbox with its label to the right. */
+export function checkboxField(options: {
+  name: string;
+  label: string;
+  checked?: boolean;
+}): HTMLElement {
+  const id = fieldId(options.name);
+  const wrap = document.createElement('label');
+  wrap.className = 'check-field';
+  wrap.htmlFor = id;
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.id = id;
+  box.name = options.name;
+  box.checked = options.checked ?? false;
+  const text = document.createElement('span');
+  text.textContent = options.label;
+  wrap.append(box, text);
   return wrap;
 }
 
-export function value(form: HTMLElement, name: string): string {
+export function checked(form: ParentNode, name: string): boolean {
+  return form.querySelector<HTMLInputElement>(`[name="${CSS.escape(name)}"]`)?.checked ?? false;
+}
+
+/** A form-error line for showFormError to write general (non-field) failures into. */
+export function formError(): HTMLElement {
+  const el = document.createElement('div');
+  el.className = 'form-error';
+  el.setAttribute('role', 'alert');
+  return el;
+}
+
+export function value(form: ParentNode, name: string): string {
   return (form.querySelector<HTMLInputElement>(`[name="${CSS.escape(name)}"]`)?.value ?? '').trim();
 }
 

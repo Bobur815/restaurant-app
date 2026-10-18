@@ -17,6 +17,11 @@ let mainWindow: BrowserWindow | null = null;
 // Measured on the dev machine: first paint ~19 s with the GPU, ~1 s without.
 app.disableHardwareAcceleration();
 
+// Chromium's own UI locale (native date inputs, built-in messages). It has no Uzbek locale, so
+// Russian gives the day-first date format used in Uzbekistan (dd.mm.yyyy). The app's own text
+// comes from its i18n files, not from this.
+app.commandLine.appendSwitch('lang', 'ru');
+
 // Custom schemes must be declared before the app is ready.
 registerImageScheme();
 

@@ -97,10 +97,10 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
         <div class="topbar-right">
           <span class="badge" data-ref="shift"></span>
           ${langButton}${themeButton}
-          <span class="user-chip">
-            <span class="user-name">${user.fullName ?? user.username}</span>
-            <span class="user-role">${t(`nav.role${user.role}`)}</span>
-          </span>
+          <a class="user-chip" href="#/profile" title="${t('profile.title')}">
+            <span class="user-name" data-ref="userName"></span>
+            <span class="user-role" data-ref="userRole"></span>
+          </a>
         </div>
       </header>
       <nav class="sidebar" id="app-sidebar" aria-label="SavdoChef">
@@ -115,6 +115,8 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     date: HTMLElement;
     shift: HTMLElement;
     restaurant: HTMLElement;
+    userName: HTMLElement;
+    userRole: HTMLElement;
   }>(el);
 
   const tick = () => {
@@ -129,6 +131,10 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
   const renderState = () => {
     const s = appStore.get();
     r.restaurant.textContent = s.receipt?.restaurantName ?? '';
+    if (s.user) {
+      r.userName.textContent = s.user.fullName ?? s.user.username;
+      r.userRole.textContent = t(`nav.role${s.user.role}`);
+    }
     const open = !!s.openSession;
     r.shift.textContent = t(open ? 'nav.shiftOpen' : 'nav.shiftClosed');
     r.shift.className = `badge ${open ? 'badge-success' : 'badge-muted'}`;

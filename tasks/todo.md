@@ -166,15 +166,18 @@ Verified by driving the built app at 1366x768 and 1280x720 (screenshots): setup 
 - [x] UX from legacy: click sound (setting), keyboard quantity entry, weight entry, portion selector.
 - [x] Every API failure: NOT_AUTHENTICATED anywhere returns to login; change events refresh settings, open shift, current user, tables, the open order.
 
-### 5b: remaining screens
+### 5b: remaining screens (done 2026-10-18)
 
-- [ ] Sessions: open (pre-filled from pending carry), edit, close with carry/write-off per dish (legacy close table), list.
-- [ ] Menu + categories (admin): CRUD, image picker, cost price, uz/ru names, deactivate.
-- [ ] Checks: list with filters, order details, admin edit/delete (cancels the order).
-- [ ] Reports (admin): daily table + products by day; Chart.js; residuals/expenses lists.
-- [ ] Settings (admin): app settings, receipt settings; Users (admin): list/create/edit/reset password; own profile/password for everyone.
-- [ ] Accessibility pass on the 5b screens; re-run the UI harness on all routes at 1280x720.
+Verified by a second UI harness on the built app (fresh DB, 1366x768 and 1280x720, screenshots): dish modal, menu, open shift via modal, checks + details, close refused while a table is unpaid, close with linked carry/write-off (17,5 -> write off 2 -> carry 15,5), next shift pre-filled with exactly 15,5, reports (all tabs, chart over 7 days), users, settings, profile, STAFF sees only Buyurtma/Smenalar/Cheklar and is bounced from /reports.
 
+- [x] Shifts: open (all dishes, pre-filled from pending carry, exact), edit (not below sold, cannot remove), close with carry/write-off kept in step + bulk buttons + notes, history with details, admin delete of unused shifts.
+- [x] Menu + categories (admin): categories list with counts, create/edit/delete; dishes table with search and hidden toggle; dish modal with uz/ru names, category, sale type (piece/portion/kg), price, cost price, picture via main-process dialog; delete hides dishes with history.
+- [x] Checks: date range (default today), method/status/table filters, sort, totals; details modal (lines, payments); admin edit and delete (cancels the order).
+- [x] Reports (admin): range presets, KPI tiles, stacked daily revenue chart by method (Chart.js, dataviz spec: palette validated in both themes on our surfaces, <=24px columns, rounded top segment, 2px surface gap, legend, cap totals, tooltip; daily table is the table view), dishes over the range, residuals and expenses tabs with filters/totals/paging.
+- [x] Users (admin): list, create, edit role/active, reset password. Profile (everyone, from the user chip): login name, full name, password.
+- [x] Settings (admin): table count, default language/theme, click sound; receipt layout fields. Printer is a text field until Phase 7.
+- [x] Polish found by the runs: decimal comma in editable fields, Chromium UI locale `ru` for day-first native date inputs (Chromium has no Uzbek locale), chart tooltip dates, form button layout.
+- [ ] Not done: per-day dish breakdown (legacy showed dishes per day; the range total is shown), waste/breakage expense entry (no legacy UI either), reprint from checks (Phase 7).
 
 ## Phase 6: security and correctness fixes (carry-over from the audit)
 

@@ -6,7 +6,13 @@ import type { RouteDef } from './router/routes';
 import { appStore, loadPrefs, type ThemeChoice } from './store/app';
 import { loginView } from './views/login';
 import { orderView } from './views/order/order-view';
-import { placeholderView } from './views/placeholder';
+import { checksView } from './views/checks/checks-view';
+import { menuView } from './views/menu/menu-view';
+import { reportsView } from './views/reports/reports-view';
+import { sessionsView } from './views/sessions/sessions-view';
+import { settingsView } from './views/settings/settings-view';
+import { profileView } from './views/users/profile-view';
+import { usersView } from './views/users/users-view';
 import { setupView } from './views/setup';
 import { tablesView } from './views/tables';
 import type { View } from './views/types';
@@ -18,13 +24,13 @@ const ROUTES: RouteDef<View>[] = [
   { path: '/login', access: 'public', layout: 'bare', view: loginView },
   { path: '/tables', access: 'user', layout: 'shell', view: tablesView },
   { path: '/tables/:table', access: 'user', layout: 'shell', view: orderView },
-  // Phase 5b screens:
-  { path: '/sessions', access: 'user', layout: 'shell', view: placeholderView('nav.sessions') },
-  { path: '/checks', access: 'user', layout: 'shell', view: placeholderView('nav.checks') },
-  { path: '/menu', access: 'admin', layout: 'shell', view: placeholderView('nav.menu') },
-  { path: '/reports', access: 'admin', layout: 'shell', view: placeholderView('nav.reports') },
-  { path: '/users', access: 'admin', layout: 'shell', view: placeholderView('nav.users') },
-  { path: '/settings', access: 'admin', layout: 'shell', view: placeholderView('nav.settings') },
+  { path: '/sessions', access: 'user', layout: 'shell', view: sessionsView },
+  { path: '/checks', access: 'user', layout: 'shell', view: checksView },
+  { path: '/profile', access: 'user', layout: 'shell', view: profileView },
+  { path: '/menu', access: 'admin', layout: 'shell', view: menuView },
+  { path: '/reports', access: 'admin', layout: 'shell', view: reportsView },
+  { path: '/users', access: 'admin', layout: 'shell', view: usersView },
+  { path: '/settings', access: 'admin', layout: 'shell', view: settingsView },
 ];
 
 function applyTheme(theme: ThemeChoice): void {

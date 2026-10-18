@@ -11,7 +11,7 @@ import { openModal } from '../../components/modal';
 import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
-import { formatMoney } from '../../utils/format';
+import { formatMoney, toInputDecimal } from '../../utils/format';
 
 /**
  * Weight entry for a by-kg dish. Legacy let the cashier type a price per unit (e.g. 45 000 for a
@@ -30,7 +30,7 @@ export function askWeight(
       label: t('order.weightKg'),
       type: 'text',
       inputmode: 'decimal',
-      value: current ?? '',
+      value: toInputDecimal(current),
     });
     const priceField = field({
       name: 'unitPrice',
@@ -48,12 +48,12 @@ export function askWeight(
     };
     const syncFromKg = () => {
       const v = parse(kg.value);
-      price.value = v ? toMoneyString(v.times(pricePerKg)) : '';
+      price.value = v ? toInputDecimal(toMoneyString(v.times(pricePerKg))) : '';
     };
     kg.addEventListener('input', syncFromKg);
     price.addEventListener('input', () => {
       const v = parse(price.value);
-      kg.value = v && pricePerKg.gt(0) ? toQtyString(v.div(pricePerKg)) : '';
+      kg.value = v && pricePerKg.gt(0) ? toInputDecimal(toQtyString(v.div(pricePerKg))) : '';
     });
     if (current) syncFromKg();
 
