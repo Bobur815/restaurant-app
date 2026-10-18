@@ -64,7 +64,9 @@
   },
   "dependencies": {
     "@prisma/client": "6.19.3",
-    "decimal.js": "10.6.0"
+    "bcryptjs": "3.0.3",
+    "decimal.js": "10.6.0",
+    "zod": "4.6.5"
   },
   "prisma": {
     "schema": "prisma/schema.sqlite.prisma"

@@ -114,19 +114,31 @@ tests/ (or colocated *.test.ts)
 
 ## Phase 3: domain modules + IPC (backend)
 
-For each module: pure TS in `src/main/<domain>/`, handler in `src/main/ipc/<domain>-handlers.ts`, channels in `src/shared/ipc.ts`, tests. Port order follows dependencies.
+Done 2026-10-18. Domain modules in `src/main/<domain>/` take `(db, actor, input)` and return DTOs (`src/shared/types.ts`, money as decimal strings); inputs are zod schemas in `src/shared/schemas.ts`; every channel is in `src/shared/ipc.ts` and implemented in `src/main/ipc/handlers.ts` (a missing channel fails to compile). 180 tests.
 
-- [ ] `auth`: login (bcrypt), `getCurrentUser()`, logout, roles ADMIN/STAFF, permission check helper used by every handler. Lockout/throttle on repeated failures (posgro has `override-throttle.ts` as a pattern).
-- [ ] `settings` + `setup`: first-run wizard (admin + receipt settings) in one transaction.
-- [ ] `menu` + `category`: CRUD, image storage in `userData/img` via a custom protocol (posgro's `images-protocol.ts`) instead of `file://` paths from the renderer; sanitize names, enforce size/type.
-- [ ] `sessions` (trading day): open/close, `SessionItem` initial/sold, remaining computed.
-- [ ] `orders`: per-table pending order, `orderNumber` from `Counter` inside the same transaction, `effQty` logic (weight = qty × kg, portions = qty × factor) moved to `shared/utils` with tests.
-- [ ] `payments`: cash/card/click/debt, refunds, report queries. All stock + order + payment writes in **one** `$transaction`.
-- [ ] `residuals` + `expenses`: carry-to-next / write-off, linked expense.
-- [ ] `reports`: aggregates done in SQL, not in the renderer.
-- [ ] `users` + permissions.
-- [ ] `ipcSafe()` wrapper + typed error codes (`NOT_AUTHENTICATED`, `FORBIDDEN`, `VALIDATION`, `CONFLICT`, `NOT_FOUND`); zod schemas for every handler input.
-- [ ] Tests: stock math, order numbering, session close with residuals, payment totals, role enforcement. Port the stock logic with characterization tests against the old behaviour before changing any rule.
+- [x] `auth`: bcrypt (cost 10), lock for 5 min after 5 wrong passwords, same answer and timing for unknown user / wrong password, inactive refused after the password check. Login is **per caller** (per window now, per device token in 8.5); every non-public call re-reads the user, so deactivation and role changes apply on the next action.
+- [x] `users`: list/create/update/reset password (admin), own profile + password (user); the last active admin cannot be demoted or deactivated, nobody deactivates themselves. Plaintext never stored or returned.
+- [x] `settings` + `setup`: typed settings over the key/value table (corrupt value -> default); receipt settings; first-run wizard in one transaction, public only until an admin exists.
+- [x] `menu` + `category`: CRUD, unique names -> CONFLICT, search across uz/ru ignoring case and apostrophe variants; dishes with history are hidden, not deleted; switching pieces/portions/kg refused while in the open shift or an unpaid order. Images: picked by a dialog in main, checked by magic bytes and size, stored as `<random>.jpg|png|webp` in `userData/img`, served by `savdochef-img://img/<name>` with a containment check (CSP allows it).
+- [x] `sessions`: open (one only, DB-enforced), edit (not below sold), close in one transaction with carry / write-off, pending carry list for pre-fill, delete only when unused.
+- [x] `orders`: server-side pricing from the menu (`shared/utils/order-line.ts`, tested), stock deltas applied in the same transaction, all-or-nothing with every shortage listed, optimistic `version` check, `YYYY-NNNNN` numbers from the counter in the transaction. Migration 0003: `orders.pendingTable` kept by triggers (one unpaid order per table, released on pay/cancel); two devices creating the same table: one wins, one CONFLICT (tested).
+- [x] `payments`: pay in full in one transaction (debt -> `pending`, legacy parity), checks list with legacy filters/sorting, admin edit/delete.
+- [x] `residuals` + `expenses`: legacy filters, pagination, totals; note search works on SQLite.
+- [x] `reports`: per-day payments by method + expenses by type; dishes per day with legacy unit counts plus stock used and revenue. Rows selected by range in SQL, summed in main with exact decimals (SQLite sums DECIMAL as float).
+- [x] `ipcSafe` (`main/ipc/ipc-safe.ts`): access `public`/`user`/`admin`, zod parse, error codes `NOT_AUTHENTICATED`, `FORBIDDEN`, `VALIDATION`, `NOT_FOUND`, `CONFLICT`, `LOCKED`, `INTERNAL` (unexpected errors logged in main, never sent). Access list is snapshot-tested; every protected channel is tested against an anonymous caller and every admin channel against STAFF.
+- [x] Behaviour changes vs legacy (all deliberate, each tested):
+  - stock: one formula for create/edit/cancel; stock + order + payment in one transaction (quirks 1, 2);
+  - totals computed on the server, client prices ignored (quirk 3);
+  - shift close in one transaction; refused while unpaid orders exist; an unassigned leftover carries over instead of vanishing;
+  - cancelled orders are kept as `cancelled` (legacy deleted them; order numbers are never reused);
+  - pending carry is returned with exact quantities (legacy UI pre-filled `quantity - 1`);
+  - reports add `stockQuantity` and `revenue` per dish (quirk 7); note search fixed (quirk 6).
+- [x] Decided 2026-10-18:
+  - deleting a check cancels its order (`checks:delete` -> `cancelPaidOrder`): payments removed, order `cancelled`, stock back to the shift only while that shift is open (closed shifts stay final); unpaid orders are cancelled from the table (fixes quirk 9);
+  - optional `MenuItem.costPrice` (migration 0004, nullable); write-offs use it, else the sale price;
+  - opening a shift keeps applying all pending carries, whatever dishes the new shift lists (legacy parity).
+- [ ] Not yet: `waste`/`breakage` expenses can only be listed (legacy had no UI to add them either); orphaned image files are not cleaned up when a dish's picture changes.
+
 
 ## Phase 4: preload and typed API client
 

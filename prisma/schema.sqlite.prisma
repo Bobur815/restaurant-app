@@ -161,6 +161,9 @@ model MenuItem {
   nameRu       String?
   description  String?
   price        Decimal  @default(0)
+  // Optional purchase/production cost per unit (per kg for weight dishes). Write-offs are costed
+  // at this; when it is not set they fall back to the sale price (legacy behaviour).
+  costPrice    Decimal?
   // File name inside userData/img, served by the images protocol (Phase 3). Never a full path.
   imageFile    String?
   categoryId   Int
@@ -288,6 +291,7 @@ model Order {
   tableNumber   Int
   // = tableNumber while pending, NULL otherwise. UNIQUE, so the database allows at most one
   // pending order per table even with several devices (Phase 8.5). Same trick as Session.openGuard.
+  // Maintained by triggers from status/tableNumber (migration 0003): code never writes it.
   pendingTable  Int?           @unique
   status        OrderStatus    @default(pending)
   sessionId     Int

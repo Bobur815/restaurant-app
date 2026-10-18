@@ -251,22 +251,36 @@ describe('database-level guarantees', () => {
     await prisma.session.update({ where: { id: s1.id }, data: { status: 'closed' } });
   });
 
-  it('allows only one pending order per table', async () => {
+  it('allows only one pending order per table; the guard follows status via triggers (migration 3)', async () => {
     const session = await prisma.session.create({ data: {} });
     const base = { tableNumber: 3, sessionId: session.id };
-    const o1 = await prisma.order.create({
-      data: { ...base, orderNumber: '2026-00001', pendingTable: 3 },
-    });
-    await expect(
-      prisma.order.create({ data: { ...base, orderNumber: '2026-00002', pendingTable: 3 } }),
-    ).rejects.toMatchObject({ code: 'P2002' });
+    const pendingTableOf = async (id: number) =>
+      (await prisma.order.findUniqueOrThrow({ where: { id } })).pendingTable;
 
-    await prisma.order.update({
-      where: { id: o1.id },
-      data: { status: 'completed', pendingTable: null },
+    const o1 = await prisma.order.create({ data: { ...base, orderNumber: '2026-00001' } });
+    expect(await pendingTableOf(o1.id)).toBe(3);
+    await expect(
+      prisma.order.create({ data: { ...base, orderNumber: '2026-00002' } }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    // Another table is independent.
+    const other = await prisma.order.create({
+      data: { ...base, tableNumber: 4, orderNumber: '2026-00004' },
     });
-    await prisma.order.create({ data: { ...base, orderNumber: '2026-00003', pendingTable: 3 } });
-    await prisma.order.updateMany({ data: { pendingTable: null, status: 'completed' } });
+
+    // Paying (or cancelling) by status alone releases the table.
+    await prisma.order.update({ where: { id: o1.id }, data: { status: 'completed' } });
+    expect(await pendingTableOf(o1.id)).toBeNull();
+    const o3 = await prisma.order.create({ data: { ...base, orderNumber: '2026-00003' } });
+
+    // Moving a pending order onto an occupied table is refused.
+    await expect(
+      prisma.order.update({ where: { id: other.id }, data: { tableNumber: 3 } }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    // Writing the guard directly cannot drop it.
+    await prisma.order.update({ where: { id: o3.id }, data: { pendingTable: null } });
+    expect(await pendingTableOf(o3.id)).toBe(3);
+
+    await prisma.order.updateMany({ data: { status: 'completed' } });
     await prisma.session.update({
       where: { id: session.id },
       data: { status: 'closed' },

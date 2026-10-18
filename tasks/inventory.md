@@ -72,5 +72,5 @@ Parity checklist for Phase 8. Source: `origin/main` @ `46542d8` (2026-01-14). On
 6. `mode: "insensitive"` in residual/expense note search is unsupported on SQLite → `q` filter throws.
 7. Reports "products sold" sum raw `quantity` (a 0.5 portion counts as 1; weight items count units).
 8. `Menu.portions` is a Boolean flag, `OrderItem.portions` is the factor; allowed factors are not enforced server-side.
-9. Payment `DELETE` removes payments but leaves the order `completed`.
+9. Payment `DELETE` removes payments but leaves the order `completed`. **Changed in rewrite (decided 2026-10-18):** deleting a check cancels the order.
 10. Seed `app.db` is shipped to every install and contains one restaurant's real-looking data (name, address, phone, 9 orders, plaintext admin password).

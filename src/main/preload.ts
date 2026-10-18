@@ -5,7 +5,12 @@ import { IPC, type ElectronAPI } from '@shared/api';
 // Never expose ipcRenderer itself: the renderer gets named functions and nothing more.
 const api: ElectronAPI = {
   app: {
-    info: () => ipcRenderer.invoke(IPC.appInfo),
+    // Handlers answer with IpcResult (main/ipc/ipc-safe.ts). Phase 4 generates this whole API.
+    info: async () => {
+      const result = await ipcRenderer.invoke(IPC.appInfo);
+      if (!result.ok) throw new Error(result.error.message);
+      return result.data;
+    },
   },
 };
 

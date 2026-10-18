@@ -1,6 +1,13 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import { IPC, type AppInfo } from '@shared/api';
-import { closeDatabase, databaseFilePath, initializeDatabase } from './database/sqlite-client';
+import { app, BrowserWindow, dialog } from 'electron';
+import path from 'path';
+import {
+  closeDatabase,
+  databaseFilePath,
+  getPrisma,
+  initializeDatabase,
+} from './database/sqlite-client';
+import { handleImageScheme, registerImageScheme } from './images/images-protocol';
+import { registerIpcHandlers } from './ipc/register';
 import { installSecurityHandlers } from './security';
 import { createWindow, DEV_SERVER_URL, INDEX_HTML_PATH } from './window';
 
@@ -9,6 +16,9 @@ let mainWindow: BrowserWindow | null = null;
 // No GPU acceleration (as posgro): tills are often reached over AnyDesk/RDP or have weak GPUs.
 // Measured on the dev machine: first paint ~19 s with the GPU, ~1 s without.
 app.disableHardwareAcceleration();
+
+// Custom schemes must be declared before the app is ready.
+registerImageScheme();
 
 // One instance per machine: two copies would fight over the SQLite file (and, later, the LAN port).
 if (!app.requestSingleInstanceLock()) {
@@ -35,14 +45,9 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
 
-    ipcMain.handle(
-      IPC.appInfo,
-      (): AppInfo => ({
-        name: app.getName(),
-        version: app.getVersion(),
-        isPackaged: app.isPackaged,
-      }),
-    );
+    const imageDir = path.join(app.getPath('userData'), 'img');
+    handleImageScheme(imageDir);
+    registerIpcHandlers(getPrisma, imageDir);
 
     mainWindow = createWindow();
     mainWindow.on('closed', () => {

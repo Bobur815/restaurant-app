@@ -47,7 +47,9 @@ export async function openDatabase(dbFile: string, options: OpenOptions): Promis
   // foreign_keys) set below then hold for every query.
   const prisma = new options.prismaModule.PrismaClient({
     datasources: { db: { url: `file:${dbFile}?connection_limit=1&socket_timeout=10` } },
-    log: ['error'],
+    // No Prisma logging: every query error is thrown to the caller, and ipcSafe logs the
+    // unexpected ones. Expected failures (a duplicate name -> CONFLICT) are not errors.
+    log: [],
   });
 
   try {
