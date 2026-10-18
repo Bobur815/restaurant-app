@@ -1,0 +1,11 @@
+{
+  // Renderer only. DOM types, no Node types: the renderer reaches the system through window.electronAPI.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*"],
+  "exclude": ["src/**/*.test.ts"]
+}

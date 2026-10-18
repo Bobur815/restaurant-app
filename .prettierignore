@@ -1,0 +1,5 @@
+legacy/
+dist/
+dist-electron/
+dist-renderer/
+src/generated/

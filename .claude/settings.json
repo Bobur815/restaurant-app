@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm --prefix backend install:*)",
+      "Bash(npm --prefix backend run generate)",
+      "Bash(npx prisma validate:*)",
+      "Bash(npx prisma format:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)"
+    ],
+    "ask": [
+      "Bash(npm --prefix backend run migrate:dev:*)",
+      "Bash(npm --prefix backend run migrate:deploy:*)",
+      "Bash(npm --prefix backend run db:push:*)",
+      "Bash(npm run package:*)",
+      "Bash(npm run make:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./backend/.env)",
+      "Edit(./backend/prisma/**/*.db)",
+      "Write(./backend/prisma/**/*.db)",
+      "Edit(./package-lock.json)",
+      "Edit(./backend/package-lock.json)",
+      "Bash(npx prisma migrate reset:*)",
+      "Bash(npx prisma db push --force-reset:*)",
+      "Bash(rm -rf:*)"
+    ]
+  }
+}
