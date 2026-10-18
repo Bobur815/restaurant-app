@@ -7,8 +7,9 @@ dist-electron/
 dist-renderer/
 out/
 release/
-# TODO Phase 8: build/icons/ must be tracked; narrow this to build/* + !build/icons/
-build/
+# build/ holds electron-builder resources; only the generated icons are tracked.
+build/*
+!build/icons/
 
 # Generated Prisma client (Phase 2)
 src/generated/

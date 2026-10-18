@@ -36,10 +36,14 @@ module.exports = {
     '!node_modules/**/*',
   ],
 
+  // Window/taskbar icon at runtime (src/main/window.ts reads resources/icons/savdochef.ico).
+  extraResources: [{ from: 'build/icons', to: 'icons', filter: ['savdochef.ico'] }],
+
+  // Icons are generated from src/shared/branding/brand.ts by `npm run build:icons`.
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     artifactName: 'SavdoChef-Setup-${version}.${ext}',
-    // Icons: Phase 8 (build/icons/).
+    icon: 'build/icons/savdochef.ico',
   },
 
   nsis: {
@@ -48,11 +52,15 @@ module.exports = {
     createDesktopShortcut: true,
     createStartMenuShortcut: true,
     shortcutName: 'SavdoChef',
+    installerIcon: 'build/icons/savdochef.ico',
+    uninstallerIcon: 'build/icons/savdochef.ico',
+    installerHeaderIcon: 'build/icons/savdochef.ico',
     runAfterFinish: false,
   },
 
   linux: {
     target: ['AppImage', 'deb'],
     category: 'Office',
+    icon: 'build/icons/savdochef-icon-1024.png',
   },
 };

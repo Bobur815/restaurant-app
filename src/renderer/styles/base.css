@@ -29,6 +29,12 @@ h1 {
   font-size: var(--font-size-xl);
 }
 
+.brand-logo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
 .muted {
   color: var(--color-text-muted);
 }

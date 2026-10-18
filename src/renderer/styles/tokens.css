@@ -24,7 +24,10 @@
   --color-text: #1b1f24;
   --color-text-muted: #5b6573;
   --color-border: #dde1e6;
-  --color-primary: #0f7b5f;
+  /* Brand orange (logo, accents, large shapes). Not for text on white: 2.2:1. */
+  --color-brand: #f8901f;
+  /* Same hue, darkened for AA: white text on it 5.0:1, it on --color-bg 4.7:1. */
+  --color-primary: #b4530b;
   --color-primary-contrast: #ffffff;
   --color-danger: #c62828;
   --color-warning: #b26a00;
@@ -41,8 +44,8 @@
     --color-text: #e8eaed;
     --color-text-muted: #9aa4b1;
     --color-border: #2c333c;
-    --color-primary: #3cc49a;
-    --color-primary-contrast: #0b1712;
+    --color-primary: #f8901f;
+    --color-primary-contrast: #1a0f00;
     --color-danger: #ef6b6b;
     --color-warning: #f0a83c;
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
@@ -56,8 +59,8 @@
   --color-text: #e8eaed;
   --color-text-muted: #9aa4b1;
   --color-border: #2c333c;
-  --color-primary: #3cc49a;
-  --color-primary-contrast: #0b1712;
+  --color-primary: #f8901f;
+  --color-primary-contrast: #1a0f00;
   --color-danger: #ef6b6b;
   --color-warning: #f0a83c;
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);

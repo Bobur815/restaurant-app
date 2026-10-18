@@ -4,6 +4,11 @@ import path from 'path';
 export const INDEX_HTML_PATH = path.join(__dirname, '../../dist-renderer/index.html');
 export const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
 
+// Taskbar/window icon: shipped as resources/icons (extraResources) in a package, build/icons in dev.
+const ICON_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, 'icons', 'savdochef.ico')
+  : path.join(__dirname, '../../build/icons/savdochef.ico');
+
 /**
  * The only way a BrowserWindow is created. webPreferences are fixed here and cannot be
  * overridden by callers: the security baseline lives in one place.
@@ -19,6 +24,7 @@ export function createWindow(
     minHeight: 720,
     show: false,
     title: 'SavdoChef',
+    icon: ICON_PATH,
     autoHideMenuBar: true,
     backgroundColor: '#ffffff',
     ...options,
