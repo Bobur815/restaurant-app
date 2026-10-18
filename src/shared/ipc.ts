@@ -1,11 +1,13 @@
 import type { z } from 'zod';
+import type { IpcResult } from './errors';
 import type * as S from './schemas';
 import type * as T from './types';
 
 /**
  * Every IPC channel: what the renderer sends (`input`, before schema defaults) and what it gets
  * back in `IpcResult.data`. The main process implements exactly this map (src/main/ipc/handlers.ts
- * fails to compile otherwise); preload (Phase 4) exposes it as window.electronAPI.<ns>.<method>.
+ * fails to compile otherwise); preload exposes it as window.electronAPI.<ns>.<method>
+ * (src/main/preload-api.ts), and the renderer calls it through src/renderer/api.
  *
  * Access is decided in main per handler: `public` (before login), `user` (any logged-in role),
  * `admin`.
@@ -81,3 +83,120 @@ export interface IpcChannels {
 export type IpcChannel = keyof IpcChannels;
 export type IpcInput<C extends IpcChannel> = IpcChannels[C]['input'];
 export type IpcOutput<C extends IpcChannel> = IpcChannels[C]['result'];
+
+/**
+ * The same channels as a runtime list (types do not exist at runtime): preload builds the API
+ * from it and main registers handlers from HANDLERS. Order is irrelevant.
+ */
+export const IPC_CHANNELS = [
+  'app:info',
+  'auth:login',
+  'auth:logout',
+  'auth:me',
+  'auth:changePassword',
+  'users:list',
+  'users:create',
+  'users:update',
+  'users:resetPassword',
+  'users:updateProfile',
+  'setup:status',
+  'setup:complete',
+  'settings:get',
+  'settings:update',
+  'receipt:get',
+  'receipt:update',
+  'categories:list',
+  'categories:create',
+  'categories:update',
+  'categories:delete',
+  'menu:list',
+  'menu:get',
+  'menu:create',
+  'menu:update',
+  'menu:delete',
+  'menu:pickImage',
+  'sessions:getOpen',
+  'sessions:get',
+  'sessions:list',
+  'sessions:pendingCarry',
+  'sessions:open',
+  'sessions:update',
+  'sessions:close',
+  'sessions:delete',
+  'orders:busyTables',
+  'orders:getTable',
+  'orders:getByNumber',
+  'orders:save',
+  'orders:cancel',
+  'payments:pay',
+  'checks:list',
+  'checks:update',
+  'checks:delete',
+  'residuals:list',
+  'residuals:apply',
+  'expenses:list',
+  'reports:sales',
+] as const satisfies readonly IpcChannel[];
+
+// Compile-time: IPC_CHANNELS lists every channel in IpcChannels (an omission is a type error).
+type MissingChannels = Exclude<IpcChannel, (typeof IPC_CHANNELS)[number]>;
+const _everyChannelListed: [MissingChannels] extends [never] ? true : MissingChannels = true;
+void _everyChannelListed;
+
+// ── Namespaced API shape: 'orders:save' -> api.orders.save(input) ───────────────────────────
+
+export type IpcNamespace = IpcChannel extends `${infer NS}:${string}` ? NS : never;
+export type IpcMethod<NS extends IpcNamespace> = IpcChannel extends infer C
+  ? C extends `${NS}:${infer M}`
+    ? M
+    : never
+  : never;
+export type ChannelOf<NS extends IpcNamespace, M extends string> = `${NS}:${M}` & IpcChannel;
+
+/** A call whose input may be left out when the channel takes none or all of it is optional. */
+export type CallFn<C extends IpcChannel, R> =
+  undefined extends IpcInput<C>
+    ? (input?: IpcInput<C>) => Promise<R>
+    : (input: IpcInput<C>) => Promise<R>;
+
+/** Splits 'orders:save' into ['orders', 'save']. */
+export function splitChannel(channel: IpcChannel): [IpcNamespace, string] {
+  const i = channel.indexOf(':');
+  return [channel.slice(0, i) as IpcNamespace, channel.slice(i + 1)];
+}
+
+// ── Events: main -> every window, after a change ──────────────────────────────────────────
+
+/** The one main -> renderer push channel. */
+export const APP_EVENT_CHANNEL = 'app:event';
+
+/**
+ * "Something changed, refetch what you show." Small and data-free on purpose: the receiver reloads
+ * through the normal API, so permissions and freshness stay in one place.
+ */
+export type AppEvent =
+  | { type: 'orders-changed'; tableNumber?: number }
+  | { type: 'session-changed' }
+  | { type: 'menu-changed' }
+  | { type: 'settings-changed' }
+  | { type: 'users-changed' };
+
+export const APP_EVENT_TYPES = [
+  'orders-changed',
+  'session-changed',
+  'menu-changed',
+  'settings-changed',
+  'users-changed',
+] as const satisfies ReadonlyArray<AppEvent['type']>;
+
+/** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */
+export type ElectronAPI = {
+  [NS in IpcNamespace]: {
+    [M in IpcMethod<NS>]: CallFn<ChannelOf<NS, M>, IpcResult<IpcOutput<ChannelOf<NS, M>>>>;
+  };
+} & {
+  events: {
+    /** Calls `listener` for every AppEvent; returns the function that stops it. */
+    subscribe(listener: (event: AppEvent) => void): () => void;
+  };
+};

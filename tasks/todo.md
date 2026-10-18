@@ -142,10 +142,13 @@ Done 2026-10-18. Domain modules in `src/main/<domain>/` take `(db, actor, input)
 
 ## Phase 4: preload and typed API client
 
-- [ ] `shared/ipc.ts`: `type IpcChannels = { 'orders:create': { args: [CreateOrderInput]; result: Order } ... }`.
-- [ ] `preload.ts`: one namespaced object (`electronAPI.orders.create(...)`), generated from the channel map; no raw `ipcRenderer` exposed, no listener leaks (return unsubscribe functions for events like `session-updated`).
-- [ ] `renderer/api/*.ts`: thin typed wrappers; the only place that touches `window.electronAPI`.
-- [ ] Replace parent/child window event juggling (`session-updated`, `reload-menu`) with a single `app:event` broadcast channel and renderer store subscriptions.
+Done 2026-10-18. Verified in the built app: `window.electronAPI` has only the channel namespaces + `events`; an anonymous protected call returns NOT_AUTHENTICATED; setup broadcasts `settings-changed` + `users-changed` to the page; login sticks to the window.
+
+- [x] `shared/ipc.ts`: channel map (input/result types) + runtime `IPC_CHANNELS`; the compiler rejects a list that misses a channel (checked by removing one: TS2322 names it). `ElectronAPI` / `ApiClient` types are derived from the map (`'orders:save'` -> `api.orders.save(input)`).
+- [x] `preload.ts` -> `createElectronApi(ipcRenderer)` (`main/preload-api.ts`, tested): one function per channel invoking exactly that channel with one argument; no raw `ipcRenderer`/`invoke`/`send`; `events.subscribe()` returns an idempotent unsubscribe and drops malformed events.
+- [x] `renderer/api`: `api` from `createApiClient` (`shared/api-client.ts`, tested): resolves to data or throws `ApiError { code, message, details, channel }`; `onApiError()` hook for global handling (NOT_AUTHENTICATED -> login in Phase 5). Lint forbids `window.electronAPI` outside `src/renderer/api`.
+- [x] One `app:event` broadcast replaces `session-updated` / `menu-updated` / `reload-menu`: `main/ipc/events.ts` declares what each successful change announces (`orders-changed` with table, `session-changed`, `menu-changed`, `settings-changed`, `users-changed`); a test requires every channel to be read-only or declare its events.
+
 
 ## Phase 5: renderer without React
 

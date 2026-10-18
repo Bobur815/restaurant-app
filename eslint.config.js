@@ -105,6 +105,21 @@ module.exports = [
     },
   },
 
+  // Only src/renderer/api talks to window.electronAPI; views use `api` (typed, unwrapped).
+  {
+    files: RENDERER_FILES,
+    ignores: ['src/renderer/api/**', 'src/renderer/env.d.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "MemberExpression[property.name='electronAPI']",
+          message: "Import { api } from '@renderer/api' instead of using window.electronAPI.",
+        },
+      ],
+    },
+  },
+
   // ── Tests ──────────────────────────────────────────────────────────────────────────────────
   {
     files: ['**/*.test.ts'],

@@ -1,17 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC, type ElectronAPI } from '@shared/api';
+import { createElectronApi } from './preload-api';
 
 // Runs with sandbox: true, so only `electron` is requirable here; everything else is bundled in.
-// Never expose ipcRenderer itself: the renderer gets named functions and nothing more.
-const api: ElectronAPI = {
-  app: {
-    // Handlers answer with IpcResult (main/ipc/ipc-safe.ts). Phase 4 generates this whole API.
-    info: async () => {
-      const result = await ipcRenderer.invoke(IPC.appInfo);
-      if (!result.ok) throw new Error(result.error.message);
-      return result.data;
-    },
-  },
-};
-
-contextBridge.exposeInMainWorld('electronAPI', api);
+// The page gets named functions per channel and an event subscription, never ipcRenderer.
+contextBridge.exposeInMainWorld('electronAPI', createElectronApi(ipcRenderer));

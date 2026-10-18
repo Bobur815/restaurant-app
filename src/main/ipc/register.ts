@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, type WebContents } from 'electron';
-import type { IpcChannel } from '@shared/ipc';
+import { APP_EVENT_CHANNEL, IPC_CHANNELS, type AppEvent } from '@shared/ipc';
 import type { Actor, Db } from '../domain/db';
 import { importImage } from '../images/image-store';
+import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-safe';
 
@@ -45,10 +46,19 @@ function servicesFor(sender: WebContents, imageDir: string): HandlerServices {
   };
 }
 
-/** Registers every channel in HANDLERS with ipcMain. */
+/** Tells every open window what changed (the LAN adapter will also push these to devices). */
+export function broadcast(events: AppEvent[]): void {
+  if (events.length === 0) return;
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed() || win.webContents.isDestroyed()) continue;
+    for (const e of events) win.webContents.send(APP_EVENT_CHANNEL, e);
+  }
+}
+
+/** Registers every channel in HANDLERS with ipcMain; successful changes are broadcast. */
 export function registerIpcHandlers(getDb: () => Db, imageDir: string): void {
-  for (const channel of Object.keys(HANDLERS) as IpcChannel[]) {
-    ipcMain.handle(channel, (event, rawInput: unknown) => {
+  for (const channel of IPC_CHANNELS) {
+    ipcMain.handle(channel, async (event, rawInput: unknown) => {
       const store = actorStoreFor(event.sender);
       const ctx: HandlerContext = {
         db: getDb(),
@@ -56,7 +66,9 @@ export function registerIpcHandlers(getDb: () => Db, imageDir: string): void {
         services: servicesFor(event.sender, imageDir),
         log: (message, error) => console.error(message, error),
       };
-      return invokeHandler(channel, HANDLERS[channel] as never, ctx, rawInput);
+      const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx, rawInput);
+      if (result.ok) broadcast(eventsFor(channel, rawInput, result.data));
+      return result;
     });
   }
 }
