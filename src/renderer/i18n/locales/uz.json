@@ -42,8 +42,12 @@
     "shiftClosed": "Smena yopiq",
     "roleADMIN": "Administrator",
     "roleSTAFF": "Xodim",
-    "collapse": "Menyuni yig'ish",
-    "expand": "Menyuni yoyish"
+    "sectionMain": "Asosiy",
+    "sectionAdmin": "Boshqaruv",
+    "lock": "Ekranni qulflash",
+    "menuToggle": "Bo'limlar",
+    "menuOpen": "Menyuni ochish",
+    "menuClose": "Menyuni yopish"
   },
   "setup": {
     "title": "SavdoChef sozlamalari",
@@ -66,7 +70,8 @@
     "username": "Login",
     "password": "Parol",
     "submit": "Kirish",
-    "welcome": "Xush kelibsiz, {{name}}"
+    "welcome": "Xush kelibsiz, {{name}}",
+    "pinLink": "PIN kod bilan kirish"
   },
   "tables": {
     "title": "Stollar",
@@ -289,7 +294,18 @@
     "newPassword": "Yangi parol",
     "repeat": "Yangi parolni takrorlang",
     "saved": "Profil saqlandi",
-    "passwordChanged": "Parol o'zgartirildi"
+    "passwordChanged": "Parol o'zgartirildi",
+    "pinTitle": "PIN kod",
+    "pinHint": "Ekran qulflanganda tez kirish uchun 4 ta raqam. O'rnatish yoki o'chirish uchun parolingizni kiriting.",
+    "pinSet": "PIN kod o'rnatilgan",
+    "pinNotSet": "PIN kod o'rnatilmagan",
+    "newPin": "Yangi PIN kod (4 raqam)",
+    "repeatPin": "PIN kodni takrorlang",
+    "pinsDiffer": "PIN kodlar bir xil emas",
+    "savePin": "PIN kodni saqlash",
+    "removePin": "PIN kodni o'chirish",
+    "pinSaved": "PIN kod saqlandi",
+    "pinRemoved": "PIN kod o'chirildi"
   },
   "settings": {
     "title": "Sozlamalar",
@@ -368,5 +384,16 @@
     "next": "Keyingi",
     "none": "Ma'lumot yo'q",
     "all": "Hammasi"
+  },
+  "lock": {
+    "title": "Ekran qulflangan",
+    "pickUser": "Foydalanuvchini tanlang",
+    "enterPin": "{{name}}: PIN kodni kiriting",
+    "unlock": "Kirish",
+    "back": "Boshqa foydalanuvchi",
+    "erase": "O'chirish",
+    "passwordLogin": "Parol bilan kirish",
+    "noUsers": "PIN kod o'rnatgan foydalanuvchi yo'q. Parol bilan kiring va Profil sahifasida PIN kod o'rnating.",
+    "digit": "Raqam {{d}}"
   }
 }

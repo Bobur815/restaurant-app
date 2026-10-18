@@ -16,6 +16,8 @@ generator client {
 
 datasource db {
   provider = "sqlite"
+  // Required by Prisma 6 (moves to prisma.config.ts in Prisma 7). Only the CLI reads it: the app
+  // passes the userData database path explicitly (src/main/database/open.ts).
   url      = env("DATABASE_URL")
 }
 
@@ -74,6 +76,9 @@ model User {
   fullName         String?
   // bcrypt hash. The plaintext never reaches the database or leaves the main process.
   passwordHash     String
+  // Optional quick-unlock PIN (exactly 4 digits) for the lock screen, stored as a bcrypt hash like
+  // the password: this column never holds the digits. Null = no PIN set.
+  pinCode          String?
   role             UserRole  @default(STAFF)
   isActive         Boolean   @default(true)
   // Login throttling (Phase 3): consecutive failures and the lock that follows them.

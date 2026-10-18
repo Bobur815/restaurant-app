@@ -24,6 +24,11 @@ export interface IpcChannels {
   'auth:logout': Channel<undefined, null>;
   'auth:me': Channel<undefined, T.CurrentUser | null>;
   'auth:changePassword': Channel<In<typeof S.changePasswordInput>, null>;
+  /** Active users with a PIN, for the lock screen. */
+  'auth:pinUsers': Channel<undefined, T.PinUserDto[]>;
+  'auth:pinLogin': Channel<In<typeof S.pinLoginInput>, T.CurrentUser>;
+  'auth:pinStatus': Channel<undefined, { hasPin: boolean }>;
+  'auth:setPin': Channel<In<typeof S.setPinInput>, { hasPin: boolean }>;
   'users:list': Channel<undefined, T.UserDto[]>;
   'users:create': Channel<In<typeof S.createUserInput>, T.UserDto>;
   'users:update': Channel<In<typeof S.updateUserInput>, T.UserDto>;
@@ -94,6 +99,10 @@ export const IPC_CHANNELS = [
   'auth:logout',
   'auth:me',
   'auth:changePassword',
+  'auth:pinUsers',
+  'auth:pinLogin',
+  'auth:pinStatus',
+  'auth:setPin',
   'users:list',
   'users:create',
   'users:update',

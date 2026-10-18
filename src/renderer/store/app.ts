@@ -20,8 +20,6 @@ export interface AppState {
   /** This machine's UI choices (localStorage), defaulting to the shop settings. */
   language: Language;
   theme: ThemeChoice;
-  /** Sidebar shows icons only. Default: collapsed on narrow screens until the user chooses. */
-  sidebarCollapsed: boolean;
 }
 
 export const appStore = createStore<AppState>({
@@ -32,7 +30,6 @@ export const appStore = createStore<AppState>({
   openSession: undefined,
   language: 'uz',
   theme: 'system',
-  sidebarCollapsed: false,
 });
 
 // ── Per-machine UI preferences ──────────────────────────────────────────────────────────────
@@ -40,7 +37,7 @@ export const appStore = createStore<AppState>({
 
 const PREFS_KEY = 'savdochef.ui';
 
-export type Prefs = Pick<AppState, 'language' | 'theme' | 'sidebarCollapsed'>;
+export type Prefs = Pick<AppState, 'language' | 'theme'>;
 
 export function loadPrefs(): Partial<Prefs> {
   try {
@@ -51,9 +48,6 @@ export function loadPrefs(): Partial<Prefs> {
     }
     if (parsed['theme'] === 'system' || parsed['theme'] === 'light' || parsed['theme'] === 'dark') {
       out.theme = parsed['theme'];
-    }
-    if (typeof parsed['sidebarCollapsed'] === 'boolean') {
-      out.sidebarCollapsed = parsed['sidebarCollapsed'];
     }
     return out;
   } catch {

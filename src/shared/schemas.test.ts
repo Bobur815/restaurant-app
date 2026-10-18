@@ -1,5 +1,7 @@
 import {
   createUserInput,
+  pinCode,
+  setPinInput,
   menuItemInput,
   saveTableOrderInput,
   updateCategoryInput,
@@ -74,5 +76,19 @@ describe('order input', () => {
         .success,
     ).toBe(false);
     expect(saveTableOrderInput.safeParse({ tableNumber: 1, lines: [] }).success).toBe(false);
+  });
+});
+
+describe('PIN code', () => {
+  it('is exactly 4 digits', () => {
+    for (const ok of ['0000', '1234', '0707']) expect(pinCode.safeParse(ok).success).toBe(true);
+    for (const bad of ['', '1', '123', '12345', '12a4', ' 1234', '١٢٣٤']) {
+      expect(pinCode.safeParse(bad).success).toBe(false);
+    }
+  });
+
+  it('setPin takes a 4-digit PIN or null (remove)', () => {
+    expect(setPinInput.safeParse({ currentPassword: 'x', pin: null }).success).toBe(true);
+    expect(setPinInput.safeParse({ currentPassword: 'x', pin: '12' }).success).toBe(false);
   });
 });

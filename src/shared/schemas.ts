@@ -68,6 +68,19 @@ export const loginInput = z.object({
   password: z.string().min(1),
 });
 
+/** Lock-screen PIN: exactly 4 digits. */
+export const pinCode = z
+  .string()
+  .regex(/^\d{4}$/, { message: "PIN kod 4 ta raqamdan iborat bo'lishi kerak" });
+
+/** Set or change the PIN (or remove it with `pin: null`); the account password confirms it. */
+export const setPinInput = z.object({
+  currentPassword: z.string().min(1),
+  pin: pinCode.nullable(),
+});
+
+export const pinLoginInput = z.object({ userId: id, pin: pinCode });
+
 export const changePasswordInput = z.object({
   currentPassword: z.string().min(1),
   newPassword: password,

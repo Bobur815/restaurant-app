@@ -1,7 +1,7 @@
 import type { z } from 'zod';
 import * as S from '@shared/schemas';
 import type { IpcChannel } from '@shared/ipc';
-import { changePassword, login } from '../auth/auth';
+import { changePassword, listPinUsers, login, pinLogin, pinStatus, setPin } from '../auth/auth';
 import { createCategory, deleteCategory, listCategories, updateCategory } from '../menu/categories';
 import {
   createMenuItem,
@@ -77,6 +77,15 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     await changePassword(ctx.db, ctx.actor, input);
     return null;
   }),
+  // Public: the lock screen lists who can unlock (names only) before anyone is logged in.
+  'auth:pinUsers': pub(S.empty, (ctx) => listPinUsers(ctx.db)),
+  'auth:pinLogin': pub(S.pinLoginInput, async (ctx, input) => {
+    const user = await pinLogin(ctx.db, input);
+    ctx.setActor(user);
+    return user;
+  }),
+  'auth:pinStatus': user(S.empty, (ctx) => pinStatus(ctx.db, ctx.actor)),
+  'auth:setPin': user(S.setPinInput, (ctx, input) => setPin(ctx.db, ctx.actor, input)),
   'users:list': admin(S.empty, (ctx) => listUsers(ctx.db)),
   'users:create': admin(S.createUserInput, (ctx, input) => createUser(ctx.db, input)),
   'users:update': admin(S.updateUserInput, (ctx, input) => updateUser(ctx.db, ctx.actor, input)),

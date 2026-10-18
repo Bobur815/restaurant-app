@@ -51,7 +51,8 @@ export const loginView: View = ({ navigate }) => {
         autocomplete: 'current-password',
       })}
       <div class="form-error" role="alert"></div>
-      ${submit}`,
+      ${submit}
+      <a class="lock-alt" href="#/lock">${t('login.pinLink')}</a>`,
   );
 
   form.addEventListener('submit', async (e) => {

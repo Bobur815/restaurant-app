@@ -4,6 +4,7 @@ import { createShell } from './layout/shell';
 import { startRouter, type Router } from './router/router';
 import type { RouteDef } from './router/routes';
 import { appStore, loadPrefs, type ThemeChoice } from './store/app';
+import { lockView } from './views/lock';
 import { loginView } from './views/login';
 import { orderView } from './views/order/order-view';
 import { checksView } from './views/checks/checks-view';
@@ -17,11 +18,10 @@ import { setupView } from './views/setup';
 import { tablesView } from './views/tables';
 import type { View } from './views/types';
 
-const NARROW_SCREEN_PX = 1300;
-
 const ROUTES: RouteDef<View>[] = [
   { path: '/setup', access: 'public', layout: 'bare', view: setupView },
   { path: '/login', access: 'public', layout: 'bare', view: loginView },
+  { path: '/lock', access: 'public', layout: 'bare', view: lockView },
   { path: '/tables', access: 'user', layout: 'shell', view: tablesView },
   { path: '/tables/:table', access: 'user', layout: 'shell', view: orderView },
   { path: '/sessions', access: 'user', layout: 'shell', view: sessionsView },
@@ -64,8 +64,6 @@ async function boot(): Promise<void> {
     user,
     language: prefs.language ?? settings.language,
     theme: prefs.theme ?? settings.theme,
-    // Narrow POS screens start with an icon-only sidebar until the user picks otherwise.
-    sidebarCollapsed: prefs.sidebarCollapsed ?? window.innerWidth <= NARROW_SCREEN_PX,
     openSession: user ? await api.sessions.getOpen() : undefined,
   });
   applyTheme(appStore.get().theme);

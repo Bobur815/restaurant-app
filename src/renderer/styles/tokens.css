@@ -24,8 +24,9 @@
   --radius-pill: 999px;
 
   --topbar-height: 60px;
-  --sidebar-width: 200px;
-  --sidebar-collapsed-width: 68px;
+  --sidebar-rail-width: 72px;
+  --sidebar-drawer-width: 248px;
+  --shell-gap: 12px;
   --control-height: 40px;
   --control-height-lg: 48px;
 

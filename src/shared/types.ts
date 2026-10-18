@@ -29,6 +29,13 @@ export interface CurrentUser {
   role: Role;
 }
 
+/** A user who can unlock with a PIN: what the lock screen lists (never any secret). */
+export interface PinUserDto {
+  id: number;
+  username: string;
+  fullName: string | null;
+}
+
 export interface UserDto extends CurrentUser {
   isActive: boolean;
   lastLoginAt: string | null;

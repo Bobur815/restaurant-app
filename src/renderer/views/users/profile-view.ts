@@ -1,4 +1,4 @@
-import { api } from '../../api';
+import { api, isApiError } from '../../api';
 import {
   clearErrors,
   field,
@@ -107,9 +107,93 @@ export const profileView: View = () => {
     }
   });
 
+  // ── PIN code for the lock screen ─────────────────────────────────────────────────────────
+  const pinForm = document.createElement('form');
+  pinForm.className = 'card form-card';
+  pinForm.noValidate = true;
+  const pinState = document.createElement('p');
+  pinState.className = 'badge badge-muted';
+  const removePin = document.createElement('button');
+  removePin.type = 'button';
+  removePin.className = 'btn btn-danger-ghost';
+  removePin.textContent = t('profile.removePin');
+  const savePin = submitButton(t('profile.savePin'));
+  pinForm.append(
+    html`<h2 class="card-title">${t('profile.pinTitle')}</h2>
+      ${pinState}
+      <p class="muted small">${t('profile.pinHint')}</p>
+      ${field({
+        name: 'pinPassword',
+        label: t('profile.currentPassword'),
+        type: 'password',
+        autocomplete: 'current-password',
+      })}
+      <div class="form-row">
+        ${field({
+          name: 'pin',
+          label: t('profile.newPin'),
+          type: 'password',
+          inputmode: 'numeric',
+          autocomplete: 'off',
+        })}
+        ${field({
+          name: 'pinRepeat',
+          label: t('profile.repeatPin'),
+          type: 'password',
+          inputmode: 'numeric',
+          autocomplete: 'off',
+        })}
+      </div>
+      ${formError()}
+      <div class="bulk-actions">${savePin}${removePin}</div>`,
+  );
+  for (const name of ['pin', 'pinRepeat']) {
+    const input = pinForm.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
+    input.maxLength = 4;
+    input.pattern = '[0-9]*';
+  }
+  const pinField = (name: string) => pinForm.querySelector<HTMLInputElement>(`[name="${name}"]`)!;
+  const showPinState = (hasPin: boolean) => {
+    pinState.textContent = t(hasPin ? 'profile.pinSet' : 'profile.pinNotSet');
+    pinState.className = `badge ${hasPin ? 'badge-success' : 'badge-muted'}`;
+    removePin.hidden = !hasPin;
+  };
+  const sendPin = async (pin: string | null) => {
+    clearErrors(pinForm);
+    if (pin !== null && pin !== pinField('pinRepeat').value) {
+      setFieldError(pinForm, 'pinRepeat', t('profile.pinsDiffer'));
+      return;
+    }
+    try {
+      const result = await api.auth.setPin({ currentPassword: pinField('pinPassword').value, pin });
+      pinForm.reset();
+      showPinState(result.hasPin);
+      toast(t(result.hasPin ? 'profile.pinSaved' : 'profile.pinRemoved'), 'success');
+    } catch (error) {
+      showFormError(pinForm, error);
+      // The server reports a bad password as field `currentPassword`; show it on this form's field.
+      if (
+        isApiError(error) &&
+        (error.details as { field?: string } | undefined)?.field === 'currentPassword'
+      ) {
+        setFieldError(pinForm, 'pinPassword', error.message);
+      }
+    }
+  };
+  pinForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    void sendPin(pinField('pin').value);
+  });
+  removePin.addEventListener('click', () => void sendPin(null));
+  showPinState(false);
+  void api.auth
+    .pinStatus()
+    .then((s) => showPinState(s.hasPin))
+    .catch(() => undefined);
+
   el.append(
     pageHeader(t('profile.title')),
-    html`<div class="card-grid">${account}${password}</div>`,
+    html`<div class="card-grid">${account}${password}${pinForm}</div>`,
   );
   return { el };
 };

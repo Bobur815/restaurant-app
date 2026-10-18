@@ -49,6 +49,12 @@ describe('redirectFor', () => {
     expect(redirectFor('/tables', 'user', done, staff)).toBeNull();
   });
 
+  it('the lock screen behaves like login', () => {
+    expect(redirectFor('/lock', 'public', done, null)).toBeNull();
+    expect(redirectFor('/lock', 'public', done, staff)).toBe('/tables');
+    expect(redirectFor('/lock', 'public', fresh, null)).toBe('/setup');
+  });
+
   it('admin pages send STAFF home', () => {
     expect(redirectFor('/users', 'admin', done, staff)).toBe('/tables');
     expect(redirectFor('/users', 'admin', done, admin)).toBeNull();

@@ -52,6 +52,8 @@ describe('access levels', () => {
         'auth:login',
         'auth:logout',
         'auth:me',
+        'auth:pinUsers',
+        'auth:pinLogin',
         'setup:status',
         'setup:complete',
         'settings:get',
@@ -59,6 +61,8 @@ describe('access levels', () => {
       ],
       user: [
         'auth:changePassword',
+        'auth:pinStatus',
+        'auth:setPin',
         'users:updateProfile',
         'categories:list',
         'menu:list',

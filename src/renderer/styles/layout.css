@@ -1,35 +1,50 @@
-/* App frame: top bar, sidebar, scrolling outlet (legacy layout). */
+/* App frame: the top bar spans the window; below it the sidebar rail and the scrolling outlet. */
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-rail-width) minmax(0, 1fr);
   grid-template-rows: var(--topbar-height) minmax(0, 1fr);
   grid-template-areas:
     'top top'
     'side main';
+  /* Top bar and sidebar float as cards: padding around the frame, a gap between them. */
+  gap: var(--shell-gap);
   height: 100vh;
+  padding: var(--shell-gap);
 }
 
 .topbar {
   grid-area: top;
+  /* Above the drawer, so an open drawer never covers it. */
+  position: relative;
+  z-index: 40;
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-4) 0 var(--space-4);
   background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
-.brand {
+.topbar-brand {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar-brand svg {
+  flex-shrink: 0;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .brand-name {
@@ -42,7 +57,6 @@
   overflow: hidden;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-  white-space: nowrap;
   text-overflow: ellipsis;
 }
 
@@ -52,6 +66,7 @@
   gap: var(--space-3);
   flex: 1;
   min-width: 0;
+  padding-left: var(--space-4);
 }
 
 .clock {
@@ -74,16 +89,40 @@
   gap: var(--space-2);
 }
 
-.user-chip {
+.topbar-divider {
+  width: 1px;
+  height: 28px;
+  margin: 0 var(--space-1);
+  background: var(--color-border);
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.topbar-user:hover,
+.topbar-user.active {
+  background: var(--color-surface-2);
+}
+
+.user-text {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  margin-left: var(--space-2);
   line-height: 1.15;
+  white-space: nowrap;
 }
 
 .user-name {
+  max-width: 160px;
+  overflow: hidden;
   font-weight: 700;
+  text-overflow: ellipsis;
 }
 
 .user-role {
@@ -91,21 +130,118 @@
   font-size: var(--font-size-xs);
 }
 
-.sidebar {
-  grid-area: side;
+.avatar {
   display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: var(--space-3);
-  background: var(--color-surface);
-  border-right: 1px solid var(--color-border);
-  overflow-y: auto;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--font-size-sm);
+  font-weight: 800;
 }
 
-.nav-list {
+.avatar-lg {
+  width: 64px;
+  height: 64px;
+  font-size: var(--font-size-xl);
+}
+
+/* ── Sidebar: a 72 px rail under the top bar that opens as a drawer over the page ───────────
+   The grid column stays the rail's width; the panel inside is absolutely positioned within the
+   row below the top bar and widens over the content when open, so nothing behind it moves.
+   Icons sit at the same x in both states; labels fade in. */
+.sidebar {
+  grid-area: side;
+  position: relative;
+  z-index: 30;
+}
+
+.sidebar-panel {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: var(--sidebar-rail-width);
+  padding: var(--space-3);
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  transition:
+    width 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+/* Open: hover (.is-open after an intent pause), pinned by the hamburger, or keyboard focus. */
+.sidebar.is-open .sidebar-panel,
+.sidebar.is-pinned .sidebar-panel,
+.sidebar:has(:focus-visible) .sidebar-panel {
+  width: var(--sidebar-drawer-width);
+  box-shadow: var(--shadow-lg);
+}
+
+.sidebar-label {
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.sidebar.is-open .sidebar-label,
+.sidebar.is-pinned .sidebar-label,
+.sidebar:has(:focus-visible) .sidebar-label {
+  opacity: 1;
+  transition-delay: 0.06s;
+}
+
+.sidebar-hamburger {
+  flex-shrink: 0;
+  margin-bottom: var(--space-1);
+  color: var(--color-text);
+}
+
+.sidebar-hamburger[aria-expanded='true'] {
+  background: var(--color-surface-2);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+.nav-section-title {
+  /* Centred over the icons in the rail, aligned with the labels in the drawer. */
+  padding: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sidebar.is-open .nav-section-title,
+.sidebar.is-pinned .nav-section-title,
+.sidebar:has(:focus-visible) .nav-section-title {
+  padding-left: 14px;
+  text-align: left;
 }
 
 .nav-link {
@@ -114,18 +250,21 @@
   gap: var(--space-3);
   width: 100%;
   min-height: 44px;
-  padding: 0 var(--space-3);
+  /* 12 panel padding + 14 = icon starts at 26: a 20 px icon is centred in the 72 px rail. */
+  padding: 0 14px;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--color-text);
+  color: var(--color-text-muted);
   font-weight: 600;
+  text-align: left;
   text-decoration: none;
   cursor: pointer;
 }
 
 .nav-link:hover {
   background: var(--color-surface-2);
+  color: var(--color-text);
 }
 
 .nav-link.active {
@@ -133,18 +272,16 @@
   color: var(--color-primary);
 }
 
-.nav-logout {
-  color: var(--color-text-muted);
-}
-
 .outlet {
   grid-area: main;
+  border-radius: var(--radius-lg);
   overflow: auto;
   outline: none;
 }
 
 .page {
-  padding: var(--space-5) var(--space-6);
+  /* The frame already has its gap; pages only add breathing room inside it. */
+  padding: var(--space-3) var(--space-2) var(--space-5);
 }
 
 .page-header {
@@ -153,27 +290,4 @@
   justify-content: space-between;
   gap: var(--space-4);
   margin-bottom: var(--space-4);
-}
-
-/* Collapsed sidebar: icons only (toggle in the top bar, Ctrl+B; default on narrow screens). */
-.shell {
-  transition: grid-template-columns 0.15s ease;
-}
-
-.shell.is-collapsed {
-  grid-template-columns: var(--sidebar-collapsed-width) minmax(0, 1fr);
-}
-
-.shell.is-collapsed .nav-link span,
-.shell.is-collapsed .brand-text {
-  display: none;
-}
-
-.shell.is-collapsed .nav-link {
-  justify-content: center;
-  padding: 0;
-}
-
-.sidebar-toggle {
-  margin-left: calc(var(--space-2) * -1);
 }

@@ -13,18 +13,19 @@ interface NavItem {
   path: string;
   label: string;
   icon: IconName;
-  admin?: boolean;
 }
 
-// Legacy sidebar order: Buyurtma first (the till's main screen), then the back office.
-const NAV: NavItem[] = [
+// Till screens first (legacy order: Buyurtma is the main screen), back office in its own group.
+const MAIN_NAV: NavItem[] = [
   { path: '/tables', label: 'nav.tables', icon: 'tables' },
   { path: '/sessions', label: 'nav.sessions', icon: 'sessions' },
   { path: '/checks', label: 'nav.checks', icon: 'checks' },
-  { path: '/menu', label: 'nav.menu', icon: 'menu', admin: true },
-  { path: '/reports', label: 'nav.reports', icon: 'reports', admin: true },
-  { path: '/users', label: 'nav.users', icon: 'users', admin: true },
-  { path: '/settings', label: 'nav.settings', icon: 'settings', admin: true },
+];
+const ADMIN_NAV: NavItem[] = [
+  { path: '/menu', label: 'nav.menu', icon: 'menu' },
+  { path: '/reports', label: 'nav.reports', icon: 'reports' },
+  { path: '/users', label: 'nav.users', icon: 'users' },
+  { path: '/settings', label: 'nav.settings', icon: 'settings' },
 ];
 
 const THEME_ORDER: ThemeChoice[] = ['system', 'light', 'dark'];
@@ -39,32 +40,74 @@ const THEME_LABEL: Record<ThemeChoice, string> = {
   dark: 'nav.themeDark',
 };
 
-export function createShell(navigate: (path: string) => void): ShellInstance {
-  const state = appStore.get();
-  const user = state.user!;
-  const items = NAV.filter((n) => !n.admin || isAdmin(user.role));
+/** "Bobur Ergashev" -> "BE", "owner" -> "OW". */
+export function initials(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return `${words[0]![0]}${words[1]![0]}`.toUpperCase();
+  return (words[0] ?? '?').slice(0, 2).toUpperCase();
+}
 
-  const navLinks = items.map((item) => {
+const HOVER_INTENT_MS = 120;
+
+function label(text: string): HTMLSpanElement {
+  const span = document.createElement('span');
+  span.className = 'sidebar-label';
+  span.textContent = text;
+  return span;
+}
+
+/**
+ * App frame. The top bar spans the window: brand, clock, status and the account controls (user,
+ * lock, logout). Below it, the sidebar is a 72 px icon rail that opens as a drawer over the page
+ * (never over the top bar): on hover, on keyboard focus, or pinned with the hamburger button.
+ * Each link keeps its name as aria-label, since the label text is hidden while the rail is closed.
+ */
+export function createShell(navigate: (path: string) => void): ShellInstance {
+  const user = appStore.get().user!;
+
+  const link = (item: NavItem) => {
     const a = document.createElement('a');
     a.href = `#${item.path}`;
     a.className = 'nav-link';
     a.dataset['path'] = item.path;
-    a.append(
-      icon(item.icon),
-      Object.assign(document.createElement('span'), { textContent: t(item.label) }),
-    );
-    a.addEventListener('click', () => playClick());
+    a.setAttribute('aria-label', t(item.label));
+    a.append(icon(item.icon), label(t(item.label)));
+    a.addEventListener('click', () => {
+      playClick();
+      closeDrawer();
+    });
     return a;
-  });
+  };
+  const mainLinks = MAIN_NAV.map(link);
+  const adminLinks = isAdmin(user.role) ? ADMIN_NAV.map(link) : [];
+  const navLinks = [...mainLinks, ...adminLinks];
 
-  const logout = document.createElement('button');
-  logout.type = 'button';
-  logout.className = 'nav-link nav-logout';
-  logout.append(
-    icon('logout'),
-    Object.assign(document.createElement('span'), { textContent: t('nav.logout') }),
-  );
+  const section = (title: string, links: HTMLAnchorElement[]) =>
+    links.length
+      ? html`<div class="nav-section">
+          <span class="nav-section-title">${title}</span>
+          ${links}
+        </div>`
+      : '';
 
+  const iconButton = (name: IconName, text: string) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'icon-button';
+    b.setAttribute('aria-label', text);
+    b.title = text;
+    b.append(icon(name));
+    return b;
+  };
+
+  const hamburger = document.createElement('button');
+  hamburger.type = 'button';
+  hamburger.className = 'nav-link sidebar-hamburger';
+  hamburger.setAttribute('aria-controls', 'app-sidebar-panel');
+  hamburger.append(icon('hamburger'), label(t('nav.menuToggle')));
+
+  const lock = iconButton('lock', t('nav.lock'));
+  const logout = iconButton('logout', t('nav.logout'));
   const themeButton = document.createElement('button');
   themeButton.type = 'button';
   themeButton.className = 'icon-button';
@@ -72,24 +115,17 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
   langButton.type = 'button';
   langButton.className = 'chip-button';
 
-  const sidebarToggle = document.createElement('button');
-  sidebarToggle.type = 'button';
-  sidebarToggle.className = 'icon-button sidebar-toggle';
-  sidebarToggle.setAttribute('aria-controls', 'app-sidebar');
-
-  const brandIcon = SavdoChefIcon({ size: 36 });
   const el = document.createElement('div');
   el.className = 'shell';
   el.append(
     html`<header class="topbar">
-        ${sidebarToggle}
-        <div class="brand">
-          ${brandIcon}
-          <div class="brand-text">
+        <a class="topbar-brand" href="#/tables" aria-label="SavdoChef">
+          ${SavdoChefIcon({ size: 40 })}
+          <span class="brand-text">
             <span class="brand-name">SavdoChef</span>
             <span class="brand-sub" data-ref="restaurant"></span>
-          </div>
-        </div>
+          </span>
+        </a>
         <div class="topbar-center">
           <span class="clock" data-ref="clock"></span>
           <span class="date" data-ref="date"></span>
@@ -97,33 +133,88 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
         <div class="topbar-right">
           <span class="badge" data-ref="shift"></span>
           ${langButton}${themeButton}
-          <a class="user-chip" href="#/profile" title="${t('profile.title')}">
-            <span class="user-name" data-ref="userName"></span>
-            <span class="user-role" data-ref="userRole"></span>
+          <span class="topbar-divider" aria-hidden="true"></span>
+          <a class="topbar-user" href="#/profile" data-ref="profile">
+            <span class="avatar" data-ref="avatar" aria-hidden="true"></span>
+            <span class="user-text">
+              <span class="user-name" data-ref="userName"></span>
+              <span class="user-role" data-ref="userRole"></span>
+            </span>
           </a>
+          ${lock}${logout}
         </div>
       </header>
-      <nav class="sidebar" id="app-sidebar" aria-label="SavdoChef">
-        <div class="nav-list">${navLinks}</div>
-        ${logout}
+      <nav class="sidebar" aria-label="SavdoChef">
+        <div class="sidebar-panel" id="app-sidebar-panel">
+          ${hamburger}
+          <div class="sidebar-nav">
+            ${section(t('nav.sectionMain'), mainLinks)}
+            ${section(t('nav.sectionAdmin'), adminLinks)}
+          </div>
+        </div>
       </nav>
       <main class="outlet" data-ref="outlet" tabindex="-1"></main>`,
   );
+
+  // The drawer opens three ways: hover (after a short intent pause, so a pointer passing over the
+  // rail does not flash it; JS, because reduced-motion settings switch CSS delays off), keyboard
+  // focus (CSS :has(:focus-visible)), or pinned with the hamburger (stays until toggled, Escape,
+  // or a page is chosen).
+  const sidebar = el.querySelector<HTMLElement>('.sidebar')!;
+  let openTimer: number | undefined;
+  let pinned = false;
+  const setPinned = (value: boolean) => {
+    pinned = value;
+    sidebar.classList.toggle('is-pinned', value);
+    hamburger.setAttribute('aria-expanded', String(value));
+    hamburger.setAttribute('aria-label', t(value ? 'nav.menuClose' : 'nav.menuOpen'));
+    hamburger.title = t(value ? 'nav.menuClose' : 'nav.menuOpen');
+  };
+  setPinned(false);
+  hamburger.addEventListener('click', () => {
+    playClick();
+    setPinned(!pinned);
+  });
+  sidebar.addEventListener('mouseenter', () => {
+    window.clearTimeout(openTimer);
+    openTimer = window.setTimeout(() => sidebar.classList.add('is-open'), HOVER_INTENT_MS);
+  });
+  sidebar.addEventListener('mouseleave', () => {
+    window.clearTimeout(openTimer);
+    sidebar.classList.remove('is-open');
+  });
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && pinned && !document.querySelector('dialog[open]')) {
+      // Close and hand focus to the page: focus left inside the rail would keep it open.
+      closeDrawer();
+      r.outlet.focus();
+    }
+  };
+  document.addEventListener('keydown', onKey);
+  // After choosing a destination, close and drop any focus inside the drawer.
+  function closeDrawer() {
+    window.clearTimeout(openTimer);
+    sidebar.classList.remove('is-open');
+    setPinned(false);
+    if (sidebar.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
+  }
+
   const r = refs<{
     outlet: HTMLElement;
     clock: HTMLElement;
     date: HTMLElement;
     shift: HTMLElement;
     restaurant: HTMLElement;
+    profile: HTMLElement;
+    avatar: HTMLElement;
     userName: HTMLElement;
     userRole: HTMLElement;
   }>(el);
 
   const tick = () => {
     const now = new Date();
-    const lang = appStore.get().language;
     r.clock.textContent = formatTime(now);
-    r.date.textContent = formatLongDate(now, lang);
+    r.date.textContent = formatLongDate(now, appStore.get().language);
   };
   tick();
   const timer = window.setInterval(tick, 15_000);
@@ -132,8 +223,11 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     const s = appStore.get();
     r.restaurant.textContent = s.receipt?.restaurantName ?? '';
     if (s.user) {
-      r.userName.textContent = s.user.fullName ?? s.user.username;
+      const name = s.user.fullName ?? s.user.username;
+      r.userName.textContent = name;
       r.userRole.textContent = t(`nav.role${s.user.role}`);
+      r.avatar.textContent = initials(name);
+      r.profile.setAttribute('aria-label', `${t('profile.title')}: ${name}`);
     }
     const open = !!s.openSession;
     r.shift.textContent = t(open ? 'nav.shiftOpen' : 'nav.shiftClosed');
@@ -141,51 +235,15 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     langButton.textContent = s.language === 'uz' ? 'UZ' : 'RU';
     langButton.setAttribute('aria-label', `${t('nav.language')}: ${langButton.textContent}`);
     themeButton.replaceChildren(icon(THEME_ICON[s.theme]));
-    const label = `${t('nav.theme')}: ${t(THEME_LABEL[s.theme])}`;
-    themeButton.setAttribute('aria-label', label);
-    themeButton.title = label;
+    const themeLabel = `${t('nav.theme')}: ${t(THEME_LABEL[s.theme])}`;
+    themeButton.setAttribute('aria-label', themeLabel);
+    themeButton.title = themeLabel;
   };
   renderState();
-  const unsubscribe = appStore.subscribe((s, prev) => {
-    renderState();
-    if (s.sidebarCollapsed !== prev.sidebarCollapsed) applySidebar();
-  });
-
-  // Collapsible sidebar: icon-only when collapsed, remembered per machine. Ctrl+B toggles.
-  const applySidebar = () => {
-    const collapsed = appStore.get().sidebarCollapsed;
-    el.classList.toggle('is-collapsed', collapsed);
-    sidebarToggle.replaceChildren(icon(collapsed ? 'expand' : 'collapse'));
-    const label = t(collapsed ? 'nav.expand' : 'nav.collapse');
-    sidebarToggle.setAttribute('aria-label', label);
-    sidebarToggle.title = `${label} (Ctrl+B)`;
-    sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
-    // Labels are hidden when collapsed: keep the names for screen readers and as tooltips.
-    for (const link of [...navLinks, logout]) {
-      const text = link.querySelector('span')?.textContent ?? '';
-      link.setAttribute('aria-label', text);
-      if (collapsed) link.title = text;
-      else link.removeAttribute('title');
-    }
-  };
-  const toggleSidebar = () => {
-    const sidebarCollapsed = !appStore.get().sidebarCollapsed;
-    appStore.set({ sidebarCollapsed });
-    savePrefs({ sidebarCollapsed });
-  };
-  sidebarToggle.addEventListener('click', toggleSidebar);
-  const onKey = (e: KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'b') {
-      e.preventDefault();
-      toggleSidebar();
-    }
-  };
-  document.addEventListener('keydown', onKey);
-  applySidebar();
+  const unsubscribe = appStore.subscribe(renderState);
 
   langButton.addEventListener('click', () => {
-    const s = appStore.get();
-    const language = s.language === 'uz' ? 'ru' : 'uz';
+    const language = appStore.get().language === 'uz' ? 'ru' : 'uz';
     appStore.set({ language });
     savePrefs({ language });
   });
@@ -200,6 +258,13 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     appStore.set({ user: null, openSession: undefined });
     navigate('/login');
   });
+  // Lock = a real logout of this window, then the PIN screen: going back by URL finds no session.
+  lock.addEventListener('click', async () => {
+    playClick();
+    await api.auth.logout().catch(() => undefined);
+    appStore.set({ user: null, openSession: undefined });
+    navigate('/lock');
+  });
 
   return {
     el,
@@ -211,11 +276,13 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
         if (active) a.setAttribute('aria-current', 'page');
         else a.removeAttribute('aria-current');
       }
+      r.profile.classList.toggle('active', path === '/profile');
     },
     destroy() {
       window.clearInterval(timer);
-      unsubscribe();
+      window.clearTimeout(openTimer);
       document.removeEventListener('keydown', onKey);
+      unsubscribe();
     },
   };
 }

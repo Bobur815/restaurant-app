@@ -51,7 +51,8 @@ export function redirectFor(
 ): string | null {
   if (!setup.setupComplete) return path === '/setup' ? null : '/setup';
   if (path === '/setup') return user ? HOME : '/login';
-  if (path === '/login') return user ? HOME : null;
+  // The PIN lock screen is a second way in: skipped, like login, once someone is logged in.
+  if (path === '/login' || path === '/lock') return user ? HOME : null;
   if (access === null) return user ? HOME : '/login'; // unknown route
   if (access === 'public') return null;
   if (!user) return '/login';
