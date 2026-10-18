@@ -8,9 +8,11 @@
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
-    "build": "electron-vite build",
+    "build": "prisma generate && electron-vite build",
     "preview": "electron-vite preview",
-    "dist:win": "electron-vite build && electron-builder --config electron-builder.config.js --win",
+    "postinstall": "prisma generate",
+    "db:generate": "prisma generate",
+    "dist:win": "npm run build && electron-builder --config electron-builder.config.js --win",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
@@ -18,7 +20,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,css,html,json}\"",
     "test": "jest",
     "test:watch": "jest --watch",
-    "check": "npm run typecheck && npm run lint && npm test"
+    "check": "npm run typecheck && npm run lint && npm test",
+    "build:icons": "node --experimental-strip-types --no-warnings scripts/build-icons.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
@@ -33,6 +36,8 @@
     "globals": "17.12.0",
     "jest": "30.5.2",
     "prettier": "3.8.1",
+    "prisma": "6.19.3",
+    "sharp": "0.35.5",
     "ts-jest": "29.4.14",
     "typescript": "5.9.3",
     "vite": "7.3.6"
@@ -56,5 +61,12 @@
         }
       ]
     }
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "decimal.js": "10.6.0"
+  },
+  "prisma": {
+    "schema": "prisma/schema.sqlite.prisma"
   }
 }

@@ -1,0 +1,59 @@
+import type { PrismaClient } from '../../generated/prisma-sqlite';
+
+/**
+ * Known settings and their defaults (JSON-encoded in `settings.value`). Upserted on every start
+ * with `update: {}`, so a value the user changed is never overwritten and a key added in a later
+ * version appears on existing installs.
+ */
+export const DEFAULT_SETTINGS: Record<string, unknown> = {
+  // Set to true by the setup wizard (Phase 3) once the first admin and receipt settings exist.
+  setup_complete: false,
+  // Was localStorage `table_count` in legacy.
+  table_count: 10,
+  language: 'uz',
+  theme: 'system',
+  click_sound: true,
+  // LAN access for waiter phones (Phase 8.5); off until enabled in settings.
+  lan_enabled: false,
+};
+
+/** Legacy defaults (backend/utils/category-add-init.js), with Russian names. Fresh databases only. */
+export const DEFAULT_CATEGORIES: ReadonlyArray<{ nameUz: string; nameRu: string }> = [
+  { nameUz: 'Ovqatlar', nameRu: 'Блюда' },
+  { nameUz: 'Salatlar', nameRu: 'Салаты' },
+  { nameUz: 'Ichimliklar', nameRu: 'Напитки' },
+  { nameUz: 'Desertlar', nameRu: 'Десерты' },
+  { nameUz: 'Non mahsulotlari', nameRu: 'Хлебобулочные изделия' },
+];
+
+export const COUNTERS = ['orders'] as const;
+
+export interface SeedOptions {
+  /** True when this start created the database. Sample data (categories) goes in only then. */
+  freshDatabase: boolean;
+}
+
+export async function seedDatabase(
+  prisma: PrismaClient,
+  { freshDatabase }: SeedOptions,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+      await tx.setting.upsert({
+        where: { key },
+        update: {},
+        create: { key, value: JSON.stringify(value) },
+      });
+    }
+
+    for (const name of COUNTERS) {
+      await tx.counter.upsert({ where: { name }, update: {}, create: { name, value: 0 } });
+    }
+
+    if (freshDatabase && (await tx.category.count()) === 0) {
+      await tx.category.createMany({
+        data: DEFAULT_CATEGORIES.map((c, i) => ({ ...c, sortOrder: i })),
+      });
+    }
+  });
+}

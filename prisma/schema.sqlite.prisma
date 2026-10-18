@@ -1,0 +1,364 @@
+// SavdoChef - local SQLite schema (Electron main process).
+//
+// The app never runs `prisma migrate`. Real databases are created and upgraded by
+// src/main/database/migrations/*.ts on every start; `migrations.test.ts` fails if this file and
+// those migrations disagree, and prints the SQL for the next migration. See that test before
+// changing anything here. Rules: additive changes only; never rename or drop a column that a
+// released build has used.
+//
+// Money and quantities are Decimal. In SQLite that is a DECIMAL-affinity column; Prisma returns
+// Prisma.Decimal. Convert at the IPC boundary with shared/utils/decimal.ts, never with Number().
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma-sqlite"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== ENUMS ====================
+
+enum UserRole {
+  ADMIN
+  STAFF
+}
+
+enum OrderStatus {
+  pending
+  completed
+  cancelled
+}
+
+enum PaymentMethod {
+  cash
+  card
+  click
+  debt
+}
+
+enum PaymentStatus {
+  paid
+  pending
+  refunded
+}
+
+enum SessionStatus {
+  open
+  closed
+}
+
+enum ResidualAction {
+  CARRY_TO_NEXT
+  WRITE_OFF
+}
+
+enum ResidualStatus {
+  pending
+  applied
+}
+
+enum ExpenseType {
+  residual_writeoff
+  waste
+  breakage
+}
+
+// ==================== USERS & SETTINGS ====================
+
+model User {
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  fullName         String?
+  // bcrypt hash. The plaintext never reaches the database or leaves the main process.
+  passwordHash     String
+  role             UserRole  @default(STAFF)
+  isActive         Boolean   @default(true)
+  // Login throttling (Phase 3): consecutive failures and the lock that follows them.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  ordersCreated   Order[]   @relation("OrderCreatedBy")
+  paymentsTaken   Payment[] @relation("PaymentCreatedBy")
+  sessionsOpened  Session[] @relation("SessionOpenedBy")
+  sessionsClosed  Session[] @relation("SessionClosedBy")
+  expensesCreated Expense[] @relation("ExpenseCreatedBy")
+
+  @@map("users")
+}
+
+// Key/value app settings. `value` is JSON text, parsed by settings/ (Phase 3).
+// Known keys are listed in src/main/database/seed.ts.
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// Receipt layout. Exactly one row, always written with id = RECEIPT_SETTINGS_ID (1); legacy
+// used a `slug = "default"` singleton. No @default: Prisma turns `@id @default(1)` into
+// AUTOINCREMENT on SQLite.
+model ReceiptSettings {
+  id                   Int      @id
+  restaurantName       String
+  address              String   @default("")
+  phone                String   @default("")
+  extraPhones          String   @default("")
+  footerNote           String   @default("")
+  locale               String   @default("uz")
+  currency             String   @default("UZS")
+  logoPath             String?
+  // Printer: Windows printer name; null = system default. Phase 7.
+  printerName          String?
+  printWidthPx         Int      @default(420)
+  printUseStarsSep     Boolean  @default(true)
+  printSeparatorChar   String   @default("*")
+  printSeparatorCount  Int      @default(38)
+  printShowAddress     Boolean  @default(true)
+  printShowPhone       Boolean  @default(true)
+  printShowDateTime    Boolean  @default(true)
+  printShowOrderNumber Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@map("receipt_settings")
+}
+
+// Named sequences, incremented inside the caller's transaction ("orders" -> orderNumber).
+model Counter {
+  name  String @id
+  value Int    @default(0)
+
+  @@map("counters")
+}
+
+// ==================== MENU ====================
+
+model Category {
+  id        Int      @id @default(autoincrement())
+  nameUz    String   @unique
+  nameRu    String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  menuItems MenuItem[]
+
+  @@map("categories")
+}
+
+model MenuItem {
+  id           Int      @id @default(autoincrement())
+  nameUz       String   @unique
+  nameRu       String?
+  description  String?
+  price        Decimal  @default(0)
+  // File name inside userData/img, served by the images protocol (Phase 3). Never a full path.
+  imageFile    String?
+  categoryId   Int
+  // Legacy `portions` flag: the dish may be sold as 1 / 0.7 / 0.5 portions.
+  hasPortions  Boolean  @default(false)
+  soldByWeight Boolean  @default(false)
+  // Soft delete: dishes referenced by orders, sessions or expenses are never removed.
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category     Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems   OrderItem[]
+  sessionItems SessionItem[]
+  residuals    Residual[]
+  expenses     Expense[]
+
+  @@index([categoryId])
+  @@map("menu_items")
+}
+
+// ==================== SESSIONS (trading day) ====================
+
+model Session {
+  id         Int           @id @default(autoincrement())
+  status     SessionStatus @default(open)
+  // 1 while open, NULL once closed. UNIQUE, so the database itself allows only one open
+  // session (SQLite treats NULLs as distinct). Prisma cannot express a partial unique index.
+  // Maintained by triggers from `status` (migration 0002): code never writes it. Create
+  // sessions as open; inserting a closed one while another is open would hit the guard.
+  openGuard  Int?          @unique @default(1)
+  openedAt   DateTime      @default(now())
+  closedAt   DateTime?
+  openedById Int?
+  closedById Int?
+  updatedAt  DateTime      @updatedAt
+
+  openedBy         User?         @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy         User?         @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  items            SessionItem[]
+  orders           Order[]
+  residuals        Residual[]    @relation("ResidualSession")
+  appliedResiduals Residual[]    @relation("ResidualAppliedSession")
+  expenses         Expense[]
+
+  @@index([status])
+  @@map("sessions")
+}
+
+// remaining = initialQuantity - soldQuantity (computed, never stored).
+model SessionItem {
+  id              Int     @id @default(autoincrement())
+  sessionId       Int
+  menuItemId      Int
+  initialQuantity Decimal @default(0)
+  soldQuantity    Decimal @default(0)
+
+  session  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, menuItemId])
+  @@index([menuItemId])
+  @@map("session_items")
+}
+
+// Leftover stock at session close. One row per (session, dish, action): legacy keyed the
+// upsert on action but the unique constraint on status, which collided when the next session
+// flipped CARRY rows to `applied` (inventory.md, quirk 5).
+model Residual {
+  id                 Int            @id @default(autoincrement())
+  sessionId          Int
+  menuItemId         Int
+  quantity           Decimal        @default(0)
+  action             ResidualAction
+  status             ResidualStatus @default(pending)
+  appliedToSessionId Int?
+  expenseId          Int?           @unique
+  note               String         @default("")
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  session          Session  @relation("ResidualSession", fields: [sessionId], references: [id], onDelete: Restrict)
+  appliedToSession Session? @relation("ResidualAppliedSession", fields: [appliedToSessionId], references: [id], onDelete: Restrict)
+  menuItem         MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  expense          Expense? @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, menuItemId, action])
+  @@index([status, action])
+  @@index([menuItemId])
+  @@index([appliedToSessionId])
+  @@map("residuals")
+}
+
+model Expense {
+  id          Int         @id @default(autoincrement())
+  sessionId   Int?
+  menuItemId  Int?
+  type        ExpenseType
+  note        String      @default("")
+  quantity    Decimal     @default(0)
+  unitCost    Decimal     @default(0)
+  amount      Decimal     @default(0)
+  createdById Int?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  session   Session?  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  menuItem  MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  createdBy User?     @relation("ExpenseCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  residual  Residual?
+
+  @@index([sessionId])
+  @@index([menuItemId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("expenses")
+}
+
+// ==================== ORDERS & PAYMENTS ====================
+
+model Order {
+  id            Int            @id @default(autoincrement())
+  // YYYY-NNNNN from Counter("orders"), assigned inside the create transaction.
+  orderNumber   String         @unique
+  tableNumber   Int
+  // = tableNumber while pending, NULL otherwise. UNIQUE, so the database allows at most one
+  // pending order per table even with several devices (Phase 8.5). Same trick as Session.openGuard.
+  pendingTable  Int?           @unique
+  status        OrderStatus    @default(pending)
+  sessionId     Int
+  totalAmount   Decimal        @default(0)
+  // Final method, copied from the payment when the order completes.
+  paymentMethod PaymentMethod?
+  // Optimistic concurrency: every write checks and bumps it (Phase 8.5).
+  version       Int            @default(0)
+  createdById   Int?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  completedAt   DateTime?
+
+  session   Session     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  createdBy User?       @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  items     OrderItem[]
+  payments  Payment[]
+
+  @@index([status])
+  @@index([tableNumber, status])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            Int      @id @default(autoincrement())
+  orderId       Int
+  menuItemId    Int
+  soldByWeight  Boolean  @default(false)
+  quantity      Decimal  @default(1)
+  // Weight items: number of units and kilograms per unit.
+  units         Int?
+  weightKg      Decimal?
+  // Portion factor (1, 0.7, 0.5) for hasPortions dishes; null otherwise.
+  portion       Decimal?
+  unitPrice     Decimal  @default(0)
+  totalPrice    Decimal  @default(0)
+  // The quantity this line took from the session stock, computed once when the line is
+  // written. Updates and cancels give back exactly this, so stock cannot drift the way legacy
+  // did when create/update/cancel each recomputed it differently (inventory.md, quirk 1).
+  stockQuantity Decimal  @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([menuItemId])
+  @@map("order_items")
+}
+
+// Payments are financial records: an order with payments cannot be deleted (Restrict).
+model Payment {
+  id          Int           @id @default(autoincrement())
+  orderId     Int
+  amount      Decimal       @default(0)
+  method      PaymentMethod
+  status      PaymentStatus @default(paid)
+  paidAt      DateTime      @default(now())
+  createdById Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  order     Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdBy User? @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([paidAt])
+  @@index([method])
+  @@index([status])
+  @@map("payments")
+}

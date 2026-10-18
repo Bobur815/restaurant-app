@@ -1,0 +1,20 @@
+import { sql as init } from './0001_init';
+import { sql as sessionOpenGuard } from './0002_session_open_guard';
+
+export interface Migration {
+  /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
+  version: number;
+  name: string;
+  sql: string;
+}
+
+/**
+ * Every schema change, in order. Append only: a released migration is never edited, reordered or
+ * removed, because installed databases have already applied it. Changes are additive (new
+ * tables, new nullable or defaulted columns, new indexes, triggers); see the header of
+ * prisma/schema.sqlite.prisma.
+ */
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: 'init', sql: init },
+  { version: 2, name: 'session_open_guard', sql: sessionOpenGuard },
+];
