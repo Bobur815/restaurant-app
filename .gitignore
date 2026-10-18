@@ -3,8 +3,15 @@ node_modules/
 
 # Build output
 dist/
+dist-electron/
+dist-renderer/
 out/
+release/
+# TODO Phase 8: build/icons/ must be tracked; narrow this to build/* + !build/icons/
 build/
+
+# Generated Prisma client (Phase 2)
+src/generated/
 
 # Compiled files
 *.log
@@ -60,3 +67,10 @@ $RECYCLE.BIN/
 
 # Others
 electron-builder.yml
+
+# SQLite databases (seed moves to code; never commit customer data)
+*.db
+*.db-journal
+
+# Claude Code local settings
+.claude/settings.local.json
