@@ -46,6 +46,8 @@ export async function payOrder(
         status: 'completed',
         paymentMethod: input.method,
         completedAt: now,
+        // A delivery is paid when the courier is back with the money.
+        ...(order.orderType === 'DELIVERY' ? { deliveryStatus: 'DELIVERED' as const } : {}),
         version: { increment: 1 },
       },
     });
@@ -73,9 +75,22 @@ export async function listChecks(
       paidAt: { gte: dayStart(input.startDate), lte: dayEnd(input.endDate) },
       ...(input.method ? { method: input.method } : {}),
       ...(input.status ? { status: input.status } : {}),
-      ...(input.tableNumber ? { order: { tableNumber: input.tableNumber } } : {}),
+      ...(input.tableNumber || input.orderType
+        ? {
+            order: {
+              ...(input.tableNumber
+                ? { tableNumber: input.tableNumber, orderType: 'DINE_IN' as const }
+                : {}),
+              ...(input.orderType ? { orderType: input.orderType } : {}),
+            },
+          }
+        : {}),
     },
-    include: { order: { select: { orderNumber: true, tableNumber: true } } },
+    include: {
+      order: {
+        select: { orderNumber: true, tableNumber: true, orderType: true, customerName: true },
+      },
+    },
     orderBy,
   });
 
@@ -83,7 +98,10 @@ export async function listChecks(
     paymentId: p.id,
     orderId: p.orderId,
     orderNumber: p.order.orderNumber,
-    tableNumber: p.order.tableNumber,
+    orderType: p.order.orderType,
+    tableNumber:
+      p.order.orderType === 'DINE_IN' && p.order.tableNumber > 0 ? p.order.tableNumber : null,
+    customerName: p.order.customerName,
     amount: decStr(p.amount),
     method: p.method,
     status: p.status,
@@ -146,7 +164,9 @@ export async function cancelPaidOrder(db: Db, orderNumber: string): Promise<Orde
     if (!order) throw notFound('Buyurtma');
     if (order.status === 'cancelled') throw conflict('Buyurtma allaqachon bekor qilingan');
     if (order.status === 'pending') {
-      throw conflict("To'lanmagan buyurtmani stol orqali bekor qiling", { status: order.status });
+      throw conflict("To'lanmagan buyurtmani buyurtma oynasidan bekor qiling", {
+        status: order.status,
+      });
     }
 
     await tx.payment.deleteMany({ where: { orderId: order.id } });

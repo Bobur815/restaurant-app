@@ -88,10 +88,14 @@ export const reportsView: View = () => {
     const expenses = sum(daily.map((d) => d.expenseTotal));
     const avg = orders ? revenue.div(orders) : dec(0);
 
-    const tile = (label: string, val: string) =>
+    const tile = (label: string, val: string, note?: string) =>
       html`<div class="stat-tile">
         <span class="stat-label">${label}</span><strong class="stat-value">${val}</strong>
+        ${note ? html`<span class="stat-note">${note}</span>` : ''}
       </div>`;
+    /** Range total of one by-order-type column. */
+    const byType = (k: 'dineIn' | 'takeaway' | 'delivery' | 'deliveryFees') =>
+      toMoneyString(sum(daily.map((d) => d[k])));
 
     if (daily.length === 0) {
       content.replaceChildren(
@@ -137,6 +141,15 @@ export const reportsView: View = () => {
           ${tile(t('reports.orders'), String(orders))}
           ${tile(t('reports.avgCheck'), formatMoney(toMoneyString(avg), l))}
           ${tile(t('reports.expenseTotal'), formatMoney(toMoneyString(expenses), l))}
+        </div>
+        <div class="stat-row">
+          ${tile(t('orderType.DINE_IN'), formatMoney(byType('dineIn'), l))}
+          ${tile(t('orderType.TAKEAWAY'), formatMoney(byType('takeaway'), l))}
+          ${tile(
+            t('orderType.DELIVERY'),
+            formatMoney(byType('delivery'), l),
+            t('reports.deliveryFees', { amount: formatMoney(byType('deliveryFees'), l) }),
+          )}
         </div>
         <div class="card">
           <h2 class="card-title">${t('reports.chartTitle')}</h2>

@@ -96,7 +96,13 @@ export function payOrderModal(order: OrderDto): Promise<OrderDto | null> {
     updateChange();
 
     const modal = openModal({
-      title: t('payment.title', { n: order.tableNumber }),
+      title:
+        order.tableNumber !== null
+          ? t('payment.title', { n: order.tableNumber })
+          : t('payment.titleOpen', {
+              type: t(`orderType.${order.orderType}`),
+              number: order.orderNumber,
+            }),
       body,
       size: 'md',
       initialFocus: () => received,

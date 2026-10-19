@@ -86,6 +86,12 @@ describe('access levels', () => {
         'orders:getByNumber',
         'orders:save',
         'orders:cancel',
+        'orders:get',
+        'orders:openList',
+        'orders:saveOpen',
+        'orders:cancelOpen',
+        'orders:setDeliveryStatus',
+        'customers:findByPhone',
         'payments:pay',
         'checks:list',
         'residuals:list',
@@ -224,6 +230,47 @@ describe('invokeHandler', () => {
     expect(result).toEqual({ ok: false, error: { code: 'INTERNAL', message: expect.any(String) } });
     expect(JSON.stringify(result)).not.toContain('secret');
     expect(logged.at(-1)?.[0]).toContain('menu:list');
+  });
+
+  it('logs a Prisma error without its query arguments (customer data)', async () => {
+    const prismaError = Object.assign(
+      new Error(
+        [
+          'Invalid `tx.customer.create()` invocation:',
+          '',
+          '{ data: { phone: "998901234567", address: "Chilonzor 9" } }',
+        ].join(String.fromCharCode(10)),
+      ),
+      { name: 'PrismaClientValidationError' },
+    );
+    const broken = {
+      ...t.db,
+      menuItem: { findMany: () => Promise.reject(prismaError) },
+    };
+    await invokeHandler(
+      'menu:list',
+      HANDLERS['menu:list'] as never,
+      {
+        db: broken as never,
+        actor: admin,
+        setActor: () => undefined,
+        services: {
+          appInfo: () => ({ name: '', version: '', isPackaged: false }),
+          printer: {
+            list: async () => [],
+            print: async () => ({ printer: 'Test' }),
+            preview: async () => 'data:image/png;base64,',
+          },
+          pickImage: async () => null,
+        },
+        log: (m, e) => logged.push([m, e]),
+      },
+      {},
+    );
+    const entry = logged.at(-1)![1] as Error;
+    expect(entry.message).toContain('PrismaClientValidationError');
+    expect(entry.message).toContain('Invalid `tx.customer.create()` invocation');
+    expect(`${entry.message} ${entry.stack}`).not.toMatch(/998901234567|Chilonzor/);
   });
 
   it('setup is public only until it has run', async () => {

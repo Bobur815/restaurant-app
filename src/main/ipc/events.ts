@@ -29,6 +29,9 @@ export const READ_ONLY_CHANNELS = [
   'orders:busyTables',
   'orders:getTable',
   'orders:getByNumber',
+  'orders:get',
+  'orders:openList',
+  'customers:findByPhone',
   'checks:list',
   'residuals:list',
   'expenses:list',
@@ -38,7 +41,10 @@ export const READ_ONLY_CHANNELS = [
 type Emit<C extends IpcChannel> = (input: IpcInput<C>, data: IpcOutput<C>) => AppEvent[];
 type Mutating = Exclude<IpcChannel, (typeof READ_ONLY_CHANNELS)[number]>;
 
-const orders = (tableNumber?: number): AppEvent => ({ type: 'orders-changed', tableNumber });
+const orders = (order?: { id: number; tableNumber: number | null }): AppEvent =>
+  order
+    ? { type: 'orders-changed', orderId: order.id, tableNumber: order.tableNumber ?? undefined }
+    : { type: 'orders-changed' };
 const SESSION: AppEvent = { type: 'session-changed' };
 const MENU: AppEvent = { type: 'menu-changed' };
 const SETTINGS: AppEvent = { type: 'settings-changed' };
@@ -84,11 +90,14 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'sessions:close': () => [SESSION],
   'sessions:delete': () => [SESSION],
   // Orders move shift stock, so the shift view refreshes too.
-  'orders:save': (_input, order) => [orders(order.tableNumber), SESSION],
-  'orders:cancel': (_input, order) => [orders(order.tableNumber), SESSION],
-  'payments:pay': (_input, order) => [orders(order.tableNumber)],
+  'orders:save': (_input, order) => [orders(order), SESSION],
+  'orders:cancel': (_input, order) => [orders(order), SESSION],
+  'orders:saveOpen': (_input, order) => [orders(order), SESSION],
+  'orders:cancelOpen': (_input, order) => [orders(order), SESSION],
+  'orders:setDeliveryStatus': (_input, order) => [orders(order)],
+  'payments:pay': (_input, order) => [orders(order)],
   'checks:update': () => [orders()],
-  'checks:delete': (_input, order) => [orders(order.tableNumber), SESSION],
+  'checks:delete': (_input, order) => [orders(order), SESSION],
   'residuals:apply': () => [SESSION],
 };
 

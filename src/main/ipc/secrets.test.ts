@@ -32,6 +32,10 @@ beforeAll(async () => {
     data: { id: RECEIPT_SETTINGS_ID, ...receiptSettingsInput.parse({ restaurantName: 'Test' }) },
   });
 
+  await t.db.customer.create({
+    data: { phone: '998901234567', name: 'Mijoz', address: 'Chilonzor' },
+  });
+
   const category = await t.db.category.findFirstOrThrow();
   const dish = await t.db.menuItem.create({
     data: { nameUz: 'Non', price: '5000', categoryId: category.id },
@@ -59,6 +63,23 @@ beforeAll(async () => {
       payments: { create: { amount: '5000', method: 'cash', createdById: staff.id } },
     },
   });
+  // An unpaid delivery with a customer, so the open-order channels return real rows.
+  const customer = await t.db.customer.findUniqueOrThrow({ where: { phone: '998901234567' } });
+  await t.db.order.create({
+    data: {
+      orderNumber: '2026-00002',
+      tableNumber: 0,
+      orderType: 'DELIVERY',
+      sessionId: session.id,
+      createdById: staff.id,
+      customerId: customer.id,
+      customerName: 'Mijoz',
+      customerPhone: customer.phone,
+      deliveryAddress: 'Chilonzor',
+      deliveryStatus: 'PREPARING',
+      totalAmount: '5000',
+    },
+  });
 });
 afterAll(() => t.close());
 
@@ -66,6 +87,8 @@ const today = new Date().toISOString().slice(0, 10);
 const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'halls:list': { includeInactive: true },
   'printing:printReceipt': { orderId: 1 },
+  'orders:get': { id: 1 },
+  'customers:findByPhone': { phone: '+998 90 123 45 67' },
   'residuals:list': {},
   'expenses:list': {},
   'menu:get': { id: 1 },

@@ -34,6 +34,20 @@ enum OrderStatus {
   cancelled
 }
 
+// How the customer gets the food (feature F1-B). Takeaway and delivery orders have no table:
+// they store tableNumber 0 (the column predates them and is NOT NULL; see migration 0007).
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+enum DeliveryStatus {
+  PREPARING
+  ON_THE_WAY
+  DELIVERED
+}
+
 enum PaymentMethod {
   cash
   card
@@ -142,6 +156,26 @@ model Counter {
   value Int    @default(0)
 
   @@map("counters")
+}
+
+// ==================== CUSTOMERS ====================
+
+// Someone the restaurant delivers to or (F1-C) gives credit to. Found by phone, which is stored
+// as 12 digits, 998XXXXXXXXX (shared/utils/phone.ts).
+model Customer {
+  id        Int      @id @default(autoincrement())
+  phone     String   @unique
+  name      String?
+  address   String?
+  landmark  String?
+  note      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@map("customers")
 }
 
 // ==================== HALLS & TABLES ====================
@@ -327,28 +361,42 @@ model Expense {
 // ==================== ORDERS & PAYMENTS ====================
 
 model Order {
-  id            Int            @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   // YYYY-NNNNN from Counter("orders"), assigned inside the create transaction.
-  orderNumber   String         @unique
-  tableNumber   Int
+  orderNumber     String          @unique
+  tableNumber     Int
   // = tableNumber while pending, NULL otherwise. UNIQUE, so the database allows at most one
   // pending order per table even with several devices (Phase 8.5). Same trick as Session.openGuard.
   // Maintained by triggers from status/tableNumber (migration 0003): code never writes it.
-  pendingTable  Int?           @unique
-  status        OrderStatus    @default(pending)
-  sessionId     Int
-  totalAmount   Decimal        @default(0)
+  pendingTable    Int?            @unique
+  status          OrderStatus     @default(pending)
+  sessionId       Int
+  totalAmount     Decimal         @default(0)
   // Final method, copied from the payment when the order completes.
-  paymentMethod PaymentMethod?
+  paymentMethod   PaymentMethod?
   // Optimistic concurrency: every write checks and bumps it (Phase 8.5).
-  version       Int            @default(0)
-  createdById   Int?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  completedAt   DateTime?
+  version         Int             @default(0)
+  orderType       OrderType       @default(DINE_IN)
+  // Takeaway/delivery customer. The fields below are copies taken when the order was saved, so
+  // the receipt and history show what was true then, whatever the customer record says later.
+  customerId      Int?
+  customerName    String?
+  customerPhone   String?
+  deliveryAddress String?
+  // Landmark or courier note ("mo'ljal").
+  deliveryNote    String?
+  // Part of totalAmount; 0 unless DELIVERY.
+  deliveryFee     Decimal         @default(0)
+  deliveryStatus  DeliveryStatus?
+  courierName     String?
+  createdById     Int?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  completedAt     DateTime?
 
   session   Session     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
   createdBy User?       @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  customer  Customer?   @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items     OrderItem[]
   payments  Payment[]
 
@@ -356,6 +404,8 @@ model Order {
   @@index([tableNumber, status])
   @@index([sessionId])
   @@index([createdAt])
+  @@index([orderType, status])
+  @@index([customerId])
   @@map("orders")
 }
 

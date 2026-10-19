@@ -934,3 +934,139 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+
+/* ── Takeaway & delivery (feature F1-B) ───────────────────────────────────────────────────── */
+.customer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+.customer-panel .segmented {
+  align-self: flex-start;
+  background: var(--color-surface);
+}
+
+.customer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0 var(--space-3);
+}
+
+.customer-grid .field {
+  margin-bottom: var(--space-1);
+}
+
+.customer-known {
+  margin-left: var(--space-2);
+}
+
+.customer-panel .form-error:empty {
+  display: none;
+}
+
+.delivery-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.delivery-status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.delivery-status .input {
+  height: 36px;
+  min-width: 160px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.page-header .page-actions .btn svg {
+  flex: none;
+}
+
+.open-orders {
+  margin-bottom: var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-3);
+}
+
+.open-orders > .hall-heading {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.open-order-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-brand);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.open-order-card.is-delivery {
+  border-left-color: var(--series-1);
+}
+
+.open-order-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.open-order-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+}
+
+.open-order-head > span:nth-of-type(1) {
+  white-space: nowrap;
+}
+
+.open-order-head .muted {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.open-order-who {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.open-order-address {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  overflow-wrap: anywhere;
+}
+
+.open-order-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.open-order-foot .muted {
+  margin-left: auto;
+  font-size: var(--font-size-xs);
+}

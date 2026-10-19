@@ -1,4 +1,5 @@
-import type { DiningTableDto, HallDto, TableSummaryDto } from '@shared/types';
+import type { DiningTableDto, HallDto, OpenOrderSummaryDto, TableSummaryDto } from '@shared/types';
+import { formatPhone } from '@shared/utils/phone';
 import { api } from '../api';
 import { toastError } from '../components/toast';
 import { t } from '../i18n';
@@ -44,14 +45,25 @@ export const tablesView: View = ({ navigate }) => {
   tabs.setAttribute('role', 'tablist');
   tabs.setAttribute('aria-label', t('tables.hallsLabel'));
   const content = document.createElement('div');
+  // Takeaway and delivery (feature F1-B): start buttons in the header, open ones in a strip.
+  const actions = document.createElement('div');
+  actions.className = 'page-actions';
+  const openStrip = document.createElement('section');
+  openStrip.className = 'open-orders';
+  openStrip.setAttribute('aria-label', t('tables.openOrders'));
   el.append(
-    html`<header class="page-header"><h1>${t('tables.title')}</h1></header>`,
+    html`<header class="page-header">
+      <h1>${t('tables.title')}</h1>
+      ${actions}
+    </header>`,
     banner,
+    openStrip,
     tabs,
     content,
   );
 
   let busy: TableSummaryDto[] = [];
+  let openOrders: OpenOrderSummaryDto[] = [];
   let halls: HallDto[] = [];
   let selected = savedHall();
 
@@ -116,7 +128,73 @@ export const tablesView: View = ({ navigate }) => {
     );
   };
 
+  const renderActions = () => {
+    const { openSession, settings } = appStore.get();
+    const start = (type: 'takeaway' | 'delivery', enabled: boolean | undefined) => {
+      if (enabled === false) return [];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-primary btn-lg';
+      b.disabled = openSession === null;
+      b.append(
+        icon(type, 20),
+        document.createTextNode(t(`orderType.${type === 'takeaway' ? 'TAKEAWAY' : 'DELIVERY'}`)),
+      );
+      b.addEventListener('click', () => {
+        playClick();
+        navigate(`/orders/new/${type}`);
+      });
+      return [b];
+    };
+    actions.replaceChildren(
+      ...start('takeaway', settings?.takeawayEnabled),
+      ...start('delivery', settings?.deliveryEnabled),
+    );
+  };
+
+  const renderOpenOrders = () => {
+    const { language } = appStore.get();
+    openStrip.hidden = openOrders.length === 0;
+    openStrip.replaceChildren(
+      html`<h2 class="hall-heading">${t('tables.openOrders')}</h2>`,
+      ...openOrders.map((o) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = `open-order-card is-${o.orderType.toLowerCase()}`;
+        const who = o.customerName ?? (o.customerPhone ? formatPhone(o.customerPhone) : null);
+        b.append(
+          html`<span class="open-order-head"
+              >${icon(o.orderType === 'DELIVERY' ? 'delivery' : 'takeaway', 18)}
+              <span>${t(`orderType.${o.orderType}`)}</span>
+              <span class="muted">${formatTime(o.createdAt)}</span></span
+            >
+            <span class="open-order-who">${who ?? t('tables.noCustomer')}</span>
+            ${o.orderType === 'DELIVERY' && o.deliveryAddress
+              ? html`<span class="open-order-address">${o.deliveryAddress}</span>`
+              : ''}
+            <span class="open-order-foot">
+              <strong>${formatMoney(o.totalAmount, language)}</strong>
+              ${o.deliveryStatus
+                ? html`<span
+                    class="badge badge-${o.deliveryStatus === 'ON_THE_WAY' ? 'info' : 'muted'}"
+                    >${t(`delivery.${o.deliveryStatus}`)}</span
+                  >`
+                : ''}
+              <span class="muted">№ ${o.orderNumber}</span>
+            </span>`,
+        );
+        b.addEventListener('click', () => {
+          playClick();
+          navigate(`/orders/${o.orderId}`);
+        });
+        return b;
+      }),
+    );
+  };
+
   const render = () => {
+    renderActions();
+    renderOpenOrders();
     const { openSession } = appStore.get();
     banner.replaceChildren();
     if (openSession === null) {
@@ -171,7 +249,11 @@ export const tablesView: View = ({ navigate }) => {
 
   const load = async () => {
     try {
-      [busy, halls] = await Promise.all([api.orders.busyTables(), api.halls.list()]);
+      [busy, halls, openOrders] = await Promise.all([
+        api.orders.busyTables(),
+        api.halls.list(),
+        api.orders.openList(),
+      ]);
       render();
     } catch (error) {
       toastError(error);
@@ -183,7 +265,7 @@ export const tablesView: View = ({ navigate }) => {
     if (e.type === 'orders-changed' || e.type === 'halls-changed') void load();
   });
   const stopStore = appStore.subscribe((s, prev) => {
-    if (s.openSession !== prev.openSession) render();
+    if (s.openSession !== prev.openSession || s.settings !== prev.settings) render();
   });
 
   return {

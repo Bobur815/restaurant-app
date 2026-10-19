@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { isDecimalString } from './utils/decimal';
 import { PORTION_FACTORS } from './utils/order-line';
+import { digitsOnly, isUzPhoneComplete, normalizeUzPhone } from './utils/phone';
 
 /**
  * Input schemas for every IPC channel. The main process parses every payload with these before
@@ -22,6 +23,13 @@ export const nonNegativeDecimal = decimalString.refine((s) => !s.startsWith('-')
 export const positiveDecimal = nonNegativeDecimal.refine((s) => /[1-9]/.test(s), {
   message: "Noldan katta bo'lishi kerak",
 });
+
+/** A money amount someone types (delivery fee): so'm with at most 2 decimals, at most 10 mln. */
+export const feeAmount = nonNegativeDecimal
+  .refine((s) => !/\.\d{3,}$/.test(s), { message: "Ko'pi bilan 2 ta kasr raqam" })
+  .refine((s) => s.replace(/^0+(?=\d)/, '').split('.')[0]!.length <= 8 && Number(s) <= 10_000_000, {
+    message: "Juda katta summa (ko'pi bilan 10 000 000)",
+  });
 
 const trimmed = (min: number, max: number, label: string) =>
   z
@@ -45,6 +53,20 @@ export const role = z.enum(['ADMIN', 'STAFF']);
 export const paymentMethod = z.enum(['cash', 'card', 'click', 'debt']);
 export const paymentStatus = z.enum(['paid', 'pending', 'refunded']);
 export const tableNumber = z.number().int().min(1).max(999);
+export const orderType = z.enum(['DINE_IN', 'TAKEAWAY', 'DELIVERY']);
+export const deliveryStatus = z.enum(['PREPARING', 'ON_THE_WAY', 'DELIVERED']);
+
+/** An Uzbek phone number in any typed form, stored as 998XXXXXXXXX; empty -> null. */
+export const optionalPhone = z
+  .string()
+  .trim()
+  .max(32)
+  .nullish()
+  .transform((v) => (v && digitsOnly(v) && digitsOnly(v) !== '998' ? v : null))
+  .refine((v) => v === null || isUzPhoneComplete(v), {
+    message: "Telefon raqami to'liq emas: +998 (90) 123-45-67",
+  })
+  .transform((v) => (v === null ? null : normalizeUzPhone(v)));
 
 export const empty = z.undefined();
 
@@ -167,6 +189,9 @@ export const updateSettingsInput = z
     theme: z.enum(['system', 'light', 'dark']),
     clickSound: z.boolean(),
     printAfterPayment: z.boolean(),
+    takeawayEnabled: z.boolean(),
+    deliveryEnabled: z.boolean(),
+    deliveryFeeDefault: feeAmount,
     lanEnabled: z.boolean(),
   })
   .partial();
@@ -322,12 +347,61 @@ export const orderLineInput = z.object({
   weightKg: positiveDecimal.nullish(),
 });
 
+const orderLines = z.array(orderLineInput).min(1, { message: "Buyurtma bo'sh" }).max(200);
+
 export const saveTableOrderInput = z.object({
   tableNumber,
-  lines: z.array(orderLineInput).min(1, { message: "Buyurtma bo'sh" }).max(200),
+  lines: orderLines,
   /** Version the client last saw; omit only when creating. */
   expectedVersion: z.number().int().min(0).optional(),
 });
+
+/**
+ * A takeaway or delivery order: created without orderId, saved again with orderId and the
+ * version last seen. Delivery needs a phone and an address.
+ */
+export const saveOpenOrderInput = z
+  .object({
+    orderId: id.optional(),
+    expectedVersion: z.number().int().min(0).optional(),
+    orderType: z.enum(['TAKEAWAY', 'DELIVERY']),
+    customerPhone: optionalPhone,
+    customerName: optionalText(60),
+    deliveryAddress: optionalText(200),
+    deliveryNote: optionalText(200),
+    /** Omitted: the order's current fee (edit) or the default from settings (new). */
+    deliveryFee: feeAmount.optional(),
+    lines: orderLines,
+  })
+  .superRefine((v, ctx) => {
+    if (v.orderType !== 'DELIVERY') return;
+    if (!v.customerPhone)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['customerPhone'],
+        message: 'Yetkazib berish uchun telefon raqami kerak',
+      });
+    if (!v.deliveryAddress)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['deliveryAddress'],
+        message: 'Yetkazib berish manzili kerak',
+      });
+  });
+
+export const orderIdInput = z.object({
+  orderId: id,
+  expectedVersion: z.number().int().min(0).optional(),
+});
+
+export const deliveryStatusInput = z.object({
+  orderId: id,
+  status: deliveryStatus,
+  courierName: optionalText(60).optional(),
+  expectedVersion: z.number().int().min(0).optional(),
+});
+
+export const phoneLookupInput = z.object({ phone: z.string().trim().max(32) });
 
 export const tableInput = z.object({ tableNumber });
 export const cancelTableOrderInput = z.object({
@@ -348,6 +422,7 @@ export const listChecksInput = z.object({
   method: paymentMethod.optional(),
   status: paymentStatus.optional(),
   tableNumber: tableNumber.optional(),
+  orderType: orderType.optional(),
   sortBy: z.enum(['paidAt', 'tableNumber', 'amount']).default('paidAt'),
   direction: z.enum(['asc', 'desc']).default('desc'),
 });
@@ -404,5 +479,6 @@ export const salesReportInput = z.object({
 
 export type SetupInput = z.infer<typeof setupInput>;
 export type SaveTableOrderInput = z.infer<typeof saveTableOrderInput>;
+export type SaveOpenOrderInput = z.infer<typeof saveOpenOrderInput>;
 /** As the renderer sends it (before schema defaults). */
 export type UpdateReceiptSettingsInput = z.input<typeof updateReceiptSettingsInput>;

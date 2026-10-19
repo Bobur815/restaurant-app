@@ -60,6 +60,9 @@ describe('settings', () => {
       theme: 'system',
       clickSound: true,
       printAfterPayment: true,
+      takeawayEnabled: true,
+      deliveryEnabled: true,
+      deliveryFeeDefault: '0',
       lanEnabled: false,
       setupComplete: false,
     });

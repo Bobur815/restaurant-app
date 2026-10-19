@@ -8,6 +8,8 @@ import {
   formatTime,
   localName,
 } from '@shared/utils/format';
+import { formatPhone } from '@shared/utils/phone';
+import { dec } from '@shared/utils/decimal';
 
 /**
  * The customer receipt as a standalone HTML document, built in the main process from the
@@ -35,6 +37,14 @@ const LABELS: Record<Language, Record<string, string>> = {
     portion07: '70%',
     portionHalf: 'yarim',
     sample: 'Namuna',
+    TAKEAWAY: 'Olib ketish',
+    DELIVERY: 'Yetkazib berish',
+    customer: 'Mijoz',
+    phone: 'Tel',
+    address: 'Manzil',
+    note: "Mo'ljal",
+    remark: 'Izoh',
+    deliveryFee: 'Yetkazib berish xizmati',
   },
   ru: {
     table: 'Стол',
@@ -51,6 +61,14 @@ const LABELS: Record<Language, Record<string, string>> = {
     portion07: '70%',
     portionHalf: 'половина',
     sample: 'Образец',
+    TAKEAWAY: 'С собой',
+    DELIVERY: 'Доставка',
+    customer: 'Клиент',
+    phone: 'Тел',
+    address: 'Адрес',
+    note: 'Ориентир',
+    remark: 'Комментарий',
+    deliveryFee: 'Услуга доставки',
   },
 };
 
@@ -88,7 +106,11 @@ export function buildReceiptHtml(
   ].join('');
 
   const meta = [
-    `<div><b>${e(L.table)}:</b> ${e(order.tableNumber)}</div>`,
+    order.orderType !== 'DINE_IN'
+      ? `<div><b>${e(L[order.orderType])}</b></div>`
+      : order.tableNumber !== null
+        ? `<div><b>${e(L.table)}:</b> ${e(order.tableNumber)}</div>`
+        : '<div></div>',
     settings.printShowOrderNumber
       ? `<div class="right"><b>${e(L.order)}:</b> #${e(order.orderNumber)}</div>`
       : '<div></div>',
@@ -113,6 +135,27 @@ export function buildReceiptHtml(
       </div>`;
     })
     .join('');
+
+  // Takeaway/delivery: who it is for and where it goes, as saved with the order.
+  const customer =
+    order.orderType === 'DINE_IN'
+      ? ''
+      : [
+          order.customerName ? `<div><b>${e(L.customer)}:</b> ${e(order.customerName)}</div>` : '',
+          order.customerPhone
+            ? `<div><b>${e(L.phone)}:</b> ${e(formatPhone(order.customerPhone))}</div>`
+            : '',
+          order.deliveryAddress
+            ? `<div><b>${e(L.address)}:</b> ${e(order.deliveryAddress)}</div>`
+            : '',
+          // A delivery's note is the landmark; on takeaway it is a free remark.
+          order.deliveryNote
+            ? `<div><b>${e(order.orderType === 'DELIVERY' ? L.note : L.remark)}:</b> ${e(order.deliveryNote)}</div>`
+            : '',
+        ].join('');
+  const fee = dec(order.deliveryFee).gt(0)
+    ? `<div class="row"><span>${e(L.deliveryFee)}</span><span class="amount">${e(formatMoney(order.deliveryFee, lang))}</span></div>`
+    : '';
 
   const method: PaymentMethod | null = order.payments[0]?.method ?? order.paymentMethod;
   const paymentBlock = method
@@ -142,6 +185,7 @@ export function buildReceiptHtml(
   .amount { white-space: nowrap; font-weight: 600; }
   .total { display: flex; justify-content: space-between; margin: 8px 0; font-size: 17px; font-weight: 700; }
   .muted { font-size: 12px; }
+  .customer { margin: 4px 0; overflow-wrap: anywhere; }
   .footer { margin-top: 10px; text-align: center; }
 </style>
 </head>
@@ -149,10 +193,12 @@ export function buildReceiptHtml(
 ${header}
 ${separator}
 <div class="meta">${meta}</div>
+${customer ? `<div class="customer">${customer}</div>` : ''}
 <hr />
 ${lines}
 <hr />
 <div class="muted">${e(L.positions)}: ${order.lines.length}</div>
+${fee}
 <div class="total"><span>${e(L.total)}:</span><span class="amount">${e(formatMoney(order.totalAmount, lang))}</span></div>
 ${paymentBlock}
 ${settings.footerNote.trim() ? `${separator}<p class="footer">${e(settings.footerNote)}</p>` : ''}
@@ -190,7 +236,16 @@ export function sampleOrder(lang: Language): OrderDto {
   return {
     id: 0,
     orderNumber: `${new Date().getFullYear()}-00000`,
+    orderType: 'DINE_IN',
     tableNumber: 1,
+    customerId: null,
+    customerName: null,
+    customerPhone: null,
+    deliveryAddress: null,
+    deliveryNote: null,
+    deliveryFee: '0',
+    deliveryStatus: null,
+    courierName: null,
     status: 'completed',
     sessionId: 0,
     totalAmount: '129600',

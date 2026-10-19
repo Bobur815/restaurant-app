@@ -21,12 +21,18 @@ import {
   listMenuItems,
   updateMenuItem,
 } from '../menu/menu-items';
+import { findCustomerByPhone } from '../customers/customers';
 import {
+  cancelOpenOrder,
   cancelTableOrder,
+  getOrder,
   getOrderByNumber,
   getTableOrder,
   listBusyTables,
+  listOpenOrders,
+  saveOpenOrder,
   saveTableOrder,
+  setDeliveryStatus,
 } from '../orders/orders';
 import { cancelPaidOrder, listChecks, payOrder, updatePayment } from '../payments/payments';
 import { previewReceipt, printOrderReceipt, printTestReceipt } from '../printing/printing';
@@ -199,6 +205,18 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     saveTableOrder(ctx.db, ctx.actor, input),
   ),
   'orders:cancel': user(S.cancelTableOrderInput, (ctx, input) => cancelTableOrder(ctx.db, input)),
+  'orders:get': user(S.idInput, (ctx, { id }) => getOrder(ctx.db, id)),
+  'orders:openList': user(S.empty, (ctx) => listOpenOrders(ctx.db)),
+  'orders:saveOpen': user(S.saveOpenOrderInput, (ctx, input) =>
+    saveOpenOrder(ctx.db, ctx.actor, input),
+  ),
+  'orders:cancelOpen': user(S.orderIdInput, (ctx, input) => cancelOpenOrder(ctx.db, input)),
+  'orders:setDeliveryStatus': user(S.deliveryStatusInput, (ctx, input) =>
+    setDeliveryStatus(ctx.db, input),
+  ),
+  'customers:findByPhone': user(S.phoneLookupInput, (ctx, { phone }) =>
+    findCustomerByPhone(ctx.db, phone),
+  ),
   'payments:pay': user(S.payOrderInput, (ctx, input) => payOrder(ctx.db, ctx.actor, input)),
   'checks:list': user(S.listChecksInput, (ctx, input) => listChecks(ctx.db, input)),
   'checks:update': admin(S.updatePaymentInput, (ctx, input) => updatePayment(ctx.db, input)),

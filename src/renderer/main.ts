@@ -31,6 +31,9 @@ const ROUTES: RouteDef<View>[] = [
   { path: '/lock', access: 'public', layout: 'bare', view: lockView },
   { path: '/tables', access: 'user', layout: 'shell', view: tablesView },
   { path: '/tables/:table', access: 'user', layout: 'shell', view: orderView },
+  // Takeaway and delivery (feature F1-B): a new one by type, a saved one by id.
+  { path: '/orders/new/:type', access: 'user', layout: 'shell', view: orderView },
+  { path: '/orders/:id', access: 'user', layout: 'shell', view: orderView },
   { path: '/sessions', access: 'user', layout: 'shell', view: sessionsView },
   { path: '/checks', access: 'user', layout: 'shell', view: checksView },
   { path: '/profile', access: 'user', layout: 'shell', view: profileView },

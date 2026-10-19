@@ -28,6 +28,9 @@ export async function salesReport(
         paidAt: true,
         order: {
           select: {
+            id: true,
+            orderType: true,
+            deliveryFee: true,
             items: {
               select: {
                 menuItemId: true,
@@ -53,6 +56,10 @@ export async function salesReport(
     | 'card'
     | 'click'
     | 'debt'
+    | 'DINE_IN'
+    | 'TAKEAWAY'
+    | 'DELIVERY'
+    | 'fees'
     | 'expense'
     | 'writeoff'
     | 'waste'
@@ -74,6 +81,10 @@ export async function salesReport(
         card: zero(),
         click: zero(),
         debt: zero(),
+        DINE_IN: zero(),
+        TAKEAWAY: zero(),
+        DELIVERY: zero(),
+        fees: zero(),
         expense: zero(),
         writeoff: zero(),
         waste: zero(),
@@ -90,6 +101,7 @@ export async function salesReport(
     Map<number, { nameUz: string; quantity: Dec; stock: Dec; revenue: Dec }>
   >();
 
+  const feeCounted = new Set<number>();
   for (const p of payments) {
     const key = dayKey(p.paidAt);
     const acc = day(key);
@@ -97,6 +109,12 @@ export async function salesReport(
     acc.orders += 1;
     acc.total = acc.total.plus(amount);
     acc[p.method] = acc[p.method].plus(amount);
+    acc[p.order.orderType] = acc[p.order.orderType].plus(amount);
+    // A fee belongs to the order, not to each of its payments.
+    if (!feeCounted.has(p.order.id)) {
+      feeCounted.add(p.order.id);
+      acc.fees = acc.fees.plus(p.order.deliveryFee.toString());
+    }
 
     const perDay = products.get(key) ?? new Map();
     products.set(key, perDay);
@@ -133,6 +151,10 @@ export async function salesReport(
     click: toMoneyString(a.click),
     debt: toMoneyString(a.debt),
     plastic: toMoneyString(a.card.plus(a.click)),
+    dineIn: toMoneyString(a.DINE_IN),
+    takeaway: toMoneyString(a.TAKEAWAY),
+    delivery: toMoneyString(a.DELIVERY),
+    deliveryFees: toMoneyString(a.fees),
     expenseTotal: toMoneyString(a.expense),
     residualWriteOff: toMoneyString(a.writeoff),
     waste: toMoneyString(a.waste),

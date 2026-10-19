@@ -1,5 +1,11 @@
-import type { CategoryDto, MenuItemDto, OrderDto, StockShortage } from '@shared/types';
-import { dec } from '@shared/utils/decimal';
+import type {
+  CategoryDto,
+  DeliveryStatus,
+  MenuItemDto,
+  OrderDto,
+  StockShortage,
+} from '@shared/types';
+import { dec, sum } from '@shared/utils/decimal';
 import { PORTION_FACTORS, type PortionFactor } from '@shared/utils/order-line';
 import { api, isApiError } from '../../api';
 import { confirmDialog } from '../../components/modal';
@@ -27,6 +33,7 @@ import {
   toSaveInput,
   type DraftLine,
 } from './draft';
+import { createCustomerPanel, type OpenType } from './customer-panel';
 import { payOrderModal } from './payment-modal';
 import { printReceipt } from './print-receipt';
 import { askWeight } from './weight-modal';
@@ -57,9 +64,32 @@ function thumb(file: string | null, className: string): HTMLElement {
   return box;
 }
 
-/** One table's order: lines on the left, the menu on the right (legacy buyurtma screen). */
+/**
+ * What the screen is editing: a table's order (`/tables/:table`), or a takeaway/delivery order,
+ * new (`/orders/new/takeaway|delivery`) or saved (`/orders/:id`).
+ */
+type Target =
+  | { kind: 'table'; tableNumber: number }
+  | { kind: 'open'; orderId: number | null; type: OpenType };
+
+function targetFrom(params: Record<string, string>): Target {
+  if (params['table']) return { kind: 'table', tableNumber: Number(params['table']) };
+  if (params['type'])
+    return {
+      kind: 'open',
+      orderId: null,
+      type: params['type'] === 'delivery' ? 'DELIVERY' : 'TAKEAWAY',
+    };
+  return { kind: 'open', orderId: Number(params['id']), type: 'TAKEAWAY' };
+}
+
+/**
+ * One order: lines on the left, the menu on the right (legacy buyurtma screen). Takeaway and
+ * delivery orders add the customer panel above the lines.
+ */
 export const orderView: View = ({ params, navigate }) => {
-  const tableNumber = Number(params['table']);
+  const target = targetFrom(params);
+  const tableNumber = target.kind === 'table' ? target.tableNumber : 0;
   const lang = () => appStore.get().language;
 
   let menu: MenuItemDto[] = [];
@@ -81,11 +111,12 @@ export const orderView: View = ({ params, navigate }) => {
             >${icon('back', 18)}<span>${t('app.back')}</span></a
           >
           <div class="order-title">
-            <h1>${t('order.title', { n: tableNumber })}</h1>
+            <h1 data-ref="title"></h1>
             <span class="muted" data-ref="number"></span>
           </div>
         </header>
         <div data-ref="notice"></div>
+        <div data-ref="customer"></div>
         <div class="order-lines" data-ref="lines"></div>
         <footer class="order-footer">
           <div class="order-total">
@@ -108,6 +139,8 @@ export const orderView: View = ({ params, navigate }) => {
       </aside>`,
   );
   const r = refs<{
+    title: HTMLElement;
+    customer: HTMLElement;
     number: HTMLElement;
     notice: HTMLElement;
     lines: HTMLElement;
@@ -131,11 +164,25 @@ export const orderView: View = ({ params, navigate }) => {
     return b;
   }
 
-  const dirty = () => !sameAsSaved(lines, order);
+  // Takeaway/delivery: customer, address, fee; saved with the order.
+  const panel =
+    target.kind === 'open'
+      ? createCustomerPanel({
+          type: target.type,
+          onChange: () => renderLines(),
+          onStatus: (status, courierName) => void changeStatus(status, courierName),
+        })
+      : null;
+  if (panel) r.customer.append(panel.el);
+
+  const dirty = () => !sameAsSaved(lines, order) || (panel?.isDirty() ?? false);
+  const title = () =>
+    target.kind === 'table' ? t('order.title', { n: tableNumber }) : t(`orderType.${panel!.type}`);
 
   // ── rendering ──────────────────────────────────────────────────────────────────────────────
 
   function renderHeader() {
+    r.title.textContent = title();
     r.number.textContent = order
       ? t('order.orderNumber', { number: order.orderNumber })
       : t('order.newOrder');
@@ -189,7 +236,9 @@ export const orderView: View = ({ params, navigate }) => {
         </table>`,
       );
     }
-    r.total.textContent = formatMoney(draftTotal(lines), l);
+    // The delivery fee is part of the order total (main computes the same).
+    r.total.textContent = formatMoney(sum([draftTotal(lines), panel?.fee() ?? '0']).toFixed(), l);
+    r.title.textContent = title();
     const unsaved = dirty();
     saveButton.disabled =
       saving || lines.length === 0 || !unsaved || stale || appStore.get().openSession === null;
@@ -392,10 +441,25 @@ export const orderView: View = ({ params, navigate }) => {
     if (saving) return false;
     saving = true;
     renderLines();
+    panel?.clearErrors();
     try {
-      order = await api.orders.save(toSaveInput(tableNumber, lines, order?.version));
+      const wasNew = order === null;
+      if (target.kind === 'table') {
+        order = await api.orders.save(toSaveInput(tableNumber, lines, order?.version));
+      } else {
+        const { feeValid: _feeValid, ...customer } = panel!.values();
+        order = await api.orders.saveOpen({
+          ...customer,
+          orderId: order?.id,
+          expectedVersion: order?.version,
+          lines: toSaveInput(0, lines).lines,
+        });
+      }
       lines = fromOrder(order, menu);
+      panel?.setOrder(order);
       toast(t('order.saved'), 'success');
+      // A new takeaway/delivery order now has an address of its own (no history entry).
+      if (target.kind === 'open' && wasNew) location.replace(`#/orders/${order.id}`);
       return true;
     } catch (error) {
       const details = isApiError(error)
@@ -413,6 +477,9 @@ export const orderView: View = ({ params, navigate }) => {
         if (isApiError(error, 'VALIDATION') && typeof details?.['lineIndex'] === 'number') {
           invalidLine = details['lineIndex'] as number;
         }
+        // Customer field problems (phone, address) show under their fields.
+        if (panel && isApiError(error, 'VALIDATION') && !('lineIndex' in (details ?? {})))
+          panel.showError(error);
         toastError(error);
       }
       return false;
@@ -445,13 +512,18 @@ export const orderView: View = ({ params, navigate }) => {
     if (!order) return;
     const ok = await confirmDialog({
       title: t('order.cancelOrder'),
-      message: t('order.cancelConfirm', { n: tableNumber }),
+      message:
+        target.kind === 'table'
+          ? t('order.cancelConfirm', { n: tableNumber })
+          : t('order.cancelConfirmOpen', { number: order.orderNumber }),
       danger: true,
       confirmLabel: t('order.cancelOrder'),
     });
     if (!ok) return;
     try {
-      await api.orders.cancel({ tableNumber, expectedVersion: order.version });
+      if (target.kind === 'table')
+        await api.orders.cancel({ tableNumber, expectedVersion: order.version });
+      else await api.orders.cancelOpen({ orderId: order.id, expectedVersion: order.version });
       toast(t('order.cancelled'), 'success');
       order = null;
       lines = [];
@@ -460,6 +532,29 @@ export const orderView: View = ({ params, navigate }) => {
       toastError(error);
     }
   });
+
+  async function changeStatus(status: DeliveryStatus, courierName: string | null) {
+    if (!order || dirty()) {
+      toast(t('order.saveFirst'), 'info');
+      return;
+    }
+    try {
+      order = await api.orders.setDeliveryStatus({
+        orderId: order.id,
+        status,
+        courierName,
+        expectedVersion: order.version,
+      });
+      panel?.setOrder(order);
+      toast(t(`delivery.${status}`), 'success');
+    } catch (error) {
+      if (isApiError(error, 'CONFLICT')) {
+        stale = true;
+        renderHeader();
+      }
+      toastError(error);
+    }
+  }
 
   r.search.addEventListener('input', () => {
     search = r.search.value.trim();
@@ -477,19 +572,32 @@ export const orderView: View = ({ params, navigate }) => {
 
   // ── loading & live updates ─────────────────────────────────────────────────────────────────
 
+  function fetchOrder(): Promise<OrderDto | null> {
+    if (target.kind === 'table') return api.orders.getTable({ tableNumber });
+    if (target.orderId === null) return Promise.resolve(null);
+    return api.orders.get({ id: target.orderId });
+  }
+
   async function load() {
     try {
       const [m, c, o, s] = await Promise.all([
         api.menu.list({}),
         api.categories.list({}),
-        api.orders.getTable({ tableNumber }),
+        fetchOrder(),
         api.sessions.getOpen(),
       ]);
       menu = m;
       categories = c;
       order = o;
       lines = o ? fromOrder(o, m) : [];
+      panel?.setOrder(o);
       stale = false;
+      // A paid or cancelled takeaway/delivery order has nothing left to do here.
+      if (o && o.status !== 'pending') {
+        toast(t('order.closed'), 'info');
+        navigate('/tables');
+        return;
+      }
       appStore.set({ openSession: s });
       renderHeader();
       renderChips();
@@ -504,13 +612,14 @@ export const orderView: View = ({ params, navigate }) => {
   void load().then(() => r.search.focus());
 
   const stopEvents = api.events.subscribe(async (e) => {
-    if (
+    const mine =
       e.type === 'orders-changed' &&
-      (e.tableNumber === undefined || e.tableNumber === tableNumber) &&
-      !saving
-    ) {
+      (target.kind === 'table'
+        ? e.tableNumber === undefined || e.tableNumber === tableNumber
+        : e.orderId === undefined || (order !== null && e.orderId === order.id));
+    if (mine && !saving) {
       // Our own save also announces; only a different version means someone else changed it.
-      const fresh = await api.orders.getTable({ tableNumber }).catch(() => undefined);
+      const fresh = await fetchOrder().catch(() => undefined);
       if (fresh === undefined) return;
       if (
         (fresh?.version ?? null) !== (order?.version ?? null) ||

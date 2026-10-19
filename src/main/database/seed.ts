@@ -16,6 +16,10 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   click_sound: true,
   // Legacy printed the receipt right after every payment.
   print_after_payment: true,
+  // Order types (feature F1-B): both offered; delivery fee typed per order unless set here.
+  takeaway_enabled: true,
+  delivery_enabled: true,
+  delivery_fee_default: '0',
   // LAN access for waiter phones (Phase 8.5); off until enabled in settings.
   lan_enabled: false,
 };

@@ -4,6 +4,7 @@ import { icon, type IconName } from '../../ui/icons';
 import type { View, ViewInstance } from '../types';
 import { usersView } from '../users/users-view';
 import { hallsSection } from './halls-section';
+import { ordersSection } from './orders-section';
 import { printerSection } from './printer-section';
 import { receiptSection } from './receipt-section';
 import { systemSection } from './system-section';
@@ -19,6 +20,7 @@ interface Section {
 export const SETTINGS_SECTIONS: readonly Section[] = [
   { id: 'system', label: 'settings.sectionSystem', icon: 'sliders', view: systemSection },
   { id: 'halls', label: 'settings.sectionHalls', icon: 'halls', view: hallsSection },
+  { id: 'orders', label: 'settings.sectionOrders', icon: 'delivery', view: ordersSection },
   { id: 'receipt', label: 'settings.sectionReceipt', icon: 'receipt', view: receiptSection },
   { id: 'printer', label: 'settings.sectionPrinter', icon: 'printer', view: printerSection },
   { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView },

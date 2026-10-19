@@ -70,8 +70,24 @@ export function toIpcError(error: unknown, log: HandlerContext['log'], channel: 
       return { code: 'NOT_FOUND', message: 'Yozuv topilmadi' };
   }
 
-  log(`[ipc] ${channel} failed`, error);
+  log(`[ipc] ${channel} failed`, loggable(error));
   return { code: 'INTERNAL', message: INTERNAL_MESSAGE };
+}
+
+/**
+ * Prisma error messages quote the query, arguments included (customer names, phones, addresses).
+ * The log gets the error's name, code and first line only; other errors are logged as they are.
+ */
+function loggable(error: unknown): unknown {
+  const e = error as { name?: unknown; message?: unknown; code?: unknown } | null;
+  if (!e || typeof e.name !== 'string' || !e.name.startsWith('PrismaClient')) return error;
+  const firstLine =
+    String(e.message ?? '')
+      .trim()
+      .split('\n')[0] ?? '';
+  const safe = new Error(`${e.name}${e.code ? ` ${String(e.code)}` : ''}: ${firstLine}`);
+  safe.name = e.name;
+  return safe;
 }
 
 /**

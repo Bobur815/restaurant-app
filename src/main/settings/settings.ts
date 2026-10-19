@@ -1,5 +1,9 @@
 import { z } from 'zod';
-import type { updateReceiptSettingsInput, updateSettingsInput } from '@shared/schemas';
+import {
+  nonNegativeDecimal,
+  type updateReceiptSettingsInput,
+  type updateSettingsInput,
+} from '@shared/schemas';
 import type { AppSettings, ReceiptSettingsDto } from '@shared/types';
 import type { DbOrTx } from '../domain/db';
 import { notFound } from '../domain/errors';
@@ -15,6 +19,9 @@ const SETTING_KEYS = {
   theme: { key: 'theme', schema: z.enum(['system', 'light', 'dark']) },
   clickSound: { key: 'click_sound', schema: z.boolean() },
   printAfterPayment: { key: 'print_after_payment', schema: z.boolean() },
+  takeawayEnabled: { key: 'takeaway_enabled', schema: z.boolean() },
+  deliveryEnabled: { key: 'delivery_enabled', schema: z.boolean() },
+  deliveryFeeDefault: { key: 'delivery_fee_default', schema: nonNegativeDecimal },
   lanEnabled: { key: 'lan_enabled', schema: z.boolean() },
   setupComplete: { key: 'setup_complete', schema: z.boolean() },
 } as const satisfies Record<keyof AppSettings, { key: string; schema: z.ZodType }>;

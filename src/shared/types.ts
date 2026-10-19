@@ -7,6 +7,8 @@ import type { DecimalString } from './utils/decimal';
 
 export type Role = 'ADMIN' | 'STAFF';
 export type OrderStatus = 'pending' | 'completed' | 'cancelled';
+export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
+export type DeliveryStatus = 'PREPARING' | 'ON_THE_WAY' | 'DELIVERED';
 export type PaymentMethod = 'cash' | 'card' | 'click' | 'debt';
 export type PaymentStatus = 'paid' | 'pending' | 'refunded';
 export type SessionStatus = 'open' | 'closed';
@@ -56,6 +58,11 @@ export interface AppSettings {
   clickSound: boolean;
   /** Print the customer receipt automatically after a payment. */
   printAfterPayment: boolean;
+  /** Order types offered on the tables screen (F1-B); dine-in is always on. */
+  takeawayEnabled: boolean;
+  deliveryEnabled: boolean;
+  /** Pre-filled delivery fee, editable per order. */
+  deliveryFeeDefault: DecimalString;
   lanEnabled: boolean;
   setupComplete: boolean;
 }
@@ -205,7 +212,9 @@ export interface PaymentDto {
 export interface OrderDto {
   id: number;
   orderNumber: string;
-  tableNumber: number;
+  orderType: OrderType;
+  /** Dine-in only; null for takeaway and delivery (and legacy orders without a table). */
+  tableNumber: number | null;
   status: OrderStatus;
   sessionId: number;
   totalAmount: DecimalString;
@@ -216,8 +225,43 @@ export interface OrderDto {
   updatedAt: string;
   completedAt: string | null;
   createdBy: string | null;
+  /** Takeaway/delivery: the customer as saved with the order (phone 998XXXXXXXXX). */
+  customerId: number | null;
+  customerName: string | null;
+  customerPhone: string | null;
+  deliveryAddress: string | null;
+  deliveryNote: string | null;
+  /** Included in totalAmount; '0' unless delivery. */
+  deliveryFee: DecimalString;
+  deliveryStatus: DeliveryStatus | null;
+  courierName: string | null;
   lines: OrderLineDto[];
   payments: PaymentDto[];
+}
+
+/** An unpaid takeaway or delivery order, for the strip on the tables screen. */
+export interface OpenOrderSummaryDto {
+  orderId: number;
+  orderNumber: string;
+  orderType: Exclude<OrderType, 'DINE_IN'>;
+  customerName: string | null;
+  customerPhone: string | null;
+  deliveryAddress: string | null;
+  deliveryStatus: DeliveryStatus | null;
+  totalAmount: DecimalString;
+  lineCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * What the order form may learn from a phone number (any logged-in user can ask): only what
+ * autofill needs. Ids, notes and (F1-C) debt stay out of it.
+ */
+export interface CustomerLookupDto {
+  name: string | null;
+  address: string | null;
+  landmark: string | null;
 }
 
 export interface TableSummaryDto {
@@ -243,7 +287,9 @@ export interface CheckDto {
   paymentId: number;
   orderId: number;
   orderNumber: string;
-  tableNumber: number;
+  orderType: OrderType;
+  tableNumber: number | null;
+  customerName: string | null;
   amount: DecimalString;
   method: PaymentMethod;
   status: PaymentStatus;
@@ -311,6 +357,12 @@ export interface DailyReportRow {
   debt: DecimalString;
   /** card + click (legacy "plastik"). */
   plastic: DecimalString;
+  /** Payments by order type (F1-B); they add up to total. */
+  dineIn: DecimalString;
+  takeaway: DecimalString;
+  delivery: DecimalString;
+  /** Delivery fees inside `delivery`, each order counted once. */
+  deliveryFees: DecimalString;
   expenseTotal: DecimalString;
   residualWriteOff: DecimalString;
   waste: DecimalString;

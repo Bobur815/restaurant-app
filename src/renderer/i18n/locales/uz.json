@@ -84,7 +84,9 @@
     "all": "Hammasi",
     "hallsLabel": "Zallar",
     "otherTables": "Boshqa stollar",
-    "emptyHall": "Bu zalda faol stol yo'q"
+    "emptyHall": "Bu zalda faol stol yo'q",
+    "openOrders": "Olib ketish va yetkazib berish",
+    "noCustomer": "Mijoz ko'rsatilmagan"
   },
   "order": {
     "title": "Stol {{n}}",
@@ -127,7 +129,10 @@
     "unitPrice": "Bir dona narxi",
     "pricePerKg": "1 kg narxi: {{price}}",
     "add": "Qo'shish",
-    "perKg": "/ kg"
+    "perKg": "/ kg",
+    "cancelConfirmOpen": "№ {{number}} buyurtmani bekor qilasizmi? Taomlar qoldiqqa qaytariladi.",
+    "saveFirst": "Avval o'zgarishlarni saqlang",
+    "closed": "Bu buyurtma allaqachon yopilgan"
   },
   "payment": {
     "title": "To'lov — Stol {{n}}",
@@ -141,7 +146,8 @@
     "change": "Qaytim",
     "debtNote": "Nasiya to'lov sifatida yoziladi (holati: kutilmoqda)",
     "confirm": "To'lovni tasdiqlash",
-    "done": "To'lov qabul qilindi: {{amount}}"
+    "done": "To'lov qabul qilindi: {{amount}}",
+    "titleOpen": "To'lov · {{type}} № {{number}}"
   },
   "sessions": {
     "title": "Smenalar",
@@ -265,7 +271,8 @@
     "order_cancelled": "Bekor qilingan",
     "order_pending": "To'lanmagan",
     "cashier": "Kassir",
-    "paidAt": "To'lov vaqti"
+    "paidAt": "To'lov vaqti",
+    "where": "Stol / turi"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -340,7 +347,12 @@
     "sectionUsers": "Foydalanuvchilar",
     "receiptContent": "Chek mazmuni",
     "receiptLayout": "Ko'rinish",
-    "printerHint": "Chek 80 mm qog'ozga chiqadi. Printer tanlanmasa, XP-80 turidagi termoprinter, bo'lmasa standart printer olinadi."
+    "printerHint": "Chek 80 mm qog'ozga chiqadi. Printer tanlanmasa, XP-80 turidagi termoprinter, bo'lmasa standart printer olinadi.",
+    "sectionOrders": "Buyurtma turlari",
+    "ordersHint": "Zaldagi stollar doim bor. Bu yerda olib ketish va yetkazib berishni yoqish yoki o'chirish mumkin; ochiq buyurtmalar baribir yakunlanadi.",
+    "takeawayEnabled": "Olib ketish",
+    "deliveryEnabled": "Yetkazib berish",
+    "deliveryFeeDefault": "Yetkazib berish narxi (odatiy, so'm)"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -391,7 +403,8 @@
     "prev": "Oldingi",
     "next": "Keyingi",
     "none": "Ma'lumot yo'q",
-    "all": "Hammasi"
+    "all": "Hammasi",
+    "deliveryFees": "shundan yetkazish xizmati: {{amount}}"
   },
   "lock": {
     "title": "Ekran qulflangan",
@@ -455,5 +468,27 @@
     "deleted": "O'chirildi",
     "seatsShort_one": "{{count}} o'rin",
     "seatsShort_other": "{{count}} o'rin"
+  },
+  "orderType": {
+    "label": "Buyurtma turi",
+    "DINE_IN": "Zalda",
+    "TAKEAWAY": "Olib ketish",
+    "DELIVERY": "Yetkazib berish"
+  },
+  "customer": {
+    "phone": "Telefon",
+    "known": "Doimiy mijoz",
+    "name": "Mijoz ismi",
+    "address": "Manzil",
+    "landmark": "Mo'ljal",
+    "note": "Izoh",
+    "fee": "Yetkazib berish narxi"
+  },
+  "delivery": {
+    "status": "Holati",
+    "courier": "Kuryer",
+    "PREPARING": "Tayyorlanmoqda",
+    "ON_THE_WAY": "Yo'lda",
+    "DELIVERED": "Yetkazildi"
   }
 }

@@ -1,6 +1,7 @@
-import type { CheckDto, OrderDto, PaymentMethod, PaymentStatus } from '@shared/types';
+import type { CheckDto, OrderDto, OrderType, PaymentMethod, PaymentStatus } from '@shared/types';
 import { PAYMENT_METHODS, PAYMENT_STATUSES } from '@shared/types';
-import { sum, toMoneyString } from '@shared/utils/decimal';
+import { dec, sum, toMoneyString } from '@shared/utils/decimal';
+import { formatPhone } from '@shared/utils/phone';
 import { api } from '../../api';
 import { field, formError, selectField, showFormError, value } from '../../components/forms';
 import { confirmDialog, openModal } from '../../components/modal';
@@ -20,6 +21,17 @@ import {
 } from '../../utils/format';
 import { printReceipt } from '../order/print-receipt';
 import type { View } from '../types';
+
+/** Where an order was served: its table, or takeaway/delivery with the customer's name. */
+function where(o: {
+  orderType: OrderType;
+  tableNumber: number | null;
+  customerName: string | null;
+}) {
+  if (o.orderType === 'DINE_IN')
+    return o.tableNumber !== null ? t('tables.table', { n: o.tableNumber }) : '—';
+  return [t(`orderType.${o.orderType}`), o.customerName].filter(Boolean).join(' · ');
+}
 
 const today = () => {
   const d = new Date();
@@ -58,6 +70,17 @@ export const checksView: View = () => {
         ...PAYMENT_STATUSES.map((s) => ({ value: s, label: t(`checks.status_${s}`) })),
       ],
     })}
+    ${selectField({
+      name: 'orderType',
+      label: t('orderType.label'),
+      options: [
+        { value: '', label: t('checks.all') },
+        ...(['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((o) => ({
+          value: o,
+          label: t(`orderType.${o}`),
+        })),
+      ],
+    })}
     ${field({
       name: 'tableNumber',
       label: t('checks.table'),
@@ -94,7 +117,7 @@ export const checksView: View = () => {
       tr.tabIndex = 0;
       tr.append(
         html`<td class="strong">${c.orderNumber}</td>
-          <td>${c.tableNumber}</td>
+          <td>${where(c)}</td>
           <td>${formatDateTime(c.paidAt)}</td>
           <td>${t(`payment.${c.method}`)}</td>
           <td>${statusBadge(c.status)}</td>
@@ -114,7 +137,7 @@ export const checksView: View = () => {
           <thead>
             <tr>
               <th>${t('checks.number')}</th>
-              <th>${t('checks.table')}</th>
+              <th>${t('checks.where')}</th>
               <th>${t('checks.time')}</th>
               <th>${t('checks.method')}</th>
               <th>${t('checks.status')}</th>
@@ -144,6 +167,7 @@ export const checksView: View = () => {
         method: (value(filters, 'method') || undefined) as PaymentMethod | undefined,
         status: (value(filters, 'status') || undefined) as PaymentStatus | undefined,
         tableNumber: table ? Number(table) : undefined,
+        orderType: (value(filters, 'orderType') || undefined) as OrderType | undefined,
         sortBy: value(filters, 'sortBy') as 'paidAt' | 'tableNumber' | 'amount',
       });
       render();
@@ -189,9 +213,24 @@ export const checksView: View = () => {
     });
     const print = button(t('printing.print'), 'secondary', () => printReceipt(order.id));
     const body = html`<p class="muted">
-        ${t('tables.table', { n: order.tableNumber })} · ${t(`checks.order_${order.status}`)} ·
-        ${t('checks.cashier')}: ${order.createdBy ?? '—'}
+        ${where(order)} · ${t(`checks.order_${order.status}`)} · ${t('checks.cashier')}:
+        ${order.createdBy ?? '—'}
       </p>
+      ${order.orderType !== 'DINE_IN'
+        ? html`<p class="muted">
+            ${[
+              order.customerName,
+              order.customerPhone ? formatPhone(order.customerPhone) : null,
+              order.deliveryAddress,
+              order.deliveryNote,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+            ${dec(order.deliveryFee).gt(0)
+              ? ` · ${t('customer.fee')}: ${formatMoney(order.deliveryFee, l)}`
+              : ''}
+          </p>`
+        : ''}
       <h3 class="section-title">${t('checks.lines')}</h3>
       <table class="lines-table">
         <tbody>

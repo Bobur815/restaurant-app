@@ -7,6 +7,8 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 - The real data is in `%APPDATA%\SavdoChef` (imported from the legacy app on 2026-10-19). Harnesses, smoke tests and upgrade tests run on a **copy** in a scratch `userData`; the real folder is only ever read to copy it. `guard-bash` blocks deleting/moving it and opening it with sqlite3.
 - Before any operation that writes a real database (import, repair): back up, dry-run on a copy, then run. `legacy-import.ts --replace` moves the old database to `backups/` first.
 
+- Never ship Prisma's `RedefineTables` SQL (new table, copy, DROP, rename) for a table others reference: our migrations run in a transaction, where `PRAGMA foreign_keys=OFF` does nothing, so the DROP cascades (order lines) or fails (payments). Write ADD COLUMN by hand (a FK column is allowed when it defaults to NULL) and let the drift test prove the schema matches (migration 0007).
+
 ## Electron and Chromium
 
 - Electron's ICU has no Uzbek: `Intl`/`toLocaleString('uz')` silently fall back. All number/date text goes through `shared/utils/format.ts`.

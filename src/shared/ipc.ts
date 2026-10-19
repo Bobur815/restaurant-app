@@ -93,6 +93,14 @@ export interface IpcChannels {
   'orders:getByNumber': Channel<In<typeof S.orderNumberInput>, T.OrderDto>;
   'orders:save': Channel<In<typeof S.saveTableOrderInput>, T.OrderDto>;
   'orders:cancel': Channel<In<typeof S.cancelTableOrderInput>, T.OrderDto>;
+  'orders:get': Channel<In<typeof S.idInput>, T.OrderDto>;
+  /** Unpaid takeaway and delivery orders. */
+  'orders:openList': Channel<undefined, T.OpenOrderSummaryDto[]>;
+  'orders:saveOpen': Channel<In<typeof S.saveOpenOrderInput>, T.OrderDto>;
+  'orders:cancelOpen': Channel<In<typeof S.orderIdInput>, T.OrderDto>;
+  'orders:setDeliveryStatus': Channel<In<typeof S.deliveryStatusInput>, T.OrderDto>;
+  /** Autofill for the order form; null when the phone is unknown or incomplete. */
+  'customers:findByPhone': Channel<In<typeof S.phoneLookupInput>, T.CustomerLookupDto | null>;
   'payments:pay': Channel<In<typeof S.payOrderInput>, T.OrderDto>;
   'checks:list': Channel<In<typeof S.listChecksInput>, T.CheckDto[]>;
   'checks:update': Channel<In<typeof S.updatePaymentInput>, T.PaymentDto[]>;
@@ -171,6 +179,12 @@ export const IPC_CHANNELS = [
   'orders:getByNumber',
   'orders:save',
   'orders:cancel',
+  'orders:get',
+  'orders:openList',
+  'orders:saveOpen',
+  'orders:cancelOpen',
+  'orders:setDeliveryStatus',
+  'customers:findByPhone',
   'payments:pay',
   'checks:list',
   'checks:update',
@@ -218,7 +232,8 @@ export const APP_EVENT_CHANNEL = 'app:event';
  * through the normal API, so permissions and freshness stay in one place.
  */
 export type AppEvent =
-  | { type: 'orders-changed'; tableNumber?: number }
+  /** tableNumber for a dine-in order, orderId always when one order changed. */
+  | { type: 'orders-changed'; tableNumber?: number; orderId?: number }
   | { type: 'session-changed' }
   | { type: 'menu-changed' }
   | { type: 'settings-changed' }

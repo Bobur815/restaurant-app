@@ -195,6 +195,65 @@ describe('splitStatements', () => {
   });
 });
 
+describe('migration 7 (order types) on a database with orders', () => {
+  it('keeps every order, line and payment; old orders are dine-in; open orders need no table', async () => {
+    const dbFile = newDbFile();
+    // A v6 database, written with plain SQL (the v7 client would ask for columns v6 lacks).
+    const v6 = await openAt(dbFile, { migrations: MIGRATIONS.slice(0, 6) });
+    const p = v6.prisma;
+    const category = await p.category.findFirstOrThrow();
+    const dish = await p.menuItem.create({
+      data: { nameUz: 'Non', price: '5000', categoryId: category.id },
+    });
+    await p.$executeRawUnsafe(
+      `INSERT INTO "sessions" ("id", "status", "openGuard", "updatedAt") VALUES (1, 'open', 1, CURRENT_TIMESTAMP)`,
+    );
+    for (const [id, status, table] of [
+      [1, 'completed', 3],
+      [2, 'pending', 4],
+    ] as const) {
+      await p.$executeRawUnsafe(
+        `INSERT INTO "orders" ("id", "orderNumber", "tableNumber", "status", "sessionId", "totalAmount", "updatedAt") VALUES (${id}, '2026-0000${id}', ${table}, '${status}', 1, 10000, CURRENT_TIMESTAMP)`,
+      );
+      await p.$executeRawUnsafe(
+        `INSERT INTO "order_items" ("orderId", "menuItemId", "quantity", "unitPrice", "totalPrice", "stockQuantity", "updatedAt") VALUES (${id}, ${dish.id}, 2, 5000, 10000, 2, CURRENT_TIMESTAMP)`,
+      );
+    }
+    await p.$executeRawUnsafe(
+      `INSERT INTO "payments" ("orderId", "amount", "method", "updatedAt") VALUES (1, 10000, 'cash', CURRENT_TIMESTAMP)`,
+    );
+    await p.$disconnect();
+
+    const v7 = await openAt(dbFile);
+    expect(v7.migration.applied).toContain('7_order_types_customers');
+    const db = v7.prisma;
+    expect(await db.order.count()).toBe(2);
+    expect(await db.orderItem.count()).toBe(2);
+    expect(await db.payment.count()).toBe(1);
+    const orders = await db.order.findMany({ orderBy: { id: 'asc' } });
+    expect(orders.map((o) => [o.orderType, o.pendingTable, o.deliveryFee.toString()])).toEqual([
+      ['DINE_IN', null, '0'],
+      ['DINE_IN', 4, '0'],
+    ]);
+
+    // The replaced trigger: open takeaway orders (tableNumber 0) never collide with each other.
+    for (const n of [3, 4]) {
+      await db.order.create({
+        data: { orderNumber: `T-${n}`, tableNumber: 0, orderType: 'TAKEAWAY', sessionId: 1 },
+      });
+    }
+    expect(
+      await db.order.count({
+        where: { orderType: 'TAKEAWAY', status: 'pending', pendingTable: null },
+      }),
+    ).toBe(2);
+    // ...and a dine-in table is still one pending order only.
+    await expect(
+      db.order.create({ data: { orderNumber: 'D-4', tableNumber: 4, sessionId: 1 } }),
+    ).rejects.toMatchObject({ code: 'P2002' });
+  });
+});
+
 describe('database-level guarantees', () => {
   let prisma: PrismaClient;
   let menuItemId: number;
