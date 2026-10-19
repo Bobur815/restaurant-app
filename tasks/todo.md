@@ -222,10 +222,14 @@ Started 2026-10-19.
 
 ## Phase 9: `.claude/` and docs
 
-- [ ] Rewrite `CLAUDE.md` for the new stack (commands, IPC chain, hard rules: additive DB upgrades, no float math on money, back up before any data operation).
-- [ ] Port from posgro: `rules/electron.md` (minus React/Styled Components/Zustand lines, plus "vanilla TS, `html` helper, no innerHTML with data"), `rules/prisma.md`, skill `ipc-feature` (rewritten for the vanilla chain), skill `prisma-migration` (SQLite section), `commands/check.md` + `plan.md`, `agents/migration-reviewer.md`, hooks (`guard-bash`, `format`).
-- [ ] Replace the current `/new-endpoint` and `/add-ipc` commands; they describe the Express design.
-- [ ] `tasks/todo.md` for ongoing work, `tasks/lessons.md` for mistakes, as in posgro.
+Done 2026-10-19.
+
+- [x] `CLAUDE.md` rewritten for the new stack: commands, layout, IPC chain, database/migrations, printing, hard rules (Decimal, additive DB changes, back up before data operations, security model, `html` helper, uz+ru, dependency pinning, git), workflow pointers.
+- [x] Ported from posgro and rewritten for the vanilla chain: `rules/electron.md` (src/main, renderer, shared), `rules/prisma.md` (prisma/, src/main/database), skills `ipc-feature` and `prisma-migration` (numbered migrations + drift test instead of `prisma migrate`), commands `/check` and `/plan`, agent `migration-reviewer`; `electron-security-reviewer` and `prisma-reviewer` rewritten for the TS code.
+- [x] Hooks (`.claude/hooks/`, run with `node --experimental-strip-types`, Node 22): `guard-bash` blocks destructive SQL, `prisma migrate`/`db push`/data-loss flags, deleting/moving or opening `%APPDATA%\SavdoChef` with sqlite, force push, hard reset, forced clean, staging `.db`/`.env`, recursive deletes (11 allow/block cases checked by hand); `format` runs Prettier on edited `src/**/*.{ts,css,html,json}` (checked with a Windows backslash path). `settings.json`: allow/ask/deny for the new scripts, hooks wired. Both took effect immediately in the session that wrote them.
+- [x] Removed the Express-era `/new-endpoint`, `/add-ipc`, `/schema-change` and `rules/backend.md`.
+- [x] `tasks/lessons.md` started with this rewrite's real lessons (data safety, Electron/Chromium quirks, harness pattern, Windows/Git Bash editing). `tasks/todo.md` stays the plan.
+- [ ] Known false positive: `guard-bash` matches the whole command text, so a heredoc or commit message that merely mentions a blocked command is blocked too. Workaround: put such text in a file. Tighten only if it gets in the way.
 
 ## Phase 8.5: LAN access for waiter phones (first release, decided 2026-10-18)
 

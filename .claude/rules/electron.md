@@ -1,24 +1,20 @@
 ---
 paths:
-  - "main.js"
-  - "preload.js"
-  - "printing.js"
-  - "*.page.js"
-  - "*-window.js"
-  - "renderer/**/*.js"
-  - "html/**/*.html"
-  - "utils/**/*.js"
+  - "src/main/**"
+  - "src/renderer/**"
+  - "src/shared/**"
 ---
 
-# Electron / renderer rules
+# Electron rules (vanilla TS, no framework)
 
-- Every `BrowserWindow` uses `contextIsolation: true` and `nodeIntegration: false`, with `preload: getPreloadPath()` from `paths.js`. Don't relax these.
-- The renderer reaches the main process only through `window.electronAPI` (defined in `preload.js`). To add a capability: expose one narrow function in `preload.js`, register the handler in `main.js` (`ipcMain.handle` for request/response, `ipcMain.on` for fire-and-forget). Never expose `ipcRenderer` itself or accept file paths/URLs from the renderer without validation.
-- `preload.js` is CommonJS-style (`require('electron')`) inside an ESM package. Keep it that way.
-- Renderer scripts are ES modules loaded by the HTML pages in `html/`. Keep one page script per window; shared helpers live in `utils/` or `renderer/`.
-- API calls from the renderer go to `http://localhost:3000/api/...`. Check `res.ok` and surface failures with `showAlert` from `utils/alert.js`, not `window.alert`.
-- Child windows tell the parent to refresh via IPC events (`session-updated`, `menu-updated`/`reload-menu`). Reuse these instead of polling.
-- Don't use `innerHTML` with API data (dish names, notes, usernames) without escaping; existing code has an `esc` helper pattern in `printing.js`. Prefer `textContent`.
-- `html/index.html` has a Content-Security-Policy meta tag. If you add scripts, styles or remote resources, update it deliberately instead of loosening it to `unsafe-inline`/`*`.
-- Receipt HTML is built in `printing.js` and must stay in visual sync with the `#checkPreview` markup in `html/payment.html`. Change both or neither.
-- Uzbek (Latin) for UI text.
+- **IPC chain:** `shared/schemas.ts` (zod) → `shared/ipc.ts` (`IpcChannels` + `IPC_CHANNELS`) → `main/ipc/handlers.ts` (`pub`/`user`/`admin`) → domain function `(db, actor, input)` → renderer `api.<ns>.<method>()` from `@renderer/api`. Only `src/renderer/api` touches `window.electronAPI` (lint-enforced); nothing touches `ipcRenderer` except `preload.ts`. Full steps: skill `ipc-feature`.
+- Every channel is either in `READ_ONLY_CHANNELS` or emits change events (`main/ipc/events.ts`); `events.test.ts` enforces it. Views refresh by subscribing, never by polling.
+- Access is enforced in main (`ipc-safe.ts`) on every call. UI hiding (`isAdmin(role)`, route `access`) is cosmetic. New channels appear in the access snapshot in `ipc.test.ts`; update it deliberately.
+- Domain modules take `Db` and plain inputs, contain no Electron imports, and are tested against a real temporary SQLite (`main/test-utils/db.ts`). Expected failures throw `AppError` (`notFound`, `conflict`, ...) with an Uzbek message; anything else surfaces as `INTERNAL` and is logged.
+- **Decimal across IPC as strings** (`shared/utils/decimal.ts`). Round once, when stored or shown.
+- **DOM:** `html\`...\`` from `renderer/ui/html.ts` (escapes every value, attribute values must be quoted) or `textContent`. No `innerHTML`; `raw()` only for markup this code wrote. Icons via `ui/icons.ts` (lucide).
+- Views live in `renderer/views/<area>/`, are registered in `renderer/main.ts` (`path`, `access`, `layout`), are a `View` returning `{ el, destroy?, canLeave? }` (`views/types.ts`; `destroy` drops subscriptions and timers), and use `components/` (forms, modal, toast, page). Styling: CSS in `renderer/styles/` with the tokens on `:root` (light and dark); no inline `style=` (CSP).
+- i18n: every string in BOTH `i18n/locales/uz.json` and `ru.json`; dish names via `localName()` (`nameUz`/`nameRu`). Numbers/dates only through `shared/utils/format.ts`.
+- `webPreferences` stay `contextIsolation: true`, `sandbox: true`, `nodeIntegration: false`. The CSP in `renderer/index.html` stays strict (`devCsp()` in `electron.vite.config.ts` loosens it only for the dev server). Windows that load generated content (receipt) get no preload and deny navigation and `window.open`.
+- Hardware (printers) runs in main with timeouts and never blocks a sale: the renderer fires and shows a toast.
+- Packaging: no `node_modules` ship; electron-vite bundles main deps. Native or path-loaded files need `asarUnpack` and `files` in `electron-builder.config.js`. Fuses disable runAsNode, so harnesses run with `npx electron <script>` against `dist-electron`, not the packaged exe.

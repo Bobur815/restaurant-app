@@ -1,7 +1,7 @@
 // SavdoChef - local SQLite schema (Electron main process).
 //
 // The app never runs `prisma migrate`. Real databases are created and upgraded by
-// src/main/database/migrations/*.ts on every start; `migrations.test.ts` fails if this file and
+// src/main/database/migrations/*.ts on every start; `database.test.ts` fails if this file and
 // those migrations disagree, and prints the SQL for the next migration. See that test before
 // changing anything here. Rules: additive changes only; never rename or drop a column that a
 // released build has used.

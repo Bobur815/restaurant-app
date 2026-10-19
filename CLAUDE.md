@@ -1,82 +1,64 @@
 # SavdoChef
 
-> **Rewrite in progress (branch `rewrite/ts-ipc`, plan in `tasks/todo.md`).** The root is now the new TypeScript + electron-vite app (`src/`, `npm run dev`, `npm run check`). Everything below describes the **legacy** app, which was deleted from this branch in Phase 6 and lives only in git tag `legacy-js-express` (`git show legacy-js-express:backend/service/Order.service.js`, or `git worktree add ../savdochef-legacy legacy-js-express` to run it). Use it as the behavior reference (`tasks/inventory.md`); don't restore it. This file gets rewritten in Phase 9.
+Offline POS for small cafes and eateries (Uzbek market): tables, orders, payments, daily shifts with per-dish stock, leftovers, receipts, reports. One Windows till, no cloud, no internet. Electron + TypeScript, SQLite through Prisma, vanilla DOM renderer (no React, no UI framework). UI in Uzbek (Latin) and Russian.
 
-Offline restaurant CRM + POS for small cafes/eateries (Uzbek market). Electron desktop app that embeds an Express + Prisma + SQLite API in the main process. Single machine, no cloud, no internet required.
-
-Plain JavaScript, ES modules everywhere (`"type": "module"`). **No TypeScript, no tests, no linter.** Do not introduce TS, a bundler, or a framework unless asked.
+Architecture follows posgro (`C:\Users\user\posgro`) without React. The old Express + JS app is gone from the tree; it lives in tag `legacy-js-express` and is the behaviour reference (`tasks/inventory.md`). Don't restore it.
 
 ## Commands
 
-Two separate `package.json` files; install both.
-
 ```bash
-npm install && npm --prefix backend install
-
-npm run dev          # nodemon + electron (watches js/html/css)
-npm start            # electron-forge start
-npm run package      # prisma generate + forge package
-npm run make:win     # prisma generate + Windows x64 zip (Squirrel is disabled)
-
-npm --prefix backend run generate        # prisma generate
-npm --prefix backend run migrate:dev     # create + apply migration (dev)
-npm --prefix backend run migrate:deploy  # apply existing migrations
+npm install            # also runs prisma generate (src/generated/ is gitignored)
+npm run dev            # electron-vite dev (HMR renderer, restarts main)
+npm run check          # typecheck (node + web) + eslint + jest. Run before saying "done".
+npm run format         # prettier on src/**/*.{ts,css,html,json}; format:check in CI style
+npm test -- <pattern>  # one suite, e.g. npm test -- printing
+npm run build          # prisma generate + electron-vite build (dist-electron/, dist-renderer/)
+npm run dist:win       # build + NSIS installer -> dist/SavdoChef-Setup-<version>.exe
+npm run release -- patch|minor|major   # check, version + tag, installer + sha256 in release/
+npm run build:icons    # regenerate build/icons + favicon from src/shared/branding/brand.ts
+npm run import:legacy  # legacy database -> new database (usage in scripts/import-legacy.ts header)
 ```
 
-Backend alone (no Electron): `cd backend && DATABASE_URL="file:./data/app.db" node server.js` (SQLite path is relative to `prisma/`). Listens on `127.0.0.1:3000`.
-
-There is no test/lint/typecheck. Verify changes by running the app or hitting the API with curl, and say what you actually ran.
+Verify UI changes in the real app, not only with tests: `npm run build`, then an Electron harness script (pattern in `tasks/lessons.md`) against a **copy** of the data in a scratch `userData`. Say what you actually ran.
 
 ## Architecture
 
 ```
-main.js              Electron main: boots backend inline, IPC handlers, window lifecycle
-preload.js           contextBridge -> window.electronAPI (only renderer<->main channel)
-printing.js          Receipt HTML builder + silent print via IPC 'print-receipt'
-*.page.js, *-window.js   BrowserWindow factories (login, main, category, session)
-html/ css/ renderer/ Renderer pages (one HTML per window), page scripts as ES modules
-utils/               Renderer-side helpers (alert, payStatuses, paymentMethods, ...)
-backend/             Express 5 API + Prisma (SQLite)
+src/shared/     types, zod schemas, IPC channel map, api client, formatting, Decimal helpers, branding
+src/main/       Electron main: database, domain modules, IPC, printing, images, logger, window
+  database/     open.ts (Electron-free), migrate.ts, migrations/NNNN_*.ts, seed.ts, legacy-import.ts
+  domain/       db.ts (Db type), errors.ts (AppError + codes)
+  ipc/          handlers.ts (channel -> access + schema + domain call), ipc-safe.ts, events.ts, register.ts
+  <domain>/     auth, users, menu, orders, payments, sessions, residuals, reports, settings, printing
+  preload.ts    contextBridge -> window.electronAPI built from the channel list (preload-api.ts)
+src/renderer/   index.html (CSP), main.ts (routes), api/ (only user of electronAPI), router/, store/,
+                ui/html.ts (escaping template), components/, layout/, views/<area>/, i18n/locales/{uz,ru}.json
+prisma/schema.sqlite.prisma   the schema; the app never runs prisma migrate
+scripts/        build-icons.mjs, import-legacy.ts, release.mjs
 ```
 
-Startup flow (`main.js`): `ensureDatabaseUrl()` sets `DATABASE_URL` to `<userData>/data/app.db` (copied from the seed `backend/prisma/data/app.db` only if missing) -> `import()` of `backend/server.js` inside the Electron main process -> wait for `/api/setup/status` -> if setup incomplete open `setup.html`, else login window.
+**IPC chain** (one per feature, no shortcuts): zod schema in `shared/schemas.ts` → channel in `shared/ipc.ts` (`IpcChannels` + `IPC_CHANNELS`) → `main/ipc/handlers.ts` entry with access `pub`/`user`/`admin` → domain function `(db, actor, input)` in `main/<domain>/` → `invokeHandler` (`ipc-safe.ts`) checks the session user and role in main, parses input, maps errors to codes → preload exposes `api.<ns>.<method>` automatically → renderer calls `api.<ns>.<method>()` from `@renderer/api` (returns data or throws `ApiError`). Every channel is either in `READ_ONLY_CHANNELS` or says which change event it emits (`events.ts`); views subscribe with `api.events.subscribe`. Compile-time maps and tests fail if a channel is missing anywhere.
 
-Backend layering (keep it): `router/*.js` -> `controller/*.js` (class, `try/catch -> next(error)`) -> `service/*.js` (singleton `export default new (class ...)`, all Prisma access) -> `database/prisma.js`. Routers are registered in `router/index.routers.js` as `{ url, funk }` and mounted under `/api`. Validation is Joi in `utils/Joi.validation.js`; errors go through `CustomError` and `middleware/ErrorHandler.js`.
+**Database:** SQLite file in `%APPDATA%\SavdoChef\data\savdochef.db` (WAL). On every start `openDatabase` runs pending migrations from `src/main/database/migrations/` (tracked by `PRAGMA user_version`), after a `VACUUM INTO` backup in `backups/` (10 kept). A newer database than the build is refused. `database.test.ts` fails if migrations and `schema.sqlite.prisma` drift, and prints the SQL for the next migration.
 
-The renderer talks to the API with `fetch('http://localhost:3000/api/...')` and to the main process only through `window.electronAPI`. Windows are separate `BrowserWindow`s; child -> parent refresh uses IPC events (`session-updated`, `menu-updated` -> `reload-menu`).
+**Domain:** dishes (`portions` 1 / 0.7 / 0.5, `soldByWeight`), one pending order per table (DB trigger), order number `YYYY-00007`, payments `cash | card | click | debt`, one open shift (DB trigger) with per-dish initial/sold quantity, leftovers carried or written off at close and applied when the next shift opens, receipt settings singleton, users `ADMIN | STAFF` with bcrypt passwords and optional 4-digit PIN (lock screen).
 
-## Domain model (backend/prisma/schema.prisma)
+**Printing:** main builds the receipt HTML from the database (`main/printing/receipt.ts`, escaped, own CSP) and silent-prints it from a hidden sandboxed window without preload; the renderer only sends an order id. Preview = PNG of the same document.
 
-- **Menu / Category**: dishes; `portions` (allowed factors 1, 0.7, 0.5) and `soldByWeight` change quantity math.
-- **Order / OrderItem**: one pending order per table; `orderNumber` is `YYYY-00007` from `Counter` (`nextSeqTx` inside a transaction).
-- **Payment**: `cash | card | click | debt`; status `paid | pending | refunded`.
-- **Session / SessionItem**: a trading day with per-dish `initialQuantity` / `soldQuantity`; remaining = initial - sold (computed, not stored). `Session.service` checks for an existing `open` session before creating one, and `recordSale` targets the open session.
-- **Residual / Expense**: leftover stock at session close, `CARRY_TO_NEXT` or `WRITE_OFF`; a `Residual` can link to an `Expense` via `expenseId`.
-- **User / Permission**: `ADMIN | STAFF`. **Setting**: key/value JSON (`setup_complete`). **RecieptSettings**: receipt layout singleton (`slug = "default"`).
+## Hard rules
 
-Money and quantities are Prisma `Decimal`; convert with `Number()` and round with `roundN` (default 2 dp). Currency UZS, locale `uz-UZ`.
+- **Money and quantities are `Decimal`** end to end (`decimal.js` / `Prisma.Decimal`), strings across IPC (`shared/utils/decimal.ts`). No float math, no `Number()` on money except for display/charts.
+- **Database changes are additive** (new table, nullable or defaulted column, index, trigger) and go through skill `prisma-migration`. Never edit or reorder a released migration. Never edit `.db` files by hand.
+- **Back up before any data operation** on a real database (import, repair, manual SQL): copy the file first. Real data lives in `%APPDATA%\SavdoChef`; tests and harnesses use a scratch `userData`. Never commit a database.
+- **Security model:** access is checked in main on every call; UI hiding is cosmetic. `contextIsolation: true`, `sandbox: true`, no `nodeIntegration`, no new `webPreferences` holes, CSP in `index.html` stays strict. The renderer never passes file paths, URLs or HTML to main. No password/PIN hash ever leaves main (`secrets.test.ts`).
+- **Renderer DOM:** build markup with `html\`...\`` (escapes everything) or `textContent`; `innerHTML` is lint-blocked. `raw()` only for markup the code itself wrote.
+- **Text:** every UI string in both `uz.json` and `ru.json`. User-facing errors from main are Uzbek. Code and logs English. Format numbers/dates with `shared/utils/format.ts` (Electron's ICU has no Uzbek; don't use `Intl`/`toLocaleString` for uz).
+- **Dependencies:** exact versions, released at least two weeks ago. Main-process deps are bundled by electron-vite; anything native or loaded by path needs `asarUnpack`/`files` in `electron-builder.config.js`.
+- **Git:** work on `rewrite/ts-ipc` (or a feature branch). Commit only when asked, push only when asked. Commit messages end with the `Co-Authored-By` line.
 
-## Conventions
+## Workflow
 
-- UI text and user-facing API messages are Uzbek (Latin script). Code identifiers are English. Keep existing Uzbek strings; add new ones in the same language.
-- Match the surrounding file style (mixed quotes/semicolons already exist; don't reformat unrelated code).
-- Do not add `fetch` calls to hardcoded hosts other than `localhost:3000`.
-- Never enable `nodeIntegration`; keep `contextIsolation: true`. New renderer capabilities go through `preload.js` + `ipcMain` in `main.js`.
-
-## Known traps (verified in code)
-
-1. **Dead legacy code**: `backend/models/*.js` are old Mongoose models, not imported anywhere, and `mongoose` is not a dependency. `backend/middleware/SetupGate.js` is unused and broken (`prisma.settings`, `Settings.updateOne`). Don't import or "fix" them; delete only if asked.
-2. **Passwords are plaintext**: `Auth.service.js` compares `===` and `routes/setup.js` stores the raw password. There is no auth middleware on the API. Don't copy this pattern; if asked to fix, plan a migration for existing users (hash on next login).
-3. **Error status bug**: `CustomError` sets `statusCode`, but `ErrorHandler` responds with `err.status || 500`, so thrown `CustomError(…, 400)` still returns 500. Set both fields or fix the handler (check the frontend for dependence first).
-4. **Schema changes don't reach existing installs**: the seed DB is copied only on first run and `migrate deploy` is not called at startup (commented out in `server.js`). Any migration needs a story for already-installed databases.
-5. **Tracked SQLite files**: `backend/prisma/data/app.db` (seed) and `backend/prisma/savdochef.db` are committed. Never edit them by hand or commit a DB containing real customer data.
-6. **Health probe mismatch**: `server.js` exposes `/api/health`, but `waitForApi` in `main.js` probes `/health` (404) then `/api/setup/status`. Startup works only because of the second probe.
-7. **`preload.js` uses `require`** while the package is `"type": "module"`; it works as a sandboxed preload. Don't convert to `import` without testing a packaged build.
-8. **Packaging**: backend is shipped via `extraResource` + `asarUnpack` (Prisma needs unpacked binaries); `main.js` prefers `backend/dist/main.js` if it exists, but no build step produces it. Forge references `build/brand_logo.png`, which isn't in the repo. Winston logs to `process.cwd()/utils/errors.log`, which may be unwritable in a packaged app.
-9. `Reciept` (sic) is used consistently in the model, routes, services and controllers. Keep the spelling; renaming needs a migration plus route changes in the renderer.
-
-## When making changes
-
-- Schema change: use `/schema-change`. New API route: use `/new-endpoint`. New renderer-to-main call: use `/add-ipc`.
-- Before finishing a backend change, check that the Prisma query shape matches `schema.prisma` (field names are camelCase, e.g. `tableNumber`, not `table_number`).
-- Stock logic (`Order.service.js` `effQty`, `Session.service.js` `recordSale`) affects real money and inventory; read both fully before editing and describe the before/after behavior in your summary.
+- Non-trivial work: `/plan` first (questions, then checkable items in `tasks/todo.md`), wait for approval.
+- New feature over IPC: skill `ipc-feature`. Schema change: skill `prisma-migration`, then agent `migration-reviewer`. Main/preload/renderer security-relevant edits: agent `electron-security-reviewer`. Domain logic touching stock, orders or money: agent `prisma-reviewer`.
+- Before finishing: `/check`. When corrected or when something surprising bites, add a line to `tasks/lessons.md`.
+- Stock and money logic (`orders/`, `payments/`, `sessions/`, `residuals/`, `shared/utils/order-line.ts`): read the module and its tests fully before editing and describe before/after behaviour in the summary.
