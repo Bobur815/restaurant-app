@@ -18,6 +18,7 @@ import {
   saveTableOrder,
 } from '../orders/orders';
 import { cancelPaidOrder, listChecks, payOrder, updatePayment } from '../payments/payments';
+import { previewReceipt, printOrderReceipt, printTestReceipt } from '../printing/printing';
 import { salesReport } from '../reports/reports';
 import { applyResiduals, listExpenses, listResiduals } from '../residuals/residuals';
 import {
@@ -113,6 +114,16 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'receipt:get': pub(S.empty, (ctx) => getReceiptSettings(ctx.db)),
   'receipt:update': admin(S.updateReceiptSettingsInput, (ctx, input) =>
     updateReceiptSettings(ctx.db, input),
+  ),
+
+  // ── printing ─────────────────────────────────────────────────────────────────────────────
+  'printing:printers': admin(S.empty, (ctx) => ctx.services.printer.list()),
+  'printing:printReceipt': user(S.printReceiptInput, (ctx, { orderId }) =>
+    printOrderReceipt(ctx.db, ctx.services.printer, orderId),
+  ),
+  'printing:test': admin(S.empty, (ctx) => printTestReceipt(ctx.db, ctx.services.printer)),
+  'printing:preview': admin(S.previewReceiptInput, (ctx, input) =>
+    previewReceipt(ctx.db, ctx.services.printer, input),
   ),
 
   // ── menu ───────────────────────────────────────────────────────────────────────────────────

@@ -43,6 +43,13 @@ export interface IpcChannels {
   'receipt:get': Channel<undefined, T.ReceiptSettingsDto | null>;
   'receipt:update': Channel<In<typeof S.updateReceiptSettingsInput>, T.ReceiptSettingsDto>;
 
+  // printing (content always built in main from the database)
+  'printing:printers': Channel<undefined, T.PrinterInfo[]>;
+  'printing:printReceipt': Channel<In<typeof S.printReceiptInput>, { printer: string }>;
+  'printing:test': Channel<undefined, { printer: string }>;
+  /** PNG data URL of the sample receipt. */
+  'printing:preview': Channel<In<typeof S.previewReceiptInput>, string>;
+
   // menu
   'categories:list': Channel<In<typeof S.listCategoriesInput>, T.CategoryDto[]>;
   'categories:create': Channel<In<typeof S.categoryInput>, T.CategoryDto>;
@@ -114,6 +121,10 @@ export const IPC_CHANNELS = [
   'settings:update',
   'receipt:get',
   'receipt:update',
+  'printing:printers',
+  'printing:printReceipt',
+  'printing:test',
+  'printing:preview',
   'categories:list',
   'categories:create',
   'categories:update',

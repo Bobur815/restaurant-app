@@ -29,6 +29,11 @@ function caller(initial: Actor | null = null) {
     },
     services: {
       appInfo: () => ({ name: 'savdochef', version: '0.0.0-test', isPackaged: false }),
+      printer: {
+        list: async () => [],
+        print: async () => ({ printer: 'Test' }),
+        preview: async () => 'data:image/png;base64,',
+      },
       pickImage: async () => null,
     },
     log: (message, error) => logged.push([message, error]),
@@ -64,6 +69,7 @@ describe('access levels', () => {
         'auth:pinStatus',
         'auth:setPin',
         'users:updateProfile',
+        'printing:printReceipt',
         'categories:list',
         'menu:list',
         'menu:get',
@@ -91,6 +97,9 @@ describe('access levels', () => {
         'users:resetPassword',
         'settings:update',
         'receipt:update',
+        'printing:printers',
+        'printing:test',
+        'printing:preview',
         'categories:create',
         'categories:update',
         'categories:delete',
@@ -192,6 +201,11 @@ describe('invokeHandler', () => {
         setActor: () => undefined,
         services: {
           appInfo: () => ({ name: '', version: '', isPackaged: false }),
+          printer: {
+            list: async () => [],
+            print: async () => ({ printer: 'Test' }),
+            preview: async () => 'data:image/png;base64,',
+          },
           pickImage: async () => null,
         },
         log: (m, e) => logged.push([m, e]),
@@ -217,6 +231,11 @@ describe('invokeHandler', () => {
               setActor: () => undefined,
               services: {
                 appInfo: () => ({ name: '', version: '', isPackaged: false }),
+                printer: {
+                  list: async () => [],
+                  print: async () => ({ printer: 'Test' }),
+                  preview: async () => 'data:image/png;base64,',
+                },
                 pickImage: async () => null,
               },
               log: () => undefined,

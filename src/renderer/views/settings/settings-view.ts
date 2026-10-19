@@ -11,10 +11,18 @@ import {
   value,
 } from '../../components/forms';
 import { pageHeader } from '../../components/page';
-import { toast, toastError } from '../../components/toast';
+import { errorMessage, toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
 import { html } from '../../ui/html';
 import type { View } from '../types';
+
+function actionButton(label: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'btn btn-secondary';
+  b.textContent = label;
+  return b;
+}
 
 function submitButton(): HTMLButtonElement {
   const b = document.createElement('button');
@@ -34,7 +42,12 @@ export const settingsView: View = () => {
 
   const load = async () => {
     try {
-      const [settings, receipt] = await Promise.all([api.settings.get(), api.receipt.get()]);
+      const [settings, receipt, printers] = await Promise.all([
+        api.settings.get(),
+        api.receipt.get(),
+        // The printer list is a nicety: the form still works if it cannot be read.
+        api.printing.printers().catch(() => []),
+      ]);
 
       const general = document.createElement('form');
       general.className = 'card form-card';
@@ -75,6 +88,11 @@ export const settingsView: View = () => {
             label: t('settings.clickSound'),
             checked: settings.clickSound,
           })}
+          ${checkboxField({
+            name: 'printAfterPayment',
+            label: t('printing.printAfterPayment'),
+            checked: settings.printAfterPayment,
+          })}
           ${formError()}${submitButton()}`,
       );
       general.addEventListener('submit', async (e) => {
@@ -86,6 +104,7 @@ export const settingsView: View = () => {
             language: value(general, 'language') as Language,
             theme: value(general, 'theme') as Theme,
             clickSound: checked(general, 'clickSound'),
+            printAfterPayment: checked(general, 'printAfterPayment'),
           });
           toast(t('settings.saved'), 'success');
         } catch (error) {
@@ -94,6 +113,8 @@ export const settingsView: View = () => {
       });
 
       const r = receipt;
+      const previewButton = actionButton(t('printing.preview'));
+      const testButton = actionButton(t('printing.test'));
       const receiptForm = document.createElement('form');
       receiptForm.className = 'card form-card';
       receiptForm.noValidate = true;
@@ -118,11 +139,30 @@ export const settingsView: View = () => {
             label: t('settings.footerNote'),
             value: r?.footerNote ?? '',
           })}
-          ${field({
-            name: 'printerName',
-            label: t('settings.printerName'),
-            value: r?.printerName ?? '',
-          })}
+          <div class="form-row">
+            ${selectField({
+              name: 'printerName',
+              label: t('printing.printer'),
+              value: r?.printerName ?? '',
+              options: [
+                { value: '', label: t('printing.auto') },
+                ...printers.map((p) => ({ value: p.name, label: p.name })),
+                // Keep a saved printer selectable even when it is offline right now.
+                ...(r?.printerName && !printers.some((p) => p.name === r.printerName)
+                  ? [{ value: r.printerName, label: r.printerName }]
+                  : []),
+              ],
+            })}
+            ${selectField({
+              name: 'locale',
+              label: t('printing.locale'),
+              value: r?.locale ?? 'uz',
+              options: [
+                { value: 'uz', label: t('settings.uzbek') },
+                { value: 'ru', label: t('settings.russian') },
+              ],
+            })}
+          </div>
           <div class="form-row">
             ${field({
               name: 'printWidthPx',
@@ -171,27 +211,32 @@ export const settingsView: View = () => {
               checked: r?.printShowOrderNumber ?? true,
             })}
           </div>
-          ${formError()}${submitButton()}`,
+          ${formError()}
+          <div class="bulk-actions">${submitButton()}${previewButton}${testButton}</div>`,
       );
+      const formValues = () => ({
+        restaurantName: value(receiptForm, 'restaurantName'),
+        phone: value(receiptForm, 'phone'),
+        extraPhones: value(receiptForm, 'extraPhones'),
+        address: value(receiptForm, 'address'),
+        footerNote: value(receiptForm, 'footerNote'),
+        printerName: value(receiptForm, 'printerName') || null,
+        locale: value(receiptForm, 'locale') as 'uz' | 'ru',
+        printWidthPx: Number(value(receiptForm, 'printWidthPx')),
+        printSeparatorCount: Number(value(receiptForm, 'printSeparatorCount')),
+        printSeparatorChar: value(receiptForm, 'printSeparatorChar'),
+        printUseStarsSep: checked(receiptForm, 'printUseStarsSep'),
+        printShowAddress: checked(receiptForm, 'printShowAddress'),
+        printShowPhone: checked(receiptForm, 'printShowPhone'),
+        printShowDateTime: checked(receiptForm, 'printShowDateTime'),
+        printShowOrderNumber: checked(receiptForm, 'printShowOrderNumber'),
+      });
       receiptForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         clearErrors(receiptForm);
         try {
           await api.receipt.update({
-            restaurantName: value(receiptForm, 'restaurantName'),
-            phone: value(receiptForm, 'phone'),
-            extraPhones: value(receiptForm, 'extraPhones'),
-            address: value(receiptForm, 'address'),
-            footerNote: value(receiptForm, 'footerNote'),
-            printerName: value(receiptForm, 'printerName') || null,
-            printWidthPx: Number(value(receiptForm, 'printWidthPx')),
-            printSeparatorCount: Number(value(receiptForm, 'printSeparatorCount')),
-            printSeparatorChar: value(receiptForm, 'printSeparatorChar'),
-            printUseStarsSep: checked(receiptForm, 'printUseStarsSep'),
-            printShowAddress: checked(receiptForm, 'printShowAddress'),
-            printShowPhone: checked(receiptForm, 'printShowPhone'),
-            printShowDateTime: checked(receiptForm, 'printShowDateTime'),
-            printShowOrderNumber: checked(receiptForm, 'printShowOrderNumber'),
+            ...formValues(),
           });
           toast(t('settings.saved'), 'success');
         } catch (error) {
@@ -199,7 +244,43 @@ export const settingsView: View = () => {
         }
       });
 
-      grid.replaceChildren(general, receiptForm);
+      // Preview: the same document the printer gets, rendered to an image by main.
+      previewButton.addEventListener('click', async () => {
+        previewButton.disabled = true;
+        try {
+          const url = await api.printing.preview(formValues());
+          const img = document.createElement('img');
+          img.src = url;
+          img.alt = t('printing.previewAlt');
+          img.className = 'receipt-preview';
+          previewBox.replaceChildren(img);
+          previewCard.hidden = false;
+        } catch (error) {
+          showFormError(receiptForm, error);
+        } finally {
+          previewButton.disabled = false;
+        }
+      });
+      testButton.addEventListener('click', async () => {
+        testButton.disabled = true;
+        try {
+          const result = await api.printing.test();
+          toast(t('printing.testSent', { printer: result.printer }), 'success');
+        } catch (error) {
+          toast(t('printing.failed', { reason: errorMessage(error) }), 'error', 8000);
+        } finally {
+          testButton.disabled = false;
+        }
+      });
+
+      const previewBox = document.createElement('div');
+      previewBox.className = 'receipt-preview-box';
+      const previewCard = document.createElement('div');
+      previewCard.className = 'card';
+      previewCard.hidden = true;
+      previewCard.append(html`<h2 class="card-title">${t('printing.previewAlt')}</h2>`, previewBox);
+
+      grid.replaceChildren(general, receiptForm, previewCard);
     } catch (error) {
       toastError(error);
     }

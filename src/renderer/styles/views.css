@@ -690,3 +690,19 @@
     transform: translateX(6px);
   }
 }
+
+/* ── Receipt preview (image rendered by main from the print document) ─────────────────────── */
+.receipt-preview-box {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.receipt-preview {
+  max-width: 100%;
+  height: auto;
+  background: #fff;
+  box-shadow: var(--shadow-md);
+}

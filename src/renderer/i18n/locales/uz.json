@@ -395,5 +395,20 @@
     "passwordLogin": "Parol bilan kirish",
     "noUsers": "PIN kod o'rnatgan foydalanuvchi yo'q. Parol bilan kiring va Profil sahifasida PIN kod o'rnating.",
     "digit": "Raqam {{d}}"
+  },
+  "printing": {
+    "print": "Chekni chop etish",
+    "printed": "Chek chop etildi ({{printer}})",
+    "failed": "Chek chop etilmadi: {{reason}}",
+    "printer": "Printer",
+    "auto": "Avtomatik (XP-80 yoki standart printer)",
+    "refresh": "Printerlarni yangilash",
+    "preview": "Namunani ko'rish",
+    "test": "Sinov cheki",
+    "testSent": "Sinov cheki yuborildi ({{printer}})",
+    "printAfterPayment": "To'lovdan keyin chekni avtomatik chop etish",
+    "previewAlt": "Chek namunasi",
+    "locale": "Chek tili",
+    "noPrinters": "Printer topilmadi"
   }
 }

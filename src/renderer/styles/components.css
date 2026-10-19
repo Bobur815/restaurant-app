@@ -201,8 +201,14 @@ legend {
 
 .form-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-3);
+}
+
+/* Long option text (printer names) must not widen the column past its card. */
+.form-row select {
+  width: 100%;
+  min-width: 0;
 }
 
 /* ── Badges, chips, notices ──────────────────────────────────────────────────────────────── */

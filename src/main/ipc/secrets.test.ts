@@ -72,6 +72,11 @@ function ctx(actor: Actor | null): HandlerContext {
     setActor: () => undefined,
     services: {
       appInfo: () => ({ name: 'x', version: '0', isPackaged: false }),
+      printer: {
+        list: async () => [],
+        print: async () => ({ printer: 'Test' }),
+        preview: async () => 'data:image/png;base64,',
+      },
       pickImage: async () => null,
     },
     log: () => undefined,

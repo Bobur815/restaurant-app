@@ -28,6 +28,7 @@ import {
   type DraftLine,
 } from './draft';
 import { payOrderModal } from './payment-modal';
+import { printReceipt } from './print-receipt';
 import { askWeight } from './weight-modal';
 
 const PORTION_LABEL: Record<PortionFactor, string> = {
@@ -431,6 +432,9 @@ export const orderView: View = ({ params, navigate }) => {
     if (!order) return;
     const paid = await payOrderModal(order);
     if (paid) {
+      // Legacy printed after every payment; in the background, so a printer problem never
+      // holds up the next customer.
+      if (appStore.get().settings?.printAfterPayment !== false) printReceipt(paid.id);
       order = null;
       lines = [];
       navigate('/tables');

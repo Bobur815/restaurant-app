@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   language: 'uz',
   theme: 'system',
   click_sound: true,
+  // Legacy printed the receipt right after every payment.
+  print_after_payment: true,
   // LAN access for waiter phones (Phase 8.5); off until enabled in settings.
   lan_enabled: false,
 };

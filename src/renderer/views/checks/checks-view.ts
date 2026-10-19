@@ -18,6 +18,7 @@ import {
   localName,
   toInputDecimal,
 } from '../../utils/format';
+import { printReceipt } from '../order/print-receipt';
 import type { View } from '../types';
 
 const today = () => {
@@ -186,6 +187,7 @@ export const checksView: View = () => {
         toastError(e);
       }
     });
+    const print = button(t('printing.print'), 'secondary', () => printReceipt(order.id));
     const body = html`<p class="muted">
         ${t('tables.table', { n: order.tableNumber })} · ${t(`checks.order_${order.status}`)} ·
         ${t('checks.cashier')}: ${order.createdBy ?? '—'}
@@ -231,8 +233,8 @@ export const checksView: View = () => {
           )}
         </tbody>
       </table>
-      ${admin && order.status === 'completed'
-        ? html`<div class="bulk-actions">${edit}${del}</div>`
+      ${order.status === 'completed'
+        ? html`<div class="bulk-actions">${print}${admin ? edit : ''}${admin ? del : ''}</div>`
         : ''}`;
     const modal = openModal({
       title: t('checks.details', { number: order.orderNumber }),

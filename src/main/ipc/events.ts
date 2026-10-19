@@ -13,6 +13,11 @@ export const READ_ONLY_CHANNELS = [
   'setup:status',
   'settings:get',
   'receipt:get',
+  // Printing changes no data.
+  'printing:printers',
+  'printing:printReceipt',
+  'printing:test',
+  'printing:preview',
   'categories:list',
   'menu:list',
   'menu:get',

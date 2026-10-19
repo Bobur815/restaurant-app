@@ -59,6 +59,7 @@ describe('settings', () => {
       language: 'uz',
       theme: 'system',
       clickSound: true,
+      printAfterPayment: true,
       lanEnabled: false,
       setupComplete: false,
     });

@@ -54,6 +54,8 @@ export interface AppSettings {
   language: Language;
   theme: Theme;
   clickSound: boolean;
+  /** Print the customer receipt automatically after a payment. */
+  printAfterPayment: boolean;
   lanEnabled: boolean;
   setupComplete: boolean;
 }
@@ -76,6 +78,11 @@ export interface ReceiptSettingsDto {
   printShowPhone: boolean;
   printShowDateTime: boolean;
   printShowOrderNumber: boolean;
+}
+
+export interface PrinterInfo {
+  name: string;
+  isDefault: boolean;
 }
 
 // ── Menu ─────────────────────────────────────────────────────────────────────────────────────

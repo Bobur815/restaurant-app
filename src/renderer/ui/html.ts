@@ -17,6 +17,8 @@
  * `javascript:` in href/src/action is replaced with `about:blank`.
  */
 
+import { escapeHtml } from '@shared/utils/escape-html';
+
 const RAW = Symbol('raw-html');
 
 export interface RawHtml {
@@ -28,14 +30,7 @@ export function raw(markup: string): RawHtml {
   return { [RAW]: markup };
 }
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+export { escapeHtml };
 
 const URL_ATTRS = new Set(['href', 'src', 'action', 'formaction', 'xlink:href']);
 const isRaw = (v: unknown): v is RawHtml => typeof v === 'object' && v !== null && RAW in v;

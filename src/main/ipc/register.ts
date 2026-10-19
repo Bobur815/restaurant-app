@@ -3,6 +3,7 @@ import { APP_EVENT_CHANNEL, IPC_CHANNELS, type AppEvent } from '@shared/ipc';
 import type { Actor, Db } from '../domain/db';
 import { importImage } from '../images/image-store';
 import { logger } from '../logger';
+import { createPrinterService } from '../printing/printer';
 import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-safe';
@@ -12,6 +13,7 @@ import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-
  * when it closes. The LAN adapter (Phase 8.5) will key the same thing by device token.
  */
 const actors = new Map<number, Actor>();
+const printer = createPrinterService();
 const tracked = new WeakSet<WebContents>();
 
 function actorStoreFor(sender: WebContents) {
@@ -31,6 +33,7 @@ function actorStoreFor(sender: WebContents) {
 function servicesFor(sender: WebContents, imageDir: string): HandlerServices {
   return {
     appInfo: () => ({ name: app.getName(), version: app.getVersion(), isPackaged: app.isPackaged }),
+    printer,
     async pickImage() {
       const win = BrowserWindow.fromWebContents(sender);
       const options = {

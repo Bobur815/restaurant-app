@@ -14,6 +14,7 @@ const SETTING_KEYS = {
   language: { key: 'language', schema: z.enum(['uz', 'ru']) },
   theme: { key: 'theme', schema: z.enum(['system', 'light', 'dark']) },
   clickSound: { key: 'click_sound', schema: z.boolean() },
+  printAfterPayment: { key: 'print_after_payment', schema: z.boolean() },
   lanEnabled: { key: 'lan_enabled', schema: z.boolean() },
   setupComplete: { key: 'setup_complete', schema: z.boolean() },
 } as const satisfies Record<keyof AppSettings, { key: string; schema: z.ZodType }>;

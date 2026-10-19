@@ -150,6 +150,11 @@ export const receiptSettingsInput = z.object({
 
 export const updateReceiptSettingsInput = z.object(receiptFields).partial();
 
+/** Receipt preview: the saved settings with these (unsaved) form values on top. */
+export const previewReceiptInput = updateReceiptSettingsInput.default({});
+
+export const printReceiptInput = z.object({ orderId: id });
+
 export const setupInput = z.object({
   admin: z.object({ username, password, fullName: optionalText(64) }),
   receipt: receiptSettingsInput,
@@ -162,6 +167,7 @@ export const updateSettingsInput = z
     language: z.enum(['uz', 'ru']),
     theme: z.enum(['system', 'light', 'dark']),
     clickSound: z.boolean(),
+    printAfterPayment: z.boolean(),
     lanEnabled: z.boolean(),
   })
   .partial();

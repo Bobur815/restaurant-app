@@ -178,7 +178,7 @@ Verified by a second UI harness on the built app (fresh DB, 1366x768 and 1280x72
 - [x] Users (admin): list, create, edit role/active, reset password. Profile (everyone, from the user chip): login name, full name, password.
 - [x] Settings (admin): table count, default language/theme, click sound; receipt layout fields. Printer is a text field until Phase 7.
 - [x] Polish found by the runs: decimal comma in editable fields, Chromium UI locale `ru` for day-first native date inputs (Chromium has no Uzbek locale), chart tooltip dates, form button layout.
-- [ ] Not done: per-day dish breakdown (legacy showed dishes per day; the range total is shown), waste/breakage expense entry (no legacy UI either), reprint from checks (Phase 7).
+- [ ] Not done: per-day dish breakdown (legacy showed dishes per day; the range total is shown), waste/breakage expense entry (no legacy UI either), reprint from checks (done in Phase 7).
 
 ## Phase 6: security and correctness fixes (carry-over from the audit)
 
@@ -190,14 +190,20 @@ Done 2026-10-18 (items already delivered by Phases 1-4 verified rather than redo
 - [x] Logger: electron-log to `app.getPath('logs')/main.log` (5 MB rotation), uncaught errors and renderer/child crashes captured, no renderer logging channel exposed, request inputs never logged (`main/logger.ts`). Verified in the built app.
 - [x] Deleted the legacy app from the branch (`git rm -r legacy`, 186 files: Express, cors, Joi, winston, Mongoose models, SetupGate, `/health` probing, `config.env.js`); it stays in tag `legacy-js-express`. Its `node_modules` folders were removed from disk. **Left on disk on purpose** (untracked, ignored): `legacy/backend/prisma/data/app.db` (the database with real-looking restaurant data), `legacy/backend/prisma/savdochef.db`, `legacy/backend/utils/errors.log`. Delete them yourself once you no longer need that data.
 - [x] Correctness: unused dish pictures are deleted at startup (only our file names, only older than 24 h, so a picture picked but not yet saved survives; tested).
-- [-] Receipt HTML escaping and a print window without preload: moved to Phase 7 (printing does not exist yet).
+- [x] Receipt HTML escaping and a print window without preload: done in Phase 7.
 - [ ] Root `.env` is the legacy app's (untracked, ignored); the new app does not read it, but the Prisma CLI prints "Environment variables loaded from .env". Remove it when convenient.
 
 ## Phase 7: printing
 
-- [ ] Receipt HTML escapes all interpolated values (build it with the same escaping as `ui/html.ts`); print window has no preload, no node access, `sandbox: true`, and loads only the generated receipt.
-- [ ] Move to `src/main/printing/`: receipt HTML builder (shared with the preview component so they cannot drift) + silent print. Decide between Chromium silent print (current) and ESC/POS (`@node-escpos/*` deps already declared but unused): **decision** based on the printers actually used on site.
-- [ ] Printer selection stored in settings, timeouts, "printer offline" error surfaced in the UI without blocking the sale.
+Done 2026-10-19 (dev machine: XP-80C over USB, EPSON, virtual printers; no paper printed by the automated run).
+
+- [x] Receipt HTML (`main/printing/receipt.ts`) escapes every value with the shared `escapeHtml` (`shared/utils/escape-html.ts`, also used by `ui/html.ts`), carries its own CSP (`default-src 'none'`, inline styles only, no scripts). The renderer never sends receipt content: `printing:printReceipt` takes an order id and main builds the document from the database (cancelled orders refused).
+- [x] Print window: hidden, `sandbox: true`, `contextIsolation`, no node, no preload, loads only a `data:` URL of the generated document, window.open and navigation denied (`receiptWindowOptions`, tested).
+- [x] **Decision: Chromium silent print, not ESC/POS.** The site printer (XP-80C) has a Windows driver and legacy already printed through it; HTML keeps one builder for print and preview, Cyrillic and Uzbek apostrophes without code pages, and no native USB deps to package. `@node-escpos/*` were never added to the new app. Revisit only if a till has no driver.
+- [x] Page is 80 mm wide and as long as the receipt (measured body height, no blank paper); 20 s timeout; errors as `CONFLICT` with `reason` `NO_PRINTER` / `PRINT_FAILED` / `TIMEOUT` / `NO_RECEIPT_SETTINGS`.
+- [x] Printer choice (`pickPrinter`, tested): name from settings (loose match, "XP-80C" finds "XP-80C (copy 1)"), else the XP-80/thermal family preferring USB and never XPS/OneNote/PDF/fax, else the Windows default, else the first.
+- [x] UI: auto-print after payment (setting `printAfterPayment`, default on, like legacy) and a print button on completed checks; both fire-and-forget with a toast, a printer failure never blocks or undoes the sale. Settings: printer dropdown (live list + "Avtomatik", a saved offline printer stays selectable), receipt language, "Namunani ko'rish" (PNG of the same document with unsaved form values, rendered by the same window) and "Sinov cheki".
+- [ ] Not verified: paper output on the XP-80C (the automated run only rendered the preview; press "Sinov cheki" once on the till). Electron 44 reports no default-printer flag here, so the "Windows default" fallback is a hint only.
 - [ ] Kitchen ticket (optional): same pipeline, second template.
 
 ## Phase 8: packaging and release

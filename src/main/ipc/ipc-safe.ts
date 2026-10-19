@@ -5,6 +5,7 @@ import { refreshActor } from '../auth/auth';
 import type { Actor, Db } from '../domain/db';
 import { AppError, forbidden, notAuthenticated, prismaCode } from '../domain/errors';
 import { ImageImportError } from '../images/image-store';
+import type { PrinterService } from '../printing/printer';
 
 /**
  * Who may call a handler: `public` (setup, login, settings for the login screen), `user` (any
@@ -16,6 +17,7 @@ export type Access = 'public' | 'user' | 'admin';
 /** Side effects a handler may need that are not the database (dialogs, files). Injected for tests. */
 export interface HandlerServices {
   appInfo(): { name: string; version: string; isPackaged: boolean };
+  printer: PrinterService;
   pickImage(): Promise<string | null>;
 }
 
