@@ -208,13 +208,17 @@ Done 2026-10-19 (dev machine: XP-80C over USB, EPSON, virtual printers; no paper
 
 ## Phase 8: packaging and release
 
-- [ ] electron-builder config (NSIS installer for Windows, optional AppImage/deb), `asarUnpack` for the Prisma engine only; electron-vite bundles main deps (no `node_modules` shipped), like posgro.
+Started 2026-10-19.
+
+- [x] electron-builder config (`electron-builder.config.js`): NSIS x64 installer (`npm run dist:win` -> `dist/SavdoChef-Setup-<version>.exe`, 119 MB), fuses (no runAsNode, no NODE_OPTIONS/inspect, asar integrity, app only from asar). Verified: `app.asar` is 1.2 MB (main/preload/renderer bundles, no `node_modules`); `app.asar.unpacked` is the generated Prisma client, 24 MB, of which 21 MB is the native engine (trimming the 3 MB wasm/edge files is not worth a custom filter). The packaged exe on an empty profile creates the database and runs migrations v0 -> v5 in about 4 s, with no errors in `main.log`. Linux targets stay in the config, unbuilt.
 - [x] Branding (posgro structure, vanilla): `src/shared/branding/brand.ts` is the single source (colors, name, uz/ru/en taglines, Icon / Wordmark / Horizontal / Square as SVG trees, chef-hat artwork redrawn as vectors from the original icon, transparent outside the tile). `src/renderer/branding/` renders them as DOM SVG. `npm run build:icons` writes `build/icons/*.svg`, `savdochef.ico` (16-256), 1024 px PNGs and `src/renderer/public/favicon.svg`; `brand.test.ts` fails if they are stale. Wired into window icon, NSIS installer/uninstaller, Linux, favicon, boot screen. UI tokens: `--color-brand` #F8901F; `--color-primary` #B4530B in light (AA with white text), brand orange in dark.
   - [ ] Wordmark renders in Segoe UI (no Poppins-like font installed); bundle a font under `font-src 'self'` if the original look matters.
-- [ ] Cold start right after an install/update: 7-26 s on the dev machine (first load of freshly written files, likely antivirus scanning; warm start ~0.1 s to DB). Measure on a real till after installing an update; consider fewer/larger files if it reproduces.
-- [ ] electron-updater + a release script; version bump rule per change.
+- [ ] Cold start right after an install/update (2026-10-19 silent installs: 0.7 s and 1.9 s from start to database open; earlier dev-build runs: 7-26 s) (first load of freshly written files, likely antivirus scanning; warm start ~0.1 s to DB). Measure on a real till after installing an update; consider fewer/larger files if it reproduces.
+- [x] **Decision: no auto-updater** (tills are offline, the repo is private; a GitHub updater would embed a token). An update means installing the newer `SavdoChef-Setup-x.y.z.exe` over the old one. `publish: null`, `deleteAppDataOnUninstall: false` (data in `%APPDATA%\SavdoChef` survives uninstall and upgrade).
+- [x] `npm run release -- patch|minor|major` (`scripts/release.mjs`): clean tree check -> `npm run check` -> `npm version` (commit + tag) -> installer -> `release/vX.Y.Z/` with a `.sha256`. Version rule in the script header: patch = fixes without migration, minor = features or any migration, major = something the operator must be told before installing. Pushing stays manual.
+- [ ] Code signing: the installer is unsigned (SmartScreen warns "unknown publisher" on first run). Needs a certificate; electron-builder picks it up from `CSC_LINK`/`CSC_KEY_PASSWORD` without config changes.
 - [ ] Parity pass against the Phase 0 inventory on a Windows machine with a real receipt printer; fill the checklist item by item.
-- [ ] Upgrade test between two versions of the **new** app (vN → vN+1 with data), not from legacy.
+- [x] Upgrade test between two versions of the **new** app (2026-10-19): installed 0.1.0 silently into a scratch folder, ran it with `--user-data-dir` on a copy of the real data (1 user, 10 dishes, 9 orders, 8 payments, 2 sessions, schema v5), installed 0.1.1 over it, ran again: log shows 0.1.1, same schema, identical counts; silent uninstall removed the program, shortcuts and registry entry and left the data. The real `%APPDATA%\SavdoChef` was never opened. Not covered: an upgrade that carries a migration (no v6 yet; the migration path itself is tested in `database.test.ts`). Repeat with the first real migration.
 
 ## Phase 9: `.claude/` and docs
 

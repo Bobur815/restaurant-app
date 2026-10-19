@@ -56,7 +56,13 @@ module.exports = {
     uninstallerIcon: 'build/icons/savdochef.ico',
     installerHeaderIcon: 'build/icons/savdochef.ico',
     runAfterFinish: false,
+    // The till's data (%APPDATA%\SavdoChef: database, backups, pictures, logs) survives an
+    // uninstall and every upgrade; installing a newer version over an older one is the update path.
+    deleteAppDataOnUninstall: false,
   },
+
+  // Updates are manual installers (scripts/release.mjs): tills are offline and the repo private.
+  publish: null,
 
   linux: {
     target: ['AppImage', 'deb'],
