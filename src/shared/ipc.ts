@@ -50,6 +50,20 @@ export interface IpcChannels {
   /** PNG data URL of the sample receipt. */
   'printing:preview': Channel<In<typeof S.previewReceiptInput>, string>;
 
+  // halls & tables
+  'halls:list': Channel<In<typeof S.listHallsInput>, T.HallDto[]>;
+  'halls:create': Channel<In<typeof S.hallInput>, T.HallDto>;
+  'halls:update': Channel<In<typeof S.updateHallInput>, T.HallDto>;
+  /** All halls in one transaction: `ids` is every hall id in the new order. */
+  'halls:reorder': Channel<In<typeof S.reorderHallsInput>, T.HallDto[]>;
+  /** Only a hall that never had tables; otherwise hide it (isActive: false). */
+  'halls:delete': Channel<In<typeof S.idInput>, null>;
+  'tables:create': Channel<In<typeof S.diningTableInput>, T.DiningTableDto>;
+  'tables:createRange': Channel<In<typeof S.tableRangeInput>, T.DiningTableDto[]>;
+  'tables:update': Channel<In<typeof S.updateDiningTableInput>, T.DiningTableDto>;
+  /** Only a table no order ever used; otherwise hide it (isActive: false). */
+  'tables:delete': Channel<In<typeof S.idInput>, null>;
+
   // menu
   'categories:list': Channel<In<typeof S.listCategoriesInput>, T.CategoryDto[]>;
   'categories:create': Channel<In<typeof S.categoryInput>, T.CategoryDto>;
@@ -125,6 +139,15 @@ export const IPC_CHANNELS = [
   'printing:printReceipt',
   'printing:test',
   'printing:preview',
+  'halls:list',
+  'halls:create',
+  'halls:update',
+  'halls:reorder',
+  'halls:delete',
+  'tables:create',
+  'tables:createRange',
+  'tables:update',
+  'tables:delete',
   'categories:list',
   'categories:create',
   'categories:update',
@@ -199,7 +222,8 @@ export type AppEvent =
   | { type: 'session-changed' }
   | { type: 'menu-changed' }
   | { type: 'settings-changed' }
-  | { type: 'users-changed' };
+  | { type: 'users-changed' }
+  | { type: 'halls-changed' };
 
 export const APP_EVENT_TYPES = [
   'orders-changed',
@@ -207,6 +231,7 @@ export const APP_EVENT_TYPES = [
   'menu-changed',
   'settings-changed',
   'users-changed',
+  'halls-changed',
 ] as const satisfies ReadonlyArray<AppEvent['type']>;
 
 /** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */

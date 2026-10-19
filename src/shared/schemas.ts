@@ -163,7 +163,6 @@ export const setupInput = z.object({
 
 export const updateSettingsInput = z
   .object({
-    tableCount: z.number().int().min(1).max(200),
     language: z.enum(['uz', 'ru']),
     theme: z.enum(['system', 'light', 'dark']),
     clickSound: z.boolean(),
@@ -171,6 +170,52 @@ export const updateSettingsInput = z
     lanEnabled: z.boolean(),
   })
   .partial();
+
+// ── Halls & tables ───────────────────────────────────────────────────────────────────────────
+
+const hallName = trimmed(1, 40, 'Zal nomi');
+const sortOrder = z.number().int().min(0).max(10_000);
+const seats = z.number().int().min(1).max(100).nullable();
+
+export const listHallsInput = z
+  .object({ includeInactive: z.boolean().default(false) })
+  .default({ includeInactive: false });
+export const hallInput = z.object({ name: hallName });
+export const updateHallInput = z.object({
+  id,
+  name: hallName.optional(),
+  sortOrder: sortOrder.optional(),
+  isActive: z.boolean().optional(),
+});
+
+/** Every hall's id, in the new order (hidden halls included). */
+export const reorderHallsInput = z.object({ ids: z.array(id).min(1).max(100) });
+
+export const diningTableInput = z.object({
+  hallId: id,
+  number: tableNumber,
+  label: optionalText(40),
+  seats: seats.default(null),
+});
+export const updateDiningTableInput = z.object({
+  id,
+  hallId: id.optional(),
+  number: tableNumber.optional(),
+  label: optionalText(40).optional(),
+  seats: seats.optional(),
+  isActive: z.boolean().optional(),
+});
+/** Adds tables from..to (inclusive) to a hall in one go; at most 100 at a time. */
+export const tableRangeInput = z
+  .object({ hallId: id, from: tableNumber, to: tableNumber })
+  .refine((r) => r.from <= r.to, {
+    message: "Boshlang'ich raqam oxirgisidan katta bo'lmasin",
+    path: ['to'],
+  })
+  .refine((r) => r.to - r.from < 100, {
+    message: "Bir martada ko'pi bilan 100 ta stol",
+    path: ['to'],
+  });
 
 // ── Menu ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -359,3 +404,5 @@ export const salesReportInput = z.object({
 
 export type SetupInput = z.infer<typeof setupInput>;
 export type SaveTableOrderInput = z.infer<typeof saveTableOrderInput>;
+/** As the renderer sends it (before schema defaults). */
+export type UpdateReceiptSettingsInput = z.input<typeof updateReceiptSettingsInput>;

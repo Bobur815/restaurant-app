@@ -4,6 +4,7 @@ import { dec, toQtyString } from '@shared/utils/decimal';
 import { BCRYPT_COST } from '../auth/auth';
 import type { Db, Tx } from '../domain/db';
 import { conflict } from '../domain/errors';
+import { ensureTablesForOrders } from '../halls/halls';
 import { RECEIPT_SETTINGS_ID, setSetting } from '../settings/settings';
 
 /**
@@ -252,6 +253,8 @@ export async function importLegacy(
     await db.$transaction(
       async (tx) => {
         await importRows(tx, legacy, report, imageFor, hashes);
+        // Every table an imported order used must exist (feature F1-A halls).
+        await ensureTablesForOrders(tx);
         if (options.dryRun) throw new DryRunRollback();
       },
       { timeout: 120_000, maxWait: 10_000 },

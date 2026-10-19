@@ -706,3 +706,231 @@
   background: #fff;
   box-shadow: var(--shadow-md);
 }
+
+/* ── Settings: section list + content (feature F1-A) ──────────────────────────────────────── */
+.settings-page {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.settings-nav {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.settings-nav-title {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2);
+  font-size: var(--font-size-lg);
+}
+
+.settings-nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.settings-nav-link:hover {
+  background: var(--color-surface-2);
+}
+
+.settings-nav-link[aria-current='page'] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.settings-nav-link svg {
+  flex: none;
+}
+
+/* A section is a page of its own; inside the settings frame it needs no outer padding. */
+.settings-content > .page {
+  padding: 0;
+}
+
+.settings-content .form-card {
+  max-width: 720px;
+}
+
+/* Receipt section: form and live preview side by side. */
+.settings-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.settings-split > .card:last-child {
+  position: sticky;
+  top: 0;
+}
+
+.field-with-action {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+/* The row carries the spacing, so the button lines up with the control, not its margin. */
+.field-with-action > .field {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.field-with-action > .btn {
+  flex: none;
+  height: var(--control-height);
+  min-height: var(--control-height);
+}
+
+.form-card > .muted:first-child {
+  margin-top: 0;
+  margin-bottom: var(--space-3);
+}
+
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 1000px) {
+  .settings-page {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Narrow: the section list becomes a scrolling strip of tabs. */
+  .settings-nav {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .settings-nav-title {
+    display: none;
+  }
+
+  .settings-nav-link {
+    flex: none;
+  }
+
+  .settings-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Halls & tables (settings) ────────────────────────────────────────────────────────────── */
+.hall-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.hall-card.is-inactive {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.hall-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.hall-header .card-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.hall-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.hall-tables {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.hall-table {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 72px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.hall-table:hover {
+  border-color: var(--color-primary);
+}
+
+.hall-table.is-inactive {
+  border-style: dashed;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.hall-table-number {
+  font-size: var(--font-size-lg);
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.hall-table-label,
+.hall-table-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* ── Tables screen: hall tabs and headings ─────────────────────────────────────────────────── */
+.hall-tabs {
+  margin-bottom: var(--space-4);
+}
+
+.hall-heading {
+  margin: var(--space-5) 0 var(--space-3);
+  font-size: var(--font-size-lg);
+}
+
+.hall-heading:first-child {
+  margin-top: 0;
+}
+
+.table-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}

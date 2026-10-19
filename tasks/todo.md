@@ -231,6 +231,58 @@ Done 2026-10-19.
 - [x] `tasks/lessons.md` started with this rewrite's real lessons (data safety, Electron/Chromium quirks, harness pattern, Windows/Git Bash editing). `tasks/todo.md` stays the plan.
 - [ ] Known false positive: `guard-bash` matches the whole command text, so a heredoc or commit message that merely mentions a blocked command is blocked too. Workaround: put such text in a file. Tighten only if it gets in the way.
 
+## Feature F1: halls, takeaway/delivery, split payment, debt, settings pages (planned 2026-10-19, awaiting approval)
+
+Decided with the user 2026-10-19: restaurant-wide unique table numbers grouped into halls; delivery with fee + status; debt as a tender (whole or part of a check) on a named customer; any user records debt and repayments, only an admin forgives/adjusts/voids. Delivered in three steps, each its own commit and version bump (minor: each carries a migration).
+
+Design rules for all three steps:
+- Additive migrations only (0006-0008). `orders.tableNumber` stays NOT NULL: takeaway/delivery orders store 0 and every DTO exposes `tableNumber: number | null` (null when not dine-in). Reason: making the column nullable needs an `orders` table rebuild, and inside our migration transaction `PRAGMA foreign_keys=OFF` is ignored, so dropping the old table would cascade-delete every order line.
+- The pending-table triggers from 0003 are replaced in 0006/0007 so `pendingTable` is set only for pending **dine-in** orders (any number of open takeaway/delivery orders).
+- Money stays Decimal; every new figure is computed in main and tested with exact values. Stock logic is unchanged: all order types use the same line pricing and shift stock.
+
+### F1-A: settings pages + halls and tables (migration 0006) - done 2026-10-19, not committed
+
+- [x] Schema + migration 0006 (`halls`, `dining_tables`; orders untouched, no FK: they keep the number). Seed creates "Asosiy zal" with tables 1..max(table_count, highest used number) once (`halls_seeded`); the setup wizard sets tables 1..N on a database without orders; the legacy import adds a table for every number its orders use (`ensureTablesForOrders`).
+- [x] `main/halls/halls.ts` + channels `halls:list` (user; hidden halls only for admins), `halls:create/update/reorder/delete`, `tables:create/createRange/update/delete` (admin), event `halls-changed`. Rules: numbers unique incl. hidden; renumber/hide refused under an unpaid order; delete only without history (else hide); hall hidden only without active tables, deleted only without any; reorder atomic and refused on a stale list.
+- [x] Security review fix: a **new** order needs an active table in an active hall (`TABLE_UNAVAILABLE`), checked inside the order transaction; an unpaid order already on a hidden number can still be edited and paid. `tableCount` dropped from `settings:update` (halls are the source of truth).
+- [x] Settings `/settings/:section`: Tizim, Zallar va stollar, Chek (content + layout + live preview), Printer (printer, refresh, width, auto-print, test), Foydalanuvchilar (old `/users` redirects with history replace; nav item removed). Narrow screens: the section list becomes a tab strip.
+- [x] Tables screen: hall tabs (remembered per device, forced to "Hammasi" with one hall), hall headings, table labels; orders on numbers outside every hall shown under "Boshqa stollar" in every view.
+- [x] Russian plurals (`_few`/`_many`) for the new strings; the i18n parity test now treats plural forms as one key and checks every plural has `_other`.
+- [x] Tests: `halls.test.ts` (13), access snapshot, staff vs admin `halls:list`, fresh-database hall. `secrets.test.ts` fixed: it passed `{}` to channels without input, so about half the read channels never ran (they failed validation and the check passed on the error); now every read channel must succeed.
+- [x] Reviews: migration-reviewer SAFE TO APPLY (both optional fixes done); electron-security-reviewer: no high findings, mediums/lows fixed except the `/users` redirect via `setTimeout` (constant target, cosmetic).
+- [x] Verified: harness on a copy of the real data (upgrade v5 -> v6, every section, dialogs, reorder, tabs, uz/ru, dark, narrow); installer upgrade 0.1.0 -> 0.2.0 on a data copy: backup written, migrated v5 -> v6, identical counts; silent uninstall clean.
+- [ ] Version bump to 0.2.0 at release (`npm run release -- minor`), not done yet.
+
+### F1-B: takeaway and delivery (migration 0007)
+
+- [ ] Schema: `Customer { id, phone @unique (998XXXXXXXXX), name?, address?, landmark?, note?, isActive, createdAt }`. On `orders`: `orderType` (DINE_IN | TAKEAWAY | DELIVERY, default DINE_IN), `customerId?`, snapshots `customerName?`, `customerPhone?`, `deliveryAddress?`, `deliveryNote?` (the receipt shows what was true at the time), `deliveryFee Decimal default 0` (part of `totalAmount`), `deliveryStatus?` (PREPARING | ON_THE_WAY | DELIVERED), `courierName?`.
+- [ ] Phone helpers in `shared/utils/phone.ts` (posgro: `+998 (90) 123-45-67` mask, 9-digit check, normalize), with tests.
+- [ ] Domain: `saveOrder` generalises `saveTableOrder` (dine-in by table number; takeaway/delivery by order id), same pricing/stock/version rules. Delivery requires phone + address; takeaway name/phone optional. Typing a known phone fills name/address from `Customer`; saving creates/updates the customer. Delivery fee defaults from setting `delivery_fee_default`, editable per order. Status changes (`orders:setDeliveryStatus`) and courier name on any user; paying a delivery sets DELIVERED.
+- [ ] Settings "Buyurtma turlari": enable takeaway / enable delivery (both on by default), default delivery fee.
+- [ ] Tables screen: "Olib ketish" and "Yetkazib berish" buttons + a strip of open takeaway/delivery orders (type icon, short number, customer, status, total, age). Order screen: header shows the type; delivery/takeaway panel for customer fields, fee and status.
+- [ ] Receipt: order type, customer name/phone, address + landmark, delivery fee line. Reports: totals by order type. Checks: type column + filter.
+- [ ] Tests: each type saves and prices correctly (fee included exactly), several open takeaways at once, dine-in one-per-table still enforced by the trigger, delivery validation, customer autofill/upsert, receipt content, legacy import still marks everything dine-in.
+
+### F1-C: split payment, debt (nasiya), debtors (migration 0008)
+
+- [ ] Schema: `payments` gains `customerId?` (debt rows), `dueDate?`, `settledAt?`. New `DebtRepayment { id, customerId, amount, method (cash|card|click), kind (PAYMENT | WRITE_OFF), note?, createdById, createdAt, voidedAt?, voidedById?, voidReason? }`. `orders.paymentMethod` gains value `mixed` for split checks.
+- [ ] Pay = list of tenders (`cash | card | click | debt`), one `Payment` row each (posgro shape, `shared/utils/split-payment.ts` with Decimal instead of tiyin floats): lines must cover the total; only cash may exceed it (the excess is change, not stored); non-cash + debt never exceed the total; debt needs a customer (picked or created inline with phone) and may have a due date. A single tender is the same call with one line.
+- [ ] Payment modal: methods as today; "Bo'lib to'lash" turns them into lines with a "qolgan" (remaining) button; "Nasiyaga" opens the customer picker (search by phone/name, add inline) and defaults the debt to the remaining amount.
+- [ ] Debtors page `/debtors` (nav "Qarzdorlar", all users): customers with balance > 0 (search, sort by balance / oldest debt / due date, overdue highlighted); customer detail = ledger (debt checks, repayments, write-offs) and unpaid checks. Repayment (any user): amount + method, allocated to the oldest unsettled debt rows first (`settledAt` set when covered). Admin: write-off, void a repayment (kept, struck through, allocation recomputed), edit customer.
+- [ ] Balance = debt payment rows of non-cancelled orders - non-voided repayments/write-offs; computed in main, never stored. Cancelling a paid check whose debt has repayments allocated is refused (void the repayment first).
+- [ ] Checks become one row per order (methods joined: "Naqd + Karta", debt part marked); admin "edit check" replaces the tenders through the same validation. Receipt lists each tender, the debt part ("Qarzga: ...") and change for cash.
+- [ ] Reports: sales by method with debt shown separately (not money received); "Qarz to'lovlari" received per day by method; outstanding debt total.
+- [ ] Settings "To'lov": enable split payment, enable debt (both on by default).
+- [ ] Legacy data: imported `debt` payments become debt rows without a customer, listed under "Noma'lum mijoz" until an admin assigns them.
+- [ ] Tests: split validation table (cover/over/short/non-cash over/debt without customer), exact Decimal sums, FIFO allocation incl. partial and void, balance after cancel, reports with debt and repayments, `secrets.test.ts` over new read channels, access snapshot.
+
+### Verification and release (each step)
+
+- [ ] `npm run check`, `migration-reviewer` on each migration, `prisma-reviewer` on payments/debt, `electron-security-reviewer` on new channels.
+- [ ] Harness on a copy of the real data: screenshots of every new screen in uz and ru, light and dark.
+- [ ] Upgrade test with the migrations: install the previous build, run it on a data copy, install the new build over it, compare counts and open the new screens.
+- [ ] Version: 0.2.0 (A), 0.3.0 (B), 0.4.0 (C), or one 0.2.0 if released together.
+
 ## Phase 8.5: LAN access for waiter phones (first release, decided 2026-10-18)
 
 - [ ] HTTP adapter in main (posgro `local-server` pattern: plain `node:http` + its small `router.ts`, `pairing.ts`, `auth.ts`, `serve-policy.ts`; copy those and their tests, **no** Express/Fastify) over the **same** domain modules; binds to the LAN only when enabled in settings; device pairing (QR/code) → per-device token; every request resolves a user + role exactly like the IPC path.

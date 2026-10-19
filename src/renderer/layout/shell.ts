@@ -24,7 +24,6 @@ const MAIN_NAV: NavItem[] = [
 const ADMIN_NAV: NavItem[] = [
   { path: '/menu', label: 'nav.menu', icon: 'menu' },
   { path: '/reports', label: 'nav.reports', icon: 'reports' },
-  { path: '/users', label: 'nav.users', icon: 'users' },
   { path: '/settings', label: 'nav.settings', icon: 'settings' },
 ];
 

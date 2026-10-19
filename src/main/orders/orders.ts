@@ -148,6 +148,19 @@ export async function saveTableOrder(
         if (existing.sessionId !== sessionId) throw conflict('Buyurtma oldingi smenaga tegishli');
       } else if (input.expectedVersion !== undefined) {
         throw staleOrder(null); // paid or cancelled elsewhere since it was loaded
+      } else {
+        // A new order needs a table that exists and is shown. An order already on a hidden or
+        // removed number can still be edited and paid (above). Checked inside the transaction,
+        // so hiding a table and opening an order on it cannot interleave.
+        const table = await tx.diningTable.findFirst({
+          where: { number: input.tableNumber, isActive: true, hall: { isActive: true } },
+        });
+        if (!table) {
+          throw conflict("Bunday stol yo'q yoki yashirilgan", {
+            reason: 'TABLE_UNAVAILABLE',
+            tableNumber: input.tableNumber,
+          });
+        }
       }
 
       const dishIds = [...new Set(input.lines.map((l) => l.menuItemId))];

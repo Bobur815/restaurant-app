@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../../generated/prisma-sqlite';
+import { ensureDefaultHall } from '../halls/halls';
 
 /**
  * Known settings and their defaults (JSON-encoded in `settings.value`). Upserted on every start
@@ -51,6 +52,18 @@ export async function seedDatabase(
     for (const name of COUNTERS) {
       await tx.counter.upsert({ where: { name }, update: {}, create: { name, value: 0 } });
     }
+
+    // First hall and tables (feature F1-A), sized from the table count the till used so far.
+    const tableCount = await tx.setting.findUnique({ where: { key: 'table_count' } });
+    let count = Number(DEFAULT_SETTINGS['table_count']);
+    try {
+      const parsed: unknown = JSON.parse(tableCount?.value ?? '');
+      if (typeof parsed === 'number' && Number.isInteger(parsed) && parsed >= 1 && parsed <= 200)
+        count = parsed;
+    } catch {
+      // corrupt value: keep the default
+    }
+    await ensureDefaultHall(tx, count);
 
     if (freshDatabase && (await tx.category.count()) === 0) {
       await tx.category.createMany({

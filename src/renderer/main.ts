@@ -13,10 +13,17 @@ import { reportsView } from './views/reports/reports-view';
 import { sessionsView } from './views/sessions/sessions-view';
 import { settingsView } from './views/settings/settings-view';
 import { profileView } from './views/users/profile-view';
-import { usersView } from './views/users/users-view';
 import { setupView } from './views/setup';
 import { tablesView } from './views/tables';
 import type { View } from './views/types';
+
+/** A route that only forwards to another (kept for old addresses), replacing the history entry. */
+const redirectTo =
+  (path: string): View =>
+  () => {
+    setTimeout(() => location.replace(`#${path}`), 0);
+    return { el: document.createElement('div') };
+  };
 
 const ROUTES: RouteDef<View>[] = [
   { path: '/setup', access: 'public', layout: 'bare', view: setupView },
@@ -29,8 +36,10 @@ const ROUTES: RouteDef<View>[] = [
   { path: '/profile', access: 'user', layout: 'shell', view: profileView },
   { path: '/menu', access: 'admin', layout: 'shell', view: menuView },
   { path: '/reports', access: 'admin', layout: 'shell', view: reportsView },
-  { path: '/users', access: 'admin', layout: 'shell', view: usersView },
+  // Users moved into Settings (feature F1-A); the old address still works.
+  { path: '/users', access: 'admin', layout: 'shell', view: redirectTo('/settings/users') },
   { path: '/settings', access: 'admin', layout: 'shell', view: settingsView },
+  { path: '/settings/:section', access: 'admin', layout: 'shell', view: settingsView },
 ];
 
 function applyTheme(theme: ThemeChoice): void {

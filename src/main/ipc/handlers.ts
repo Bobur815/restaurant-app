@@ -2,6 +2,17 @@ import type { z } from 'zod';
 import * as S from '@shared/schemas';
 import type { IpcChannel } from '@shared/ipc';
 import { changePassword, listPinUsers, login, pinLogin, pinStatus, setPin } from '../auth/auth';
+import {
+  createHall,
+  createTable,
+  createTableRange,
+  deleteHall,
+  deleteTable,
+  listHalls,
+  reorderHalls,
+  updateHall,
+  updateTable,
+} from '../halls/halls';
 import { createCategory, deleteCategory, listCategories, updateCategory } from '../menu/categories';
 import {
   createMenuItem,
@@ -125,6 +136,26 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'printing:preview': admin(S.previewReceiptInput, (ctx, input) =>
     previewReceipt(ctx.db, ctx.services.printer, input),
   ),
+
+  // ── halls & tables ───────────────────────────────────────────────────────────────────────
+  // Hidden halls and tables are for the settings page (admins); everyone else sees active ones.
+  'halls:list': user(S.listHallsInput, (ctx, input) =>
+    listHalls(ctx.db, { includeInactive: input.includeInactive && ctx.actor.role === 'ADMIN' }),
+  ),
+  'halls:create': admin(S.hallInput, (ctx, input) => createHall(ctx.db, input)),
+  'halls:update': admin(S.updateHallInput, (ctx, input) => updateHall(ctx.db, input)),
+  'halls:reorder': admin(S.reorderHallsInput, (ctx, { ids }) => reorderHalls(ctx.db, ids)),
+  'halls:delete': admin(S.idInput, async (ctx, { id }) => {
+    await deleteHall(ctx.db, id);
+    return null;
+  }),
+  'tables:create': admin(S.diningTableInput, (ctx, input) => createTable(ctx.db, input)),
+  'tables:createRange': admin(S.tableRangeInput, (ctx, input) => createTableRange(ctx.db, input)),
+  'tables:update': admin(S.updateDiningTableInput, (ctx, input) => updateTable(ctx.db, input)),
+  'tables:delete': admin(S.idInput, async (ctx, { id }) => {
+    await deleteTable(ctx.db, id);
+    return null;
+  }),
 
   // ── menu ───────────────────────────────────────────────────────────────────────────────────
   'categories:list': user(S.listCategoriesInput, (ctx, input) => listCategories(ctx.db, input)),

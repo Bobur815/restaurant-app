@@ -70,6 +70,7 @@ describe('access levels', () => {
         'auth:setPin',
         'users:updateProfile',
         'printing:printReceipt',
+        'halls:list',
         'categories:list',
         'menu:list',
         'menu:get',
@@ -100,6 +101,14 @@ describe('access levels', () => {
         'printing:printers',
         'printing:test',
         'printing:preview',
+        'halls:create',
+        'halls:update',
+        'halls:reorder',
+        'halls:delete',
+        'tables:create',
+        'tables:createRange',
+        'tables:update',
+        'tables:delete',
         'categories:create',
         'categories:update',
         'categories:delete',
@@ -270,5 +279,19 @@ describe('invokeHandler', () => {
       ok: true,
       data: { name: 'savdochef', version: '0.0.0-test', isPackaged: false },
     });
+  });
+});
+
+describe('halls:list', () => {
+  it('shows hidden halls to admins only', async () => {
+    const hidden = await t.db.hall.create({ data: { name: 'Yashirin zal', isActive: false } });
+    const names = async (who: Actor) => {
+      const r = await caller(who).call('halls:list', { includeInactive: true });
+      if (!r.ok) throw new Error(r.error.message);
+      return r.data.map((h) => h.name);
+    };
+    expect(await names(admin)).toContain('Yashirin zal');
+    expect(await names(staff)).not.toContain('Yashirin zal');
+    await t.db.hall.delete({ where: { id: hidden.id } });
   });
 });

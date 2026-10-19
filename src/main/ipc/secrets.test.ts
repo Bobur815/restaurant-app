@@ -1,6 +1,8 @@
 import type { IpcChannel } from '@shared/ipc';
+import { receiptSettingsInput } from '@shared/schemas';
 import { setPin } from '../auth/auth';
 import type { Actor } from '../domain/db';
+import { RECEIPT_SETTINGS_ID } from '../settings/settings';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
 import { READ_ONLY_CHANNELS } from './events';
 import { HANDLERS } from './handlers';
@@ -24,6 +26,11 @@ beforeAll(async () => {
   await setPin(t.db, admin, { currentPassword: 'boss-pass', pin: '1234' });
   const staff = await createUser(t.db, { username: 'kassa', password: 'kassa-pass' });
   await setPin(t.db, staff, { currentPassword: 'kassa-pass', pin: '4321' });
+
+  // Receipt settings, so the printing channels run their whole path (with the fake printer).
+  await t.db.receiptSettings.create({
+    data: { id: RECEIPT_SETTINGS_ID, ...receiptSettingsInput.parse({ restaurantName: 'Test' }) },
+  });
 
   const category = await t.db.category.findFirstOrThrow();
   const dish = await t.db.menuItem.create({
@@ -57,6 +64,10 @@ afterAll(() => t.close());
 
 const today = new Date().toISOString().slice(0, 10);
 const INPUTS: Partial<Record<IpcChannel, unknown>> = {
+  'halls:list': { includeInactive: true },
+  'printing:printReceipt': { orderId: 1 },
+  'residuals:list': {},
+  'expenses:list': {},
   'menu:get': { id: 1 },
   'sessions:get': { id: 1 },
   'orders:getTable': { tableNumber: 1 },
@@ -89,9 +100,12 @@ describe('no secrets over IPC', () => {
       channel,
       HANDLERS[channel] as never,
       ctx(admin),
-      INPUTS[channel] ?? {},
+      // No entry: no input (channels without input reject `{}`; object schemas default it).
+      INPUTS[channel],
     );
     expect(JSON.stringify(result)).not.toMatch(SECRET);
+    // A failed call proves nothing about secrets: every read channel must really run here.
+    expect(result).toMatchObject({ ok: true });
   });
 
   it('login, PIN login and user management answers carry no hashes', async () => {

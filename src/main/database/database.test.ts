@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import type { PrismaClient } from '../../generated/prisma-sqlite';
+import { DEFAULT_HALL_NAME, HALLS_SEEDED_KEY } from '../halls/halls';
 import { getUserVersion, splitStatements } from './migrate';
 import { MIGRATIONS, type Migration } from './migrations';
 import { loadPrismaModule, openDatabase } from './open';
@@ -81,7 +82,11 @@ describe('openDatabase', () => {
 
     const categories = await prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
     expect(categories.map((c) => c.nameUz)).toEqual(DEFAULT_CATEGORIES.map((c) => c.nameUz));
-    expect(await prisma.setting.count()).toBe(Object.keys(DEFAULT_SETTINGS).length);
+    // + the internal flag that the first hall was created.
+    expect(await prisma.setting.count()).toBe(Object.keys(DEFAULT_SETTINGS).length + 1);
+    expect(await prisma.setting.findUnique({ where: { key: HALLS_SEEDED_KEY } })).not.toBeNull();
+    const halls = await prisma.hall.findMany({ include: { tables: true } });
+    expect(halls.map((h) => [h.name, h.tables.length])).toEqual([[DEFAULT_HALL_NAME, 10]]);
     expect(await prisma.counter.findUnique({ where: { name: 'orders' } })).toEqual({
       name: 'orders',
       value: 0,

@@ -10,7 +10,29 @@ function keys(obj: object, prefix = ''): string[] {
 
 describe('translations', () => {
   it('uz and ru have exactly the same keys', () => {
-    expect(keys(ru).sort()).toEqual(keys(uz).sort());
+    // Russian has more plural forms than Uzbek (one/few/many/other vs one/other); those count as
+    // the same key. Every plural key still needs its `_other` form in both.
+    const base = (list: string[]) =>
+      [...new Set(list.map((k) => k.replace(/_(zero|one|two|few|many|other)$/, '')))].sort();
+    expect(base(keys(ru))).toEqual(base(keys(uz)));
+    for (const lang of [uz, ru]) {
+      const all = new Set(keys(lang));
+      for (const k of all) {
+        const m = /^(.*)_(zero|one|two|few|many)$/.exec(k);
+        if (m) expect(all.has(`${m[1]}_other`)).toBe(true);
+      }
+    }
+  });
+
+  it('Russian plurals pick the right form', () => {
+    setLanguage('ru');
+    expect([1, 3, 5, 21].map((count) => t('halls.tables', { count }))).toEqual([
+      '1 стол',
+      '3 стола',
+      '5 столов',
+      '21 стол',
+    ]);
+    setLanguage('uz');
   });
 
   it('no empty strings', () => {

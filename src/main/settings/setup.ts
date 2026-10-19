@@ -3,6 +3,7 @@ import type { CurrentUser, SetupStatus } from '@shared/types';
 import { hashPassword, toCurrentUser } from '../auth/auth';
 import type { Db, DbOrTx } from '../domain/db';
 import { conflict } from '../domain/errors';
+import { setDefaultTables } from '../halls/halls';
 import { getSettings, RECEIPT_SETTINGS_ID, setSetting } from './settings';
 
 /**
@@ -45,6 +46,7 @@ export async function completeSetup(db: Db, input: SetupInput): Promise<CurrentU
       create: { id: RECEIPT_SETTINGS_ID, ...input.receipt },
     });
     await setSetting(tx, 'tableCount', input.tableCount);
+    await setDefaultTables(tx, input.tableCount);
     await setSetting(tx, 'setupComplete', true);
 
     return toCurrentUser(admin);

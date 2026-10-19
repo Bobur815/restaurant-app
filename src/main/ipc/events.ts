@@ -18,6 +18,7 @@ export const READ_ONLY_CHANNELS = [
   'printing:printReceipt',
   'printing:test',
   'printing:preview',
+  'halls:list',
   'categories:list',
   'menu:list',
   'menu:get',
@@ -42,6 +43,7 @@ const SESSION: AppEvent = { type: 'session-changed' };
 const MENU: AppEvent = { type: 'menu-changed' };
 const SETTINGS: AppEvent = { type: 'settings-changed' };
 const USERS: AppEvent = { type: 'users-changed' };
+const HALLS: AppEvent = { type: 'halls-changed' };
 
 /**
  * What each successful change announces to every window (replaces legacy's `session-updated` /
@@ -62,6 +64,14 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'setup:complete': () => [SETTINGS, USERS],
   'settings:update': () => [SETTINGS],
   'receipt:update': () => [SETTINGS],
+  'halls:create': () => [HALLS],
+  'halls:update': () => [HALLS],
+  'halls:reorder': () => [HALLS],
+  'halls:delete': () => [HALLS],
+  'tables:create': () => [HALLS],
+  'tables:createRange': () => [HALLS],
+  'tables:update': () => [HALLS],
+  'tables:delete': () => [HALLS],
   'categories:create': () => [MENU],
   'categories:update': () => [MENU],
   'categories:delete': () => [MENU],

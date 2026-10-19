@@ -85,6 +85,27 @@ export interface PrinterInfo {
   isDefault: boolean;
 }
 
+// ── Halls & tables ───────────────────────────────────────────────────────────────────────────
+
+export interface DiningTableDto {
+  id: number;
+  /** Unique across the restaurant; what orders store as tableNumber. */
+  number: number;
+  hallId: number;
+  label: string | null;
+  seats: number | null;
+  isActive: boolean;
+}
+
+export interface HallDto {
+  id: number;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  /** Sorted by number. Inactive tables only when listed with includeInactive. */
+  tables: DiningTableDto[];
+}
+
 // ── Menu ─────────────────────────────────────────────────────────────────────────────────────
 
 export interface CategoryDto {

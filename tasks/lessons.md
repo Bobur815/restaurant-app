@@ -32,3 +32,8 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 - Long inline scripts in Bash calls fail unpredictably; write them to the scratchpad and run them from there.
 - `guard-bash` checks the whole command text: a heredoc or commit message that mentions a blocked command (e.g. writing docs about it) is blocked. Put that text in a file and pass the file.
 - `.claude/settings.json` hooks apply immediately in the running session, not only in the next one.
+- `guard-bash` also blocks a line that moves a scratch folder and later copies **from** `%APPDATA%\SavdoChef`; run the move and the copy as separate commands.
+
+## Tests
+
+- A test that loops over channels must assert the call succeeded. `secrets.test.ts` passed `{}` to channels without input; they failed validation and "no secret in the result" passed on the error, so half the read channels were never checked (found in F1-A review).

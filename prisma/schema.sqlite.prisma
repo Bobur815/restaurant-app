@@ -144,6 +144,43 @@ model Counter {
   @@map("counters")
 }
 
+// ==================== HALLS & TABLES ====================
+
+// A room or area of the restaurant (main hall, terrace, VIP rooms). Hidden, never deleted, once
+// it has tables, so old orders keep their place in history.
+model Hall {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tables DiningTable[]
+
+  @@map("halls")
+}
+
+// A table. `number` is unique across the restaurant (decided 2026-10-19) and is what orders store
+// in `tableNumber`, so orders need no foreign key and old orders stay valid when tables move
+// between halls or are hidden.
+model DiningTable {
+  id        Int      @id @default(autoincrement())
+  number    Int      @unique
+  hallId    Int
+  // Optional name shown under the number ("VIP xona", "Deraza oldi").
+  label     String?
+  seats     Int?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hall Hall @relation(fields: [hallId], references: [id], onDelete: Restrict)
+
+  @@index([hallId])
+  @@map("dining_tables")
+}
+
 // ==================== MENU ====================
 
 model Category {
