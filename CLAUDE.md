@@ -1,6 +1,6 @@
 # SavdoChef
 
-> **Rewrite in progress (branch `rewrite/ts-ipc`, plan in `tasks/todo.md`).** The root is now the new TypeScript + electron-vite app (`src/`, `npm run dev`, `npm run check`). Everything below describes the **legacy** app, which now lives in `legacy/` (run it with `npm --prefix legacy start`; paths below are relative to `legacy/`). Use it as the behavior reference (`tasks/inventory.md`); don't extend it. This file gets rewritten in Phase 9.
+> **Rewrite in progress (branch `rewrite/ts-ipc`, plan in `tasks/todo.md`).** The root is now the new TypeScript + electron-vite app (`src/`, `npm run dev`, `npm run check`). Everything below describes the **legacy** app, which was deleted from this branch in Phase 6 and lives only in git tag `legacy-js-express` (`git show legacy-js-express:backend/service/Order.service.js`, or `git worktree add ../savdochef-legacy legacy-js-express` to run it). Use it as the behavior reference (`tasks/inventory.md`); don't restore it. This file gets rewritten in Phase 9.
 
 Offline restaurant CRM + POS for small cafes/eateries (Uzbek market). Electron desktop app that embeds an Express + Prisma + SQLite API in the main process. Single machine, no cloud, no internet required.
 

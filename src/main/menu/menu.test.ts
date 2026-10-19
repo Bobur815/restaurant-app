@@ -2,7 +2,13 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { menuItemInput } from '@shared/schemas';
-import { importImage, ImageImportError, resolveImagePath, sniffImage } from '../images/image-store';
+import {
+  cleanupOrphanImages,
+  importImage,
+  ImageImportError,
+  resolveImagePath,
+  sniffImage,
+} from '../images/image-store';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import { createCategory, deleteCategory, listCategories, updateCategory } from './categories';
 import {
@@ -135,5 +141,21 @@ describe('image store', () => {
     ]) {
       expect(resolveImagePath(dir, bad)).toBeNull();
     }
+  });
+
+  it('cleanup removes only old, unreferenced pictures with our names', () => {
+    const imgDir = path.join(dir, 'cleanup');
+    fs.mkdirSync(imgDir, { recursive: true });
+    const name = (c: string) => c.repeat(32) + '.png';
+    for (const f of [name('a'), name('b'), name('c'), 'notes.txt'])
+      fs.writeFileSync(path.join(imgDir, f), png);
+    const old = Date.now() / 1000 - 2 * 24 * 3600;
+    for (const f of [name('a'), name('b'), 'notes.txt'])
+      fs.utimesSync(path.join(imgDir, f), old, old);
+
+    // a: old + referenced -> kept; b: old + unreferenced -> removed; c: new -> kept; notes.txt: not ours.
+    expect(cleanupOrphanImages(imgDir, new Set([name('a')]))).toEqual([name('b')]);
+    expect(fs.readdirSync(imgDir).sort()).toEqual([name('a'), name('c'), 'notes.txt'].sort());
+    expect(cleanupOrphanImages(path.join(dir, 'missing'), new Set())).toEqual([]);
   });
 });

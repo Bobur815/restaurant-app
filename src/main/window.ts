@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, type BrowserWindowConstructorOptions } from 'electron';
 import path from 'path';
+import { logger } from './logger';
 
 export const INDEX_HTML_PATH = path.join(__dirname, '../../dist-renderer/index.html');
 export const DEV_SERVER_URL = process.env['ELECTRON_RENDERER_URL'];
@@ -48,7 +49,7 @@ export function createWindow(
   });
 
   win.webContents.on('did-fail-load', (_e, code, desc, url) => {
-    console.error(`[window] did-fail-load code=${code} desc=${desc} url=${url}`);
+    logger.error(`[window] did-fail-load code=${code} desc=${desc} url=${url}`);
   });
 
   if (DEV_SERVER_URL) {

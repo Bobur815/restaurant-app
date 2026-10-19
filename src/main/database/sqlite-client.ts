@@ -1,6 +1,7 @@
 import { app } from 'electron';
 import path from 'path';
 import type { PrismaClient } from '../../generated/prisma-sqlite';
+import { logger } from '../logger';
 import { loadPrismaModule, openDatabase, type PrismaModule } from './open';
 
 let prisma: PrismaClient | null = null;
@@ -23,9 +24,9 @@ export async function initializeDatabase(): Promise<PrismaClient> {
   const opened = await openDatabase(dbFile, {
     prismaModule,
     backupDir: backupDirPath(),
-    log: (m) => console.log(m),
+    log: (m) => logger.info(m),
   });
-  console.log(
+  logger.info(
     `[db] ${path.basename(dbFile)} schema v${opened.migration.to}${opened.freshDatabase ? ' (new)' : ''}`,
   );
   prisma = opened.prisma;

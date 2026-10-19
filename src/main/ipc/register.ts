@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, type WebContents } from 'electron'
 import { APP_EVENT_CHANNEL, IPC_CHANNELS, type AppEvent } from '@shared/ipc';
 import type { Actor, Db } from '../domain/db';
 import { importImage } from '../images/image-store';
+import { logger } from '../logger';
 import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-safe';
@@ -64,7 +65,7 @@ export function registerIpcHandlers(getDb: () => Db, imageDir: string): void {
         db: getDb(),
         ...store,
         services: servicesFor(event.sender, imageDir),
-        log: (message, error) => console.error(message, error),
+        log: (message, error) => logger.error(message, error),
       };
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx, rawInput);
       if (result.ok) broadcast(eventsFor(channel, rawInput, result.data));

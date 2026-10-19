@@ -21,7 +21,8 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "check": "npm run typecheck && npm run lint && npm test",
-    "build:icons": "node --experimental-strip-types --no-warnings scripts/build-icons.mjs"
+    "build:icons": "node --experimental-strip-types --no-warnings scripts/build-icons.mjs",
+    "import:legacy": "esbuild scripts/import-legacy.ts --bundle --platform=node --format=cjs --tsconfig=tsconfig.base.json --outfile=dist/scripts/import-legacy.cjs --log-level=warning && node dist/scripts/import-legacy.cjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
@@ -96,6 +97,7 @@
     "bcryptjs": "3.0.3",
     "chart.js": "4.5.1",
     "decimal.js": "10.6.0",
+    "electron-log": "5.4.4",
     "i18next": "26.4.2",
     "lucide": "1.51.0",
     "zod": "4.6.5"

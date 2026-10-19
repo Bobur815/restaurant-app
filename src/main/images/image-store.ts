@@ -67,3 +67,30 @@ export const IMAGE_MIME: Record<Kind, string> = {
   png: 'image/png',
   webp: 'image/webp',
 };
+
+export const ORPHAN_MIN_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Deletes pictures nothing refers to any more (a dish's picture was replaced or removed).
+ * Only names this store could have issued are touched, and only files older than `minAgeMs`:
+ * a picture picked in the dish dialog but not saved yet must survive. Returns the removed names.
+ */
+export function cleanupOrphanImages(
+  imageDir: string,
+  referenced: ReadonlySet<string>,
+  now: number = Date.now(),
+  minAgeMs: number = ORPHAN_MIN_AGE_MS,
+): string[] {
+  if (!fs.existsSync(imageDir)) return [];
+  const removed: string[] = [];
+  for (const name of fs.readdirSync(imageDir)) {
+    if (!IMAGE_FILE_NAME.test(name) || referenced.has(name)) continue;
+    const full = resolveImagePath(imageDir, name);
+    if (!full) continue;
+    const stat = fs.statSync(full);
+    if (!stat.isFile() || now - stat.mtimeMs < minAgeMs) continue;
+    fs.rmSync(full, { force: true });
+    removed.push(name);
+  }
+  return removed;
+}

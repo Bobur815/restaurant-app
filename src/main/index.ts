@@ -6,16 +6,34 @@ import {
   getPrisma,
   initializeDatabase,
 } from './database/sqlite-client';
+import { cleanupOrphanImages } from './images/image-store';
 import { handleImageScheme, registerImageScheme } from './images/images-protocol';
 import { registerIpcHandlers } from './ipc/register';
+import { initLogger, logger } from './logger';
 import { installSecurityHandlers } from './security';
 import { createWindow, DEV_SERVER_URL, INDEX_HTML_PATH } from './window';
 
 let mainWindow: BrowserWindow | null = null;
 
+/** Housekeeping, never blocks or breaks startup. */
+async function removeOrphanImages(imageDir: string): Promise<void> {
+  try {
+    const rows = await getPrisma().menuItem.findMany({
+      where: { imageFile: { not: null } },
+      select: { imageFile: true },
+    });
+    const removed = cleanupOrphanImages(imageDir, new Set(rows.map((r) => r.imageFile!)));
+    if (removed.length) logger.info(`[img] removed ${removed.length} unused picture(s)`);
+  } catch (error) {
+    logger.warn('[img] cleanup failed', error);
+  }
+}
+
 // No GPU acceleration (as posgro): tills are often reached over AnyDesk/RDP or have weak GPUs.
 // Measured on the dev machine: first paint ~19 s with the GPU, ~1 s without.
 app.disableHardwareAcceleration();
+
+initLogger();
 
 // Chromium's own UI locale (native date inputs, built-in messages). It has no Uzbek locale, so
 // Russian gives the day-first date format used in Uzbekistan (dd.mm.yyyy). The app's own text
@@ -41,7 +59,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       await initializeDatabase();
     } catch (error) {
-      console.error('[db] failed to open database:', error);
+      logger.error('[db] failed to open database:', error);
       dialog.showErrorBox(
         "Ma'lumotlar bazasini ochib bo'lmadi",
         `${error instanceof Error ? error.message : String(error)}\n\nFayl: ${databaseFilePath()}`,
@@ -52,6 +70,7 @@ if (!app.requestSingleInstanceLock()) {
 
     const imageDir = path.join(app.getPath('userData'), 'img');
     handleImageScheme(imageDir);
+    void removeOrphanImages(imageDir);
     registerIpcHandlers(getPrisma, imageDir);
 
     mainWindow = createWindow();
