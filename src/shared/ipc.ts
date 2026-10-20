@@ -19,25 +19,26 @@ export interface IpcChannels {
   // app
   'app:info': Channel<undefined, { name: string; version: string; isPackaged: boolean }>;
 
-  // auth & users
-  'auth:login': Channel<In<typeof S.loginInput>, T.CurrentUser>;
+  // auth & users (feature F2: PIN-only login)
+  'auth:pinLogin': Channel<In<typeof S.pinLoginInput>, T.CurrentUser>;
   'auth:logout': Channel<undefined, null>;
   'auth:me': Channel<undefined, T.CurrentUser | null>;
-  'auth:changePassword': Channel<In<typeof S.changePasswordInput>, null>;
-  /** Active users with a PIN, for the lock screen. */
-  'auth:pinUsers': Channel<undefined, T.PinUserDto[]>;
-  'auth:pinLogin': Channel<In<typeof S.pinLoginInput>, T.CurrentUser>;
-  'auth:pinStatus': Channel<undefined, { hasPin: boolean }>;
-  'auth:setPin': Channel<In<typeof S.setPinInput>, { hasPin: boolean }>;
+  /** Forgotten admin PIN: recovery code + new PIN; returns the next recovery code (once). */
+  'auth:recover': Channel<In<typeof S.recoverInput>, T.LoginWithCodeDto>;
+  /** Nobody with the users permission can log in (after an upgrade): who could. */
+  'auth:bootstrapStatus': Channel<undefined, { needed: boolean; admins: T.AdminChoiceDto[] }>;
+  'auth:bootstrapPin': Channel<In<typeof S.bootstrapPinInput>, T.LoginWithCodeDto>;
+  /** Whether a recovery code exists; a new one is made (and shown once) on request. */
+  'auth:recoveryStatus': Channel<undefined, { hasCode: boolean }>;
+  'auth:newRecoveryCode': Channel<undefined, { recoveryCode: string }>;
   'users:list': Channel<undefined, T.UserDto[]>;
   'users:create': Channel<In<typeof S.createUserInput>, T.UserDto>;
   'users:update': Channel<In<typeof S.updateUserInput>, T.UserDto>;
-  'users:resetPassword': Channel<In<typeof S.resetPasswordInput>, null>;
   'users:updateProfile': Channel<In<typeof S.updateProfileInput>, T.CurrentUser>;
 
   // setup & settings
   'setup:status': Channel<undefined, T.SetupStatus>;
-  'setup:complete': Channel<In<typeof S.setupInput>, T.CurrentUser>;
+  'setup:complete': Channel<In<typeof S.setupInput>, T.LoginWithCodeDto>;
   'settings:get': Channel<undefined, T.AppSettings>;
   'settings:update': Channel<In<typeof S.updateSettingsInput>, T.AppSettings>;
   'receipt:get': Channel<undefined, T.ReceiptSettingsDto | null>;
@@ -133,18 +134,17 @@ export type IpcOutput<C extends IpcChannel> = IpcChannels[C]['result'];
  */
 export const IPC_CHANNELS = [
   'app:info',
-  'auth:login',
+  'auth:pinLogin',
   'auth:logout',
   'auth:me',
-  'auth:changePassword',
-  'auth:pinUsers',
-  'auth:pinLogin',
-  'auth:pinStatus',
-  'auth:setPin',
+  'auth:recover',
+  'auth:bootstrapStatus',
+  'auth:bootstrapPin',
+  'auth:recoveryStatus',
+  'auth:newRecoveryCode',
   'users:list',
   'users:create',
   'users:update',
-  'users:resetPassword',
   'users:updateProfile',
   'setup:status',
   'setup:complete',

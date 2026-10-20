@@ -11,7 +11,7 @@ import { api, isApiError } from '../../api';
 import { confirmDialog } from '../../components/modal';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
-import { appStore } from '../../store/app';
+import { appStore, can } from '../../store/app';
 import { html, refs } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { playClick } from '../../ui/sound';
@@ -154,7 +154,8 @@ export const orderView: View = ({ params, navigate }) => {
   const saveButton = button(t('order.save'), 'primary');
   const payButton = button(t('order.pay'), 'success');
   const cancelButton = button(t('order.cancelOrder'), 'danger-ghost');
-  r.actions.append(cancelButton, payButton, saveButton);
+  // Closing an order (payment) is its own permission: a waiter saves, the cashier takes the money.
+  r.actions.append(cancelButton, ...(can('payments') ? [payButton] : []), saveButton);
 
   function button(label: string, kind: string): HTMLButtonElement {
     const b = document.createElement('button');

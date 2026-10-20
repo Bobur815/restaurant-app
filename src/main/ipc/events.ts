@@ -7,8 +7,8 @@ import type { AppEvent, IpcChannel, IpcInput, IpcOutput } from '@shared/ipc';
 export const READ_ONLY_CHANNELS = [
   'app:info',
   'auth:me',
-  'auth:pinUsers',
-  'auth:pinStatus',
+  'auth:bootstrapStatus',
+  'auth:recoveryStatus',
   'users:list',
   'setup:status',
   'settings:get',
@@ -60,15 +60,13 @@ const DEBTS: AppEvent = { type: 'debts-changed' };
  * affect the calling window, so they announce nothing.
  */
 export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
-  'auth:login': () => [],
-  'auth:logout': () => [],
-  'auth:changePassword': () => [],
   'auth:pinLogin': () => [],
-  // The lock screen's user list changes.
-  'auth:setPin': () => [USERS],
+  'auth:logout': () => [],
+  'auth:recover': () => [USERS],
+  'auth:bootstrapPin': () => [USERS],
+  'auth:newRecoveryCode': () => [],
   'users:create': () => [USERS],
   'users:update': () => [USERS],
-  'users:resetPassword': () => [USERS],
   'users:updateProfile': () => [USERS],
   'setup:complete': () => [SETTINGS, USERS],
   'settings:update': () => [SETTINGS],

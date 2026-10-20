@@ -1,14 +1,22 @@
 import { api } from '../api';
 import { SavdoChefSquare } from '../branding';
-import { clearErrors, field, setFieldError, showFormError, value } from '../components/forms';
+import { clearErrors, field, showFormError, value } from '../components/forms';
+import { phoneField } from '../components/phone-field';
+import { pinField, pinsMatch } from '../components/pin-field';
+import { showRecoveryCode } from '../components/recovery-code';
 import { toast } from '../components/toast';
 import { t } from '../i18n';
+import { homeFor } from '../router/routes';
 import { appStore } from '../store/app';
 import { html } from '../ui/html';
 import type { View } from './types';
 
-/** First run: the first administrator and the restaurant's receipt details, in one step. */
+/**
+ * First run: the first administrator (name, phone, login PIN) and the restaurant's receipt
+ * details, in one step. Ends by showing the owner's recovery code once.
+ */
 export const setupView: View = ({ navigate }) => {
+  const adminPhone = phoneField({ name: 'admin.phone', label: t('setup.adminPhone') });
   const form = document.createElement('form');
   form.className = 'auth-card auth-card-wide';
   form.noValidate = true;
@@ -30,26 +38,14 @@ export const setupView: View = ({ navigate }) => {
         <fieldset>
           <legend>${t('setup.adminSection')}</legend>
           ${field({
-            name: 'admin.username',
-            label: t('setup.username'),
+            name: 'admin.fullName',
+            label: t('setup.fullName'),
             required: true,
-            autocomplete: 'username',
+            autocomplete: 'name',
           })}
-          ${field({ name: 'admin.fullName', label: t('setup.fullName'), autocomplete: 'name' })}
-          ${field({
-            name: 'admin.password',
-            label: t('setup.password'),
-            type: 'password',
-            required: true,
-            autocomplete: 'new-password',
-          })}
-          ${field({
-            name: 'passwordRepeat',
-            label: t('setup.passwordRepeat'),
-            type: 'password',
-            required: true,
-            autocomplete: 'new-password',
-          })}
+          ${adminPhone.el} ${pinField('admin.pin', t('setup.pin'))}
+          ${pinField('pinRepeat', t('setup.pinRepeat'))}
+          <p class="muted small">${t('setup.pinHint')}</p>
         </fieldset>
         <fieldset>
           <legend>${t('setup.restaurantSection')}</legend>
@@ -78,17 +74,14 @@ export const setupView: View = ({ navigate }) => {
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     clearErrors(form);
-    if (value(form, 'admin.password') !== value(form, 'passwordRepeat')) {
-      setFieldError(form, 'passwordRepeat', t('errors.passwordsDiffer'));
-      return;
-    }
+    if (!pinsMatch(form, 'admin.pin', 'pinRepeat')) return;
     submit.disabled = true;
     try {
-      const user = await api.setup.complete({
+      const { user, recoveryCode } = await api.setup.complete({
         admin: {
-          username: value(form, 'admin.username'),
-          password: form.querySelector<HTMLInputElement>('[name="admin.password"]')!.value,
-          fullName: value(form, 'admin.fullName') || null,
+          fullName: value(form, 'admin.fullName'),
+          phone: adminPhone.input.value,
+          pin: value(form, 'admin.pin'),
         },
         receipt: {
           restaurantName: value(form, 'receipt.restaurantName'),
@@ -105,8 +98,9 @@ export const setupView: View = ({ navigate }) => {
         setup: { setupComplete: true, hasAdmin: true },
         openSession: null,
       });
+      await showRecoveryCode(recoveryCode);
       toast(t('setup.done'), 'success');
-      navigate('/tables');
+      navigate(homeFor(user));
     } catch (error) {
       showFormError(form, error);
     } finally {

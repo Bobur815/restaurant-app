@@ -3,6 +3,7 @@ import { dec, isDecimalString } from './utils/decimal';
 import { PORTION_FACTORS } from './utils/order-line';
 import { digitsOnly, isUzPhoneComplete, normalizeUzPhone } from './utils/phone';
 import { TENDER_METHODS } from './utils/split-payment';
+import { cleanPermissions, PERMISSIONS } from './permissions';
 
 /**
  * Input schemas for every IPC channel. The main process parses every payload with these before
@@ -79,7 +80,7 @@ export function localDate(days = 0): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-export const role = z.enum(['ADMIN', 'STAFF']);
+export const role = z.enum(['ADMIN', 'CASHIER', 'STAFF']);
 export const paymentMethod = z.enum(['cash', 'card', 'click', 'debt']);
 export const paymentStatus = z.enum(['paid', 'pending', 'refunded']);
 export const tableNumber = z.number().int().min(1).max(999);
@@ -105,59 +106,62 @@ const page = {
   limit: z.number().int().min(1).max(200).default(20),
 };
 
+/** A phone that must be there (debt needs a customer). */
+export const requiredPhone = optionalPhone.refine((v): v is string => v !== null, {
+  message: 'Telefon raqami kerak',
+});
+
 // ── Auth & users ─────────────────────────────────────────────────────────────────────────────
 
-export const username = trimmed(3, 32, 'Login').regex(/^[\p{L}\p{N}._-]+$/u, {
-  message: "Login faqat harf, raqam, '.', '_' va '-' dan iborat bo'lishi mumkin",
-});
-export const password = z
-  .string()
-  .min(6, { message: "Parol kamida 6 ta belgidan iborat bo'lishi kerak" })
-  .max(128);
-
-export const loginInput = z.object({
-  username: z.string().trim().min(1),
-  password: z.string().min(1),
-});
-
-/** Lock-screen PIN: exactly 4 digits. */
+/** The login PIN: exactly 4 digits, unique among users (feature F2). */
 export const pinCode = z
   .string()
   .regex(/^\d{4}$/, { message: "PIN kod 4 ta raqamdan iborat bo'lishi kerak" });
 
-/** Set or change the PIN (or remove it with `pin: null`); the account password confirms it. */
-export const setPinInput = z.object({
-  currentPassword: z.string().min(1),
-  pin: pinCode.nullable(),
+export const permission = z.enum(PERMISSIONS);
+export const permissionList = z
+  .array(permission)
+  .max(PERMISSIONS.length)
+  .transform((list) => cleanPermissions(list));
+
+const userName = trimmed(1, 64, 'Ism');
+
+export const pinLoginInput = z.object({ pin: pinCode });
+
+/** Recovery code (shown once to the admin) and the new PIN for the owner admin. */
+export const recoverInput = z.object({
+  code: z.string().trim().min(8).max(32),
+  pin: pinCode,
 });
 
-export const pinLoginInput = z.object({ userId: id, pin: pinCode });
-
-export const changePasswordInput = z.object({
-  currentPassword: z.string().min(1),
-  newPassword: password,
-});
+/** Upgrade with nobody able to log in: the PIN of an administrator, once. */
+export const bootstrapPinInput = z.object({ userId: id, pin: pinCode });
 
 export const updateProfileInput = z.object({
-  username: username.optional(),
-  fullName: optionalText(64).optional(),
+  fullName: userName.optional(),
+  phone: requiredPhone.optional(),
 });
 
 export const createUserInput = z.object({
-  username,
-  password,
-  fullName: optionalText(64),
+  fullName: userName,
+  phone: requiredPhone,
   role: role.default('STAFF'),
+  /** Omitted: the role's defaults. */
+  permissions: permissionList.optional(),
+  /** Omitted or null: the user cannot log in until a PIN is set. */
+  pin: pinCode.nullish(),
 });
 
 export const updateUserInput = z.object({
   id,
-  fullName: optionalText(64).optional(),
+  fullName: userName.optional(),
+  phone: requiredPhone.optional(),
   role: role.optional(),
+  permissions: permissionList.optional(),
   isActive: z.boolean().optional(),
+  /** A new PIN; null removes it; omitted keeps it. */
+  pin: pinCode.nullable().optional(),
 });
-
-export const resetPasswordInput = z.object({ id, newPassword: password });
 
 // ── Setup & settings ─────────────────────────────────────────────────────────────────────────
 
@@ -208,7 +212,7 @@ export const previewReceiptInput = updateReceiptSettingsInput.default({});
 export const printReceiptInput = z.object({ orderId: id });
 
 export const setupInput = z.object({
-  admin: z.object({ username, password, fullName: optionalText(64) }),
+  admin: z.object({ fullName: userName, phone: requiredPhone, pin: pinCode }),
   receipt: receiptSettingsInput,
   tableCount: z.number().int().min(1).max(200).default(10),
 });
@@ -431,11 +435,6 @@ export const deliveryStatusInput = z.object({
   status: deliveryStatus,
   courierName: optionalText(60).optional(),
   expectedVersion: z.number().int().min(0).optional(),
-});
-
-/** A phone that must be there (debt needs a customer). */
-export const requiredPhone = optionalPhone.refine((v): v is string => v !== null, {
-  message: 'Telefon raqami kerak',
 });
 
 export const phoneLookupInput = z.object({ phone: z.string().trim().max(32) });

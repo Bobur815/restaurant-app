@@ -7,6 +7,7 @@ import type {
   voidRepaymentInput,
   writeOffInput,
 } from '@shared/schemas';
+import { hasPermission } from '@shared/permissions';
 import type { DebtorDetailDto, DebtorDto } from '@shared/types';
 import { dec, sum, toMoneyString, type Dec } from '@shared/utils/decimal';
 import type { Actor, Db, DbOrTx, Tx } from '../domain/db';
@@ -202,8 +203,8 @@ export async function getDebtor(
       : db.debtRepayment.findMany({
           where: { customerId },
           include: {
-            createdBy: { select: { username: true } },
-            voidedBy: { select: { username: true } },
+            createdBy: { select: { fullName: true } },
+            voidedBy: { select: { fullName: true } },
           },
           orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         }),
@@ -245,9 +246,9 @@ export async function getDebtor(
       amount: decStr(r.amount),
       note: r.note,
       createdAt: iso(r.createdAt),
-      createdBy: r.createdBy?.username ?? null,
+      createdBy: r.createdBy?.fullName ?? null,
       voidedAt: isoOrNull(r.voidedAt),
-      voidedBy: r.voidedBy?.username ?? null,
+      voidedBy: r.voidedBy?.fullName ?? null,
       voidReason: r.voidReason,
     })),
   };
@@ -279,7 +280,7 @@ async function addCredit(
     await assertNotOverpaid(tx, data.customerId);
     await reallocate(tx, data.customerId);
   });
-  return getDebtor(db, data.customerId, { full: actor.role === 'ADMIN' });
+  return getDebtor(db, data.customerId, { full: hasPermission(actor, 'debtsAdmin') });
 }
 
 /** Money brought back against the debt (any user); never more than is owed. */

@@ -17,8 +17,7 @@ import { button, pageHeader } from '../../components/page';
 import { phoneField } from '../../components/phone-field';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
-import { isAdmin } from '../../router/routes';
-import { appStore } from '../../store/app';
+import { appStore, can } from '../../store/app';
 import { html } from '../../ui/html';
 import { formatDate, formatDateTime, formatMoney, toInputDecimal } from '../../utils/format';
 import type { View } from '../types';
@@ -70,7 +69,7 @@ export const debtorsView: View = () => {
   filters.className = 'filters';
   filters.append(
     html`${field({ name: 'q', label: t('debts.search') })}
-    ${isAdmin(appStore.get().user!.role)
+    ${can('debtsAdmin')
       ? checkboxField({ name: 'includeSettled', label: t('debts.includeSettled') })
       : ''}`,
   );
@@ -175,7 +174,7 @@ export const debtorsView: View = () => {
   // ── one customer's ledger ──────────────────────────────────────────────────────────────────
 
   async function showDebtor(customerId: number | null) {
-    const admin = isAdmin(appStore.get().user!.role);
+    const admin = can('debtsAdmin');
     const body = document.createElement('div');
     body.className = 'debtor-detail';
 

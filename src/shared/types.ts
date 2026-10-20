@@ -5,7 +5,8 @@ import type { DecimalString } from './utils/decimal';
  * strings, ids are numbers. Prisma types never leave the main process.
  */
 
-export type Role = 'ADMIN' | 'STAFF';
+import type { Permission, Role } from './permissions';
+export type { Permission, Role } from './permissions';
 export type OrderStatus = 'pending' | 'completed' | 'cancelled';
 export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
 export type DeliveryStatus = 'PREPARING' | 'ON_THE_WAY' | 'DELIVERED';
@@ -28,20 +29,29 @@ export const PAYMENT_STATUSES: readonly PaymentStatus[] = ['paid', 'pending', 'r
 /** The logged-in user as the UI sees it (also the server-side "actor"). */
 export interface CurrentUser {
   id: number;
-  username: string;
-  fullName: string | null;
+  fullName: string;
+  /** 998XXXXXXXXX; null only for users from before phones (an admin fills it in). */
+  phone: string | null;
   role: Role;
+  permissions: Permission[];
 }
 
-/** A user who can unlock with a PIN: what the lock screen lists (never any secret). */
-export interface PinUserDto {
+/** An administrator, for the one-time "set the administrator PIN" step (names only). */
+export interface AdminChoiceDto {
   id: number;
-  username: string;
-  fullName: string | null;
+  fullName: string;
+}
+
+/** A login that also hands over a new recovery code (shown once, never stored in clear). */
+export interface LoginWithCodeDto {
+  user: CurrentUser;
+  recoveryCode: string;
 }
 
 export interface UserDto extends CurrentUser {
   isActive: boolean;
+  /** Has a PIN for the lock screen / PIN login (the PIN itself never leaves main). */
+  hasPin: boolean;
   lastLoginAt: string | null;
   createdAt: string;
 }

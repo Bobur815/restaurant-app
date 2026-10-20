@@ -1,156 +1,164 @@
+import bcrypt from 'bcryptjs';
+import { receiptSettingsInput, setupInput } from '@shared/schemas';
+import { completeSetup } from '../settings/setup';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
 import {
-  createUser as createUserViaModule,
-  listUsers,
-  updateProfile,
-  updateUser,
-} from '../users/users';
-import { changePassword, LOCK_MINUTES, login, MAX_FAILED_LOGINS, refreshActor } from './auth';
+  bootstrapPin,
+  bootstrapStatus,
+  LOCK_MINUTES,
+  MAX_FAILED,
+  pinLogin,
+  recoverWithCode,
+  setPinOf,
+} from './auth';
 
-jest.setTimeout(30_000);
+jest.setTimeout(60_000);
 
 let t: TestDb;
-beforeAll(async () => {
+beforeEach(async () => {
   t = await createTestDb();
 });
-afterAll(() => t.close());
+afterEach(() => t.close());
 
-describe('login', () => {
-  it('returns the user without any password data', async () => {
-    await createUser(t.db, { username: 'kassa1', password: 'right-pass' });
-    const user = await login(t.db, { username: 'kassa1', password: 'right-pass' });
-    expect(user).toEqual({
-      id: expect.any(Number),
-      username: 'kassa1',
-      fullName: null,
-      role: 'STAFF',
+const minutes = (from: Date, n: number) => new Date(from.getTime() + n * 60_000);
+
+async function setup(pin = '1234') {
+  return completeSetup(
+    t.db,
+    setupInput.parse({
+      admin: { fullName: 'Ega', phone: '+998 90 000 00 01', pin },
+      receipt: receiptSettingsInput.parse({ restaurantName: 'Test' }),
+    }),
+  );
+}
+
+describe('PIN login', () => {
+  it('the PIN alone says who logs in; it is stored as a keyed hash, never as digits', async () => {
+    const { user: admin } = await setup('1234');
+    const waiter = await createUser(t.db, { username: 'Dilshod', pin: '5678' });
+
+    expect(await pinLogin(t.db, '1234')).toMatchObject({ id: admin.id, role: 'ADMIN' });
+    expect(await pinLogin(t.db, '5678')).toMatchObject({
+      id: waiter.id,
+      fullName: 'Dilshod',
+      permissions: ['orders'],
+    });
+    const row = await t.db.user.findUniqueOrThrow({ where: { id: waiter.id } });
+    expect(row.pinHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(JSON.stringify(row)).not.toContain('5678');
+  });
+
+  it('PINs are unique', async () => {
+    await setup('1234');
+    const waiter = await createUser(t.db, { username: 'Dilshod' });
+    await expect(setPinOf(t.db, waiter.id, '1234')).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { field: 'pin' },
     });
   });
 
-  it('gives the same answer for an unknown user and a wrong password', async () => {
-    await createUser(t.db, { username: 'kassa2', password: 'right-pass' });
-    const a = login(t.db, { username: 'nobody', password: 'x' });
-    const b = login(t.db, { username: 'kassa2', password: 'wrong' });
-    await expect(a).rejects.toMatchObject({
-      code: 'NOT_AUTHENTICATED',
-      message: "Login yoki parol noto'g'ri",
-    });
-    await expect(b).rejects.toMatchObject({
-      code: 'NOT_AUTHENTICATED',
-      message: "Login yoki parol noto'g'ri",
-    });
-  });
-
-  it(`locks for ${LOCK_MINUTES} minutes after ${MAX_FAILED_LOGINS} wrong passwords, even for the right one`, async () => {
-    await createUser(t.db, { username: 'kassa3', password: 'right-pass' });
-    const now = new Date('2026-10-18T10:00:00Z');
-    for (let i = 0; i < MAX_FAILED_LOGINS; i++) {
-      await expect(login(t.db, { username: 'kassa3', password: 'bad' }, now)).rejects.toMatchObject(
-        {
-          code: 'NOT_AUTHENTICATED',
-        },
-      );
+  it('5 wrong PINs lock the keypad; the lock doubles and survives a restart', async () => {
+    await setup('1234');
+    const now = new Date(2026, 9, 20, 10, 0);
+    for (let i = 1; i < MAX_FAILED; i++) {
+      await expect(pinLogin(t.db, '0000', now)).rejects.toMatchObject({
+        code: 'NOT_AUTHENTICATED',
+        details: { attemptsLeft: MAX_FAILED - i },
+      });
     }
-    await expect(
-      login(t.db, { username: 'kassa3', password: 'right-pass' }, now),
-    ).rejects.toMatchObject({
+    await expect(pinLogin(t.db, '0000', now)).rejects.toMatchObject({ code: 'LOCKED' });
+    // Locked even for the right PIN (the lock is kept in the database, not in memory).
+    await expect(pinLogin(t.db, '1234', minutes(now, 1))).rejects.toMatchObject({
       code: 'LOCKED',
     });
-    const later = new Date(now.getTime() + LOCK_MINUTES * 60_000 + 1);
-    await expect(
-      login(t.db, { username: 'kassa3', password: 'right-pass' }, later),
-    ).resolves.toMatchObject({
-      username: 'kassa3',
+
+    const later = minutes(now, LOCK_MINUTES + 1);
+    for (let i = 0; i < MAX_FAILED - 1; i++)
+      await expect(pinLogin(t.db, '0000', later)).rejects.toThrow();
+    const second = await pinLogin(t.db, '0000', later).catch((e: unknown) => e);
+    expect(second).toMatchObject({ code: 'LOCKED' });
+    const until = new Date((second as { details: { lockedUntil: string } }).details.lockedUntil);
+    expect(until.getTime() - later.getTime()).toBe(2 * LOCK_MINUTES * 60_000);
+
+    // A right PIN after the lock resets everything.
+    expect((await pinLogin(t.db, '1234', minutes(until, 1))).fullName).toBe('Ega');
+    await expect(pinLogin(t.db, '0000', minutes(until, 1))).rejects.toMatchObject({
+      details: { attemptsLeft: MAX_FAILED - 1 },
     });
   });
 
-  it('a successful login resets the failure counter', async () => {
-    await createUser(t.db, { username: 'kassa4', password: 'right-pass' });
-    for (let i = 0; i < MAX_FAILED_LOGINS - 1; i++) {
-      await login(t.db, { username: 'kassa4', password: 'bad' }).catch(() => undefined);
+  it('an inactive user is refused even with the right PIN', async () => {
+    await setup();
+    await createUser(t.db, { username: 'Ketgan', pin: '4444', isActive: false });
+    await expect(pinLogin(t.db, '4444')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('a PIN from the old version works once and is converted', async () => {
+    await setup();
+    const old = await createUser(t.db, { username: 'Eski' });
+    await t.db.user.update({
+      where: { id: old.id },
+      data: { legacyPinCode: await bcrypt.hash('2468', 4) },
+    });
+    expect((await pinLogin(t.db, '2468')).id).toBe(old.id);
+    const row = await t.db.user.findUniqueOrThrow({ where: { id: old.id } });
+    expect(row).toMatchObject({ legacyPinCode: null });
+    expect(row.pinHash).not.toBeNull();
+    expect((await pinLogin(t.db, '2468')).id).toBe(old.id);
+
+    // Two old PINs alike: nobody gets in on it, an administrator must give new ones.
+    const hash = await bcrypt.hash('1357', 4);
+    for (const name of ['A', 'B']) {
+      const u = await createUser(t.db, { username: name });
+      await t.db.user.update({ where: { id: u.id }, data: { legacyPinCode: hash } });
     }
-    await login(t.db, { username: 'kassa4', password: 'right-pass' });
-    await login(t.db, { username: 'kassa4', password: 'bad' }).catch(() => undefined);
-    await expect(login(t.db, { username: 'kassa4', password: 'right-pass' })).resolves.toBeTruthy();
+    await expect(pinLogin(t.db, '1357')).rejects.toMatchObject({ code: 'CONFLICT' });
   });
+});
 
-  it('refuses inactive users only after the password is right', async () => {
-    await createUser(t.db, { username: 'old', password: 'right-pass', isActive: false });
-    await expect(login(t.db, { username: 'old', password: 'bad' })).rejects.toMatchObject({
-      code: 'NOT_AUTHENTICATED',
+describe('recovery code', () => {
+  it('setup gives a code once; it sets the owner a new PIN and is replaced by a new code', async () => {
+    const { recoveryCode } = await setup('1234');
+    expect(recoveryCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(JSON.stringify(await t.db.setting.findMany())).not.toContain(recoveryCode);
+
+    await expect(
+      recoverWithCode(t.db, { code: 'AAAA-BBBB-CCCC', pin: '9999' }),
+    ).rejects.toMatchObject({ code: 'NOT_AUTHENTICATED' });
+    // Typed in lower case without dashes still matches.
+    const result = await recoverWithCode(t.db, {
+      code: recoveryCode.toLowerCase().replace(/-/g, ''),
+      pin: '9999',
     });
-    await expect(login(t.db, { username: 'old', password: 'right-pass' })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+    expect(result.user.fullName).toBe('Ega');
+    expect(result.recoveryCode).not.toBe(recoveryCode);
+    expect((await pinLogin(t.db, '9999')).fullName).toBe('Ega');
+    await expect(pinLogin(t.db, '1234')).rejects.toMatchObject({ code: 'NOT_AUTHENTICATED' });
+    await expect(recoverWithCode(t.db, { code: recoveryCode, pin: '8888' })).rejects.toMatchObject({
+      code: 'NOT_AUTHENTICATED',
     });
   });
 });
 
-describe('passwords and users', () => {
-  it('stores bcrypt hashes, never the plaintext', async () => {
-    await createUserViaModule(t.db, {
-      username: 'newbie',
-      password: 'plain-secret',
-      fullName: null,
-      role: 'STAFF',
+describe('first administrator PIN', () => {
+  it('only while nobody who manages users can log in', async () => {
+    const owner = await createUser(t.db, { username: 'Ega', role: 'ADMIN' });
+    await createUser(t.db, { username: 'Kassa', role: 'CASHIER', pin: '1111' });
+    expect(await bootstrapStatus(t.db)).toEqual({
+      needed: true,
+      admins: [{ id: owner.id, fullName: 'Ega' }],
     });
-    const row = await t.db.user.findUniqueOrThrow({ where: { username: 'newbie' } });
-    expect(row.passwordHash).toMatch(/^\$2[aby]\$10\$/);
-    expect(row.passwordHash).not.toContain('plain-secret');
-    expect(JSON.stringify(await listUsers(t.db))).not.toContain('$2');
-  });
+    const cashier = (await t.db.user.findFirstOrThrow({ where: { fullName: 'Kassa' } })).id;
+    await expect(bootstrapPin(t.db, { userId: cashier, pin: '2222' })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
 
-  it('changePassword requires the current password', async () => {
-    const actor = await createUser(t.db, { username: 'changer', password: 'old-pass' });
-    await expect(
-      changePassword(t.db, actor, { currentPassword: 'nope', newPassword: 'new-pass' }),
-    ).rejects.toMatchObject({ code: 'VALIDATION' });
-    await changePassword(t.db, actor, { currentPassword: 'old-pass', newPassword: 'new-pass' });
-    await expect(login(t.db, { username: 'changer', password: 'new-pass' })).resolves.toBeTruthy();
-  });
-
-  it('duplicate usernames are a CONFLICT', async () => {
-    await expect(
-      createUserViaModule(t.db, {
-        username: 'newbie',
-        password: 'whatever',
-        fullName: null,
-        role: 'STAFF',
-      }),
-    ).rejects.toMatchObject({ code: 'CONFLICT' });
-    const actor = await createUser(t.db, { username: 'renamer' });
-    await expect(updateProfile(t.db, actor, { username: 'newbie' })).rejects.toMatchObject({
+    const result = await bootstrapPin(t.db, { userId: owner.id, pin: '2222' });
+    expect(result.user.id).toBe(owner.id);
+    expect(result.recoveryCode).toMatch(/^[A-Z2-9-]{14}$/);
+    expect(await bootstrapStatus(t.db)).toEqual({ needed: false, admins: [] });
+    await expect(bootstrapPin(t.db, { userId: owner.id, pin: '3333' })).rejects.toMatchObject({
       code: 'CONFLICT',
     });
-  });
-
-  it('never leaves the system without an active admin', async () => {
-    const t2 = await createTestDb();
-    try {
-      const admin = await createUser(t2.db, { username: 'boss', role: 'ADMIN' });
-      await expect(updateUser(t2.db, admin, { id: admin.id, role: 'STAFF' })).rejects.toMatchObject(
-        { code: 'CONFLICT' },
-      );
-      await expect(
-        updateUser(t2.db, admin, { id: admin.id, isActive: false }),
-      ).rejects.toMatchObject({ code: 'CONFLICT' });
-
-      const second = await createUser(t2.db, { username: 'boss2', role: 'ADMIN' });
-      await expect(
-        updateUser(t2.db, second, { id: admin.id, role: 'STAFF' }),
-      ).resolves.toMatchObject({ role: 'STAFF' });
-      // Self-deactivation is refused even when another admin exists.
-      await expect(
-        updateUser(t2.db, second, { id: second.id, isActive: false }),
-      ).rejects.toMatchObject({ code: 'CONFLICT' });
-    } finally {
-      await t2.close();
-    }
-  });
-
-  it('refreshActor drops a deactivated user', async () => {
-    const actor = await createUser(t.db, { username: 'leaver' });
-    expect(await refreshActor(t.db, actor)).toEqual(actor);
-    await t.db.user.update({ where: { id: actor.id }, data: { isActive: false } });
-    expect(await refreshActor(t.db, actor)).toBeNull();
   });
 });

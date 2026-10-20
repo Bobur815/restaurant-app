@@ -1,11 +1,13 @@
-import type { CurrentUser, Role, SetupStatus } from '@shared/types';
+import { hasPermission, type Permission } from '@shared/permissions';
+import type { CurrentUser, SetupStatus } from '@shared/types';
 
 /**
  * Route matching and access decisions, pure (tested without a DOM). router.ts wires them to
  * location.hash and mounts views.
  */
 
-export type Access = 'public' | 'user' | 'admin';
+/** public; any logged-in user; or users with (any of) these permissions. */
+export type Access = 'public' | 'user' | Permission | readonly Permission[];
 
 export interface RouteDef<V> {
   /** e.g. '/tables/:table'. Segments starting with ':' are params. */
@@ -42,6 +44,19 @@ export function matchRoute<V>(routes: readonly RouteDef<V>[], path: string): Mat
 
 export const HOME = '/tables';
 
+/** Where a user starts: the tables if they take orders, else checks, else shifts (anyone). */
+export function homeFor(user: CurrentUser): string {
+  if (hasPermission(user, 'orders')) return '/tables';
+  if (hasPermission(user, 'checks')) return '/checks';
+  return '/sessions';
+}
+
+export function canAccess(user: CurrentUser, access: Access): boolean {
+  if (access === 'public' || access === 'user') return true;
+  const needed: readonly Permission[] = typeof access === 'string' ? [access] : access;
+  return needed.some((p) => hasPermission(user, p));
+}
+
 /** Where to go instead of `path`, or null to show it. Order matters: setup, then login, then role. */
 export function redirectFor(
   path: string,
@@ -50,17 +65,15 @@ export function redirectFor(
   user: CurrentUser | null,
 ): string | null {
   if (!setup.setupComplete) return path === '/setup' ? null : '/setup';
-  if (path === '/setup') return user ? HOME : '/login';
-  // The PIN lock screen is a second way in: skipped, like login, once someone is logged in.
-  if (path === '/login' || path === '/lock') return user ? HOME : null;
-  if (access === null) return user ? HOME : '/login'; // unknown route
+  if (path === '/setup') return user ? homeFor(user) : '/login';
+  // The lock screen is the login keypad: skipped, like login, once someone is logged in.
+  if (path === '/login' || path === '/lock') return user ? homeFor(user) : null;
+  if (access === null) return user ? homeFor(user) : '/login'; // unknown route
   if (access === 'public') return null;
   if (!user) return '/login';
-  if (access === 'admin' && !isAdmin(user.role)) return HOME;
+  if (!canAccess(user, access)) return homeFor(user);
   return null;
 }
-
-export const isAdmin = (role: Role) => role === 'ADMIN';
 
 /** location.hash ('#/tables/3?x') -> '/tables/3'. */
 export function pathFromHash(hash: string): string {

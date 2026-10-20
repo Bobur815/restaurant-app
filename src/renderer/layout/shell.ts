@@ -2,7 +2,7 @@ import { api } from '../api';
 import { SavdoChefIcon } from '../branding';
 import { t } from '../i18n';
 import type { ShellInstance } from '../router/router';
-import { isAdmin } from '../router/routes';
+import { canAccess, homeFor, type Access } from '../router/routes';
 import { appStore, savePrefs, type ThemeChoice } from '../store/app';
 import { html, refs } from '../ui/html';
 import { icon, type IconName } from '../ui/icons';
@@ -13,19 +13,21 @@ interface NavItem {
   path: string;
   label: string;
   icon: IconName;
+  /** Same as the route's access in main.ts: a link is shown only to who may open the page. */
+  access: Access;
 }
 
 // Till screens first (legacy order: Buyurtma is the main screen), back office in its own group.
 const MAIN_NAV: NavItem[] = [
-  { path: '/tables', label: 'nav.tables', icon: 'tables' },
-  { path: '/sessions', label: 'nav.sessions', icon: 'sessions' },
-  { path: '/checks', label: 'nav.checks', icon: 'checks' },
-  { path: '/debtors', label: 'nav.debtors', icon: 'debt' },
+  { path: '/tables', label: 'nav.tables', icon: 'tables', access: 'orders' },
+  { path: '/sessions', label: 'nav.sessions', icon: 'sessions', access: 'user' },
+  { path: '/checks', label: 'nav.checks', icon: 'checks', access: 'checks' },
+  { path: '/debtors', label: 'nav.debtors', icon: 'debt', access: 'debt' },
 ];
 const ADMIN_NAV: NavItem[] = [
-  { path: '/menu', label: 'nav.menu', icon: 'menu' },
-  { path: '/reports', label: 'nav.reports', icon: 'reports' },
-  { path: '/settings', label: 'nav.settings', icon: 'settings' },
+  { path: '/menu', label: 'nav.menu', icon: 'menu', access: 'menu' },
+  { path: '/reports', label: 'nav.reports', icon: 'reports', access: 'reports' },
+  { path: '/settings', label: 'nav.settings', icon: 'settings', access: ['settings', 'users'] },
 ];
 
 const THEME_ORDER: ThemeChoice[] = ['system', 'light', 'dark'];
@@ -78,8 +80,9 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     });
     return a;
   };
-  const mainLinks = MAIN_NAV.map(link);
-  const adminLinks = isAdmin(user.role) ? ADMIN_NAV.map(link) : [];
+  const allowed = (item: NavItem) => canAccess(user, item.access);
+  const mainLinks = MAIN_NAV.filter(allowed).map(link);
+  const adminLinks = ADMIN_NAV.filter(allowed).map(link);
   const navLinks = [...mainLinks, ...adminLinks];
 
   const section = (title: string, links: HTMLAnchorElement[]) =>
@@ -119,7 +122,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
   el.className = 'shell';
   el.append(
     html`<header class="topbar">
-        <a class="topbar-brand" href="#/tables" aria-label="SavdoChef">
+        <a class="topbar-brand" href="#${homeFor(user)}" aria-label="SavdoChef">
           ${SavdoChefIcon({ size: 40 })}
           <span class="brand-text">
             <span class="brand-name">SavdoChef</span>
@@ -223,7 +226,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     const s = appStore.get();
     r.restaurant.textContent = s.receipt?.restaurantName ?? '';
     if (s.user) {
-      const name = s.user.fullName ?? s.user.username;
+      const name = s.user.fullName;
       r.userName.textContent = name;
       r.userRole.textContent = t(`nav.role${s.user.role}`);
       r.avatar.textContent = initials(name);

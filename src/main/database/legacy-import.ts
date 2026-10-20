@@ -1,7 +1,6 @@
-import bcrypt from 'bcryptjs';
 import type { PrismaClient } from '../../generated/prisma-sqlite';
 import { dec, toQtyString } from '@shared/utils/decimal';
-import { BCRYPT_COST } from '../auth/auth';
+import { ROLE_DEFAULTS } from '@shared/permissions';
 import type { Db, Tx } from '../domain/db';
 import { conflict } from '../domain/errors';
 import { ensureTablesForOrders } from '../halls/halls';
@@ -15,7 +14,8 @@ import { RECEIPT_SETTINGS_ID, setSetting } from '../settings/settings';
  * Rules:
  * - Money is copied exactly as legacy recorded it (order totals, line prices, payments), even
  *   where legacy's own maths was inconsistent: it is what customers paid.
- * - Plaintext legacy passwords are bcrypt-hashed; they are never stored as given.
+ * - Legacy passwords are not imported (login is a PIN since F2): users come in without one, and
+ *   the one-time "set the administrator PIN" step (auth.ts bootstrapPin) lets the owner in.
  * - Legacy orders had no shift; each goes to the shift whose open..close window contains it.
  * - Each line's stock use is computed with the current rules (portions, kg).
  * - All database writes run in one transaction: the import fully happens or not at all.
@@ -244,15 +244,10 @@ export async function importLegacy(
     imageFor.set(m.id, stored);
   }
 
-  // Passwords hashed outside the transaction too (bcrypt is slow).
-  const hashes = new Map<number, string>();
-  for (const u of legacy.users)
-    hashes.set(u.id, await bcrypt.hash(String(u.password), BCRYPT_COST));
-
   try {
     await db.$transaction(
       async (tx) => {
-        await importRows(tx, legacy, report, imageFor, hashes);
+        await importRows(tx, legacy, report, imageFor);
         // Every table an imported order used must exist (feature F1-A halls).
         await ensureTablesForOrders(tx);
         if (options.dryRun) throw new DryRunRollback();
@@ -270,7 +265,6 @@ async function importRows(
   legacy: LegacyData,
   report: ImportReport,
   imageFor: Map<number, string | null>,
-  hashes: Map<number, string>,
 ): Promise<void> {
   // Categories: reuse the seeded ones with the same name.
   const categoryId = new Map<number, number>();
@@ -325,14 +319,14 @@ async function importRows(
     return id;
   };
 
-  // Users (password hashed).
+  // Users: name and role (permissions from the role); no password, no PIN, no phone yet.
   for (const u of legacy.users) {
+    const role = u.role === 'ADMIN' ? 'ADMIN' : 'STAFF';
     await tx.user.create({
       data: {
-        username: u.username,
-        fullName: u.full_name && u.full_name !== u.username ? u.full_name : null,
-        passwordHash: hashes.get(u.id)!,
-        role: u.role === 'ADMIN' ? 'ADMIN' : 'STAFF',
+        fullName: u.full_name?.trim() || u.username,
+        role,
+        permissions: JSON.stringify(ROLE_DEFAULTS[role]),
         isActive: bool(u.is_active),
         createdAt: date(u.createdAt),
       },

@@ -1,17 +1,32 @@
+import { PERMISSIONS } from '@shared/permissions';
 import { matchRoute, pathFromHash, redirectFor, type RouteDef } from './routes';
 
 const routes: RouteDef<string>[] = [
   { path: '/setup', access: 'public', layout: 'bare', view: 'setup' },
   { path: '/login', access: 'public', layout: 'bare', view: 'login' },
-  { path: '/tables', access: 'user', layout: 'shell', view: 'tables' },
-  { path: '/tables/:table', access: 'user', layout: 'shell', view: 'order' },
-  { path: '/users', access: 'admin', layout: 'shell', view: 'users' },
+  { path: '/tables', access: 'orders', layout: 'shell', view: 'tables' },
+  { path: '/tables/:table', access: 'orders', layout: 'shell', view: 'order' },
+  { path: '/users', access: 'users', layout: 'shell', view: 'users' },
 ];
 
 const done = { setupComplete: true, hasAdmin: true };
 const fresh = { setupComplete: false, hasAdmin: false };
-const staff = { id: 2, username: 's', fullName: null, role: 'STAFF' as const };
-const admin = { id: 1, username: 'a', fullName: null, role: 'ADMIN' as const };
+const staff = {
+  id: 2,
+  fullName: 'S',
+  phone: null,
+  role: 'STAFF' as const,
+  permissions: ['orders' as const],
+};
+const admin = {
+  id: 1,
+  fullName: 'A',
+  phone: null,
+  role: 'ADMIN' as const,
+  permissions: [...PERMISSIONS],
+};
+/** Reports only: never sent to a page it may not open (no redirect loop). */
+const accountant = { ...staff, id: 3, permissions: ['reports' as const] };
 
 describe('matchRoute', () => {
   it('matches static and param routes', () => {
@@ -55,9 +70,12 @@ describe('redirectFor', () => {
     expect(redirectFor('/lock', 'public', fresh, null)).toBe('/setup');
   });
 
-  it('admin pages send STAFF home', () => {
-    expect(redirectFor('/users', 'admin', done, staff)).toBe('/tables');
-    expect(redirectFor('/users', 'admin', done, admin)).toBeNull();
+  it('pages need their permission; without it the user goes to their own home', () => {
+    expect(redirectFor('/users', 'users', done, staff)).toBe('/tables');
+    expect(redirectFor('/users', 'users', done, admin)).toBeNull();
+    expect(redirectFor('/tables', 'orders', done, accountant)).toBe('/sessions');
+    expect(redirectFor('/settings', ['settings', 'users'], done, admin)).toBeNull();
+    expect(redirectFor('/settings', ['settings', 'users'], done, staff)).toBe('/tables');
   });
 
   it('unknown routes go home or to login', () => {

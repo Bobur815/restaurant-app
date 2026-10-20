@@ -1,6 +1,7 @@
 import { ZodError, type z } from 'zod';
 import type { IpcError, IpcResult } from '@shared/errors';
 import type { IpcChannel, IpcOutput } from '@shared/ipc';
+import { hasPermission, type Permission } from '@shared/permissions';
 import { refreshActor } from '../auth/auth';
 import type { Actor, Db } from '../domain/db';
 import { AppError, forbidden, notAuthenticated, prismaCode } from '../domain/errors';
@@ -12,7 +13,8 @@ import type { PrinterService } from '../printing/printer';
  * logged-in role), `admin`. Checked here, in main, on every call; hiding buttons in the UI is
  * cosmetic only.
  */
-export type Access = 'public' | 'user' | 'admin';
+/** public: before login; user: any logged-in user; a permission: users who have it. */
+export type Access = 'public' | 'user' | Permission;
 
 /** Side effects a handler may need that are not the database (dialogs, files). Injected for tests. */
 export interface HandlerServices {
@@ -108,7 +110,7 @@ export async function invokeHandler<C extends IpcChannel>(
         ctx.setActor(null);
         throw notAuthenticated();
       }
-      if (def.access === 'admin' && actor.role !== 'ADMIN') throw forbidden();
+      if (def.access !== 'user' && !hasPermission(actor, def.access)) throw forbidden();
     }
 
     const parsed = def.input.safeParse(rawInput);

@@ -4,7 +4,6 @@ import { createShell } from './layout/shell';
 import { startRouter, type Router } from './router/router';
 import type { RouteDef } from './router/routes';
 import { appStore, loadPrefs, type ThemeChoice } from './store/app';
-import { lockView } from './views/lock';
 import { loginView } from './views/login';
 import { orderView } from './views/order/order-view';
 import { checksView } from './views/checks/checks-view';
@@ -26,25 +25,29 @@ const redirectTo =
     return { el: document.createElement('div') };
   };
 
+const SETTINGS_ACCESS = ['settings', 'users'] as const;
+
 const ROUTES: RouteDef<View>[] = [
   { path: '/setup', access: 'public', layout: 'bare', view: setupView },
   { path: '/login', access: 'public', layout: 'bare', view: loginView },
-  { path: '/lock', access: 'public', layout: 'bare', view: lockView },
-  { path: '/tables', access: 'user', layout: 'shell', view: tablesView },
-  { path: '/tables/:table', access: 'user', layout: 'shell', view: orderView },
+  // Lock = log out to the PIN keypad (the same page as login).
+  { path: '/lock', access: 'public', layout: 'bare', view: loginView },
+  { path: '/tables', access: 'orders', layout: 'shell', view: tablesView },
+  { path: '/tables/:table', access: 'orders', layout: 'shell', view: orderView },
   // Takeaway and delivery (feature F1-B): a new one by type, a saved one by id.
-  { path: '/orders/new/:type', access: 'user', layout: 'shell', view: orderView },
-  { path: '/orders/:id', access: 'user', layout: 'shell', view: orderView },
+  { path: '/orders/new/:type', access: 'orders', layout: 'shell', view: orderView },
+  { path: '/orders/:id', access: 'orders', layout: 'shell', view: orderView },
   { path: '/sessions', access: 'user', layout: 'shell', view: sessionsView },
-  { path: '/checks', access: 'user', layout: 'shell', view: checksView },
-  { path: '/debtors', access: 'user', layout: 'shell', view: debtorsView },
+  { path: '/checks', access: 'checks', layout: 'shell', view: checksView },
+  { path: '/debtors', access: 'debt', layout: 'shell', view: debtorsView },
   { path: '/profile', access: 'user', layout: 'shell', view: profileView },
-  { path: '/menu', access: 'admin', layout: 'shell', view: menuView },
-  { path: '/reports', access: 'admin', layout: 'shell', view: reportsView },
+  { path: '/menu', access: 'menu', layout: 'shell', view: menuView },
+  { path: '/reports', access: 'reports', layout: 'shell', view: reportsView },
   // Users moved into Settings (feature F1-A); the old address still works.
-  { path: '/users', access: 'admin', layout: 'shell', view: redirectTo('/settings/users') },
-  { path: '/settings', access: 'admin', layout: 'shell', view: settingsView },
-  { path: '/settings/:section', access: 'admin', layout: 'shell', view: settingsView },
+  { path: '/users', access: 'users', layout: 'shell', view: redirectTo('/settings/users') },
+  // Settings: the sections a user sees follow their permissions (settings-view.ts).
+  { path: '/settings', access: SETTINGS_ACCESS, layout: 'shell', view: settingsView },
+  { path: '/settings/:section', access: SETTINGS_ACCESS, layout: 'shell', view: settingsView },
 ];
 
 function applyTheme(theme: ThemeChoice): void {

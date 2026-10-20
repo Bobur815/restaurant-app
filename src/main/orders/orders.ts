@@ -26,7 +26,7 @@ const orderInclude = {
     orderBy: { id: 'asc' },
   },
   payments: { orderBy: { id: 'asc' }, include: { customer: { select: { name: true } } } },
-  createdBy: { select: { username: true } },
+  createdBy: { select: { fullName: true } },
 } as const;
 
 type OrderRow = NonNullable<Awaited<ReturnType<typeof findOrder>>>;
@@ -50,7 +50,7 @@ export function toOrderDto(o: OrderRow): OrderDto {
     createdAt: iso(o.createdAt),
     updatedAt: iso(o.updatedAt),
     completedAt: isoOrNull(o.completedAt),
-    createdBy: o.createdBy?.username ?? null,
+    createdBy: o.createdBy?.fullName ?? null,
     customerId: o.customerId,
     customerName: o.customerName,
     customerPhone: o.customerPhone,

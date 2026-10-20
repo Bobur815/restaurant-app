@@ -82,8 +82,11 @@ describe('openDatabase', () => {
 
     const categories = await prisma.category.findMany({ orderBy: { sortOrder: 'asc' } });
     expect(categories.map((c) => c.nameUz)).toEqual(DEFAULT_CATEGORIES.map((c) => c.nameUz));
-    // + the internal flag that the first hall was created.
-    expect(await prisma.setting.count()).toBe(Object.keys(DEFAULT_SETTINGS).length + 1);
+    // + the internal flag that the first hall was created, and the per-install PIN key.
+    expect(await prisma.setting.count()).toBe(Object.keys(DEFAULT_SETTINGS).length + 2);
+    expect(
+      JSON.parse((await prisma.setting.findUniqueOrThrow({ where: { key: 'pin_key' } })).value),
+    ).toMatch(/^[0-9a-f]{64}$/);
     expect(await prisma.setting.findUnique({ where: { key: HALLS_SEEDED_KEY } })).not.toBeNull();
     const halls = await prisma.hall.findMany({ include: { tables: true } });
     expect(halls.map((h) => [h.name, h.tables.length])).toEqual([[DEFAULT_HALL_NAME, 10]]);
@@ -285,6 +288,57 @@ describe('migration 8 (split payment, debt) on a database with payments', () => 
       ['debt', 'pending', '7500', null, null],
     ]);
     expect(await v8.prisma.debtRepayment.count()).toBe(0);
+  });
+});
+
+describe('migration 9 (PIN login, permissions) on a database with users', () => {
+  it('keeps every user and what points to them; names from usernames; old PINs kept for once', async () => {
+    const dbFile = newDbFile();
+    const v8 = await openAt(dbFile, { migrations: MIGRATIONS.slice(0, 8) });
+    const p = v8.prisma;
+    const insert = (
+      id: number,
+      username: string,
+      fullName: string | null,
+      role: string,
+      pin: string | null,
+    ) =>
+      p.$executeRawUnsafe(
+        `INSERT INTO "users" ("id", "username", "fullName", "passwordHash", "pinCode", "role", "updatedAt") VALUES (${id}, '${username}', ${fullName === null ? 'NULL' : `'${fullName}'`}, '$2a$10$x', ${pin === null ? 'NULL' : `'${pin}'`}, '${role}', CURRENT_TIMESTAMP)`,
+      );
+    await insert(1, 'admin', null, 'ADMIN', '$2a$10$oldpin');
+    await insert(2, 'kassa', 'Zohid', 'STAFF', null);
+    await p.$executeRawUnsafe(
+      `INSERT INTO "sessions" ("id", "status", "openGuard", "openedById", "updatedAt") VALUES (1, 'open', 1, 1, CURRENT_TIMESTAMP)`,
+    );
+    await p.$executeRawUnsafe(
+      `INSERT INTO "orders" ("id", "orderNumber", "tableNumber", "status", "sessionId", "createdById", "updatedAt") VALUES (1, '2026-00001', 1, 'pending', 1, 2, CURRENT_TIMESTAMP)`,
+    );
+    await p.$disconnect();
+
+    const v9 = await openAt(dbFile);
+    expect(v9.migration.applied).toContain('9_pin_login_permissions');
+    const users = await v9.prisma.user.findMany({ orderBy: { id: 'asc' } });
+    expect(
+      users.map((u) => [
+        u.fullName,
+        u.role,
+        JSON.parse(u.permissions).length,
+        u.legacyPinCode,
+        u.pinHash,
+        u.phone,
+      ]),
+    ).toEqual([
+      ['admin', 'ADMIN', 11, '$2a$10$oldpin', null, null],
+      ['Zohid', 'STAFF', 1, null, null, null],
+    ]);
+    const cols = await v9.prisma.$queryRawUnsafe<Array<{ name: string }>>(
+      'PRAGMA table_info("users")',
+    );
+    expect(cols.map((c) => c.name)).not.toEqual(expect.arrayContaining(['username']));
+    expect(cols.map((c) => c.name)).not.toContain('passwordHash');
+    expect((await v9.prisma.order.findUniqueOrThrow({ where: { id: 1 } })).createdById).toBe(2);
+    expect((await v9.prisma.session.findUniqueOrThrow({ where: { id: 1 } })).openedById).toBe(1);
   });
 });
 

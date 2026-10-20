@@ -1,7 +1,8 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import bcrypt from 'bcryptjs';
+import { ROLE_DEFAULTS, type Permission, type Role } from '@shared/permissions';
+import { setPinOf, toCurrentUser } from '../auth/auth';
 import type { Actor, Db } from '../domain/db';
 import { loadPrismaModule, openDatabase } from '../database/open';
 
@@ -26,18 +27,31 @@ export async function createTestDb(): Promise<TestDb> {
   };
 }
 
-/** Low bcrypt cost keeps tests fast; production uses auth.BCRYPT_COST. */
+/**
+ * A user for tests. `username` is only the display name now (login is a PIN, feature F2);
+ * permissions default to the role's; `pin` makes them able to log in.
+ */
 export async function createUser(
   db: Db,
-  data: { username: string; password?: string; role?: 'ADMIN' | 'STAFF'; isActive?: boolean },
+  data: {
+    username: string;
+    role?: Role;
+    permissions?: Permission[];
+    pin?: string;
+    phone?: string;
+    isActive?: boolean;
+  },
 ): Promise<Actor> {
+  const role = data.role ?? 'STAFF';
   const user = await db.user.create({
     data: {
-      username: data.username,
-      passwordHash: await bcrypt.hash(data.password ?? 'secret123', 4),
-      role: data.role ?? 'STAFF',
+      fullName: data.username,
+      phone: data.phone ?? null,
+      role,
+      permissions: JSON.stringify(data.permissions ?? ROLE_DEFAULTS[role]),
       isActive: data.isActive ?? true,
     },
   });
-  return { id: user.id, username: user.username, fullName: user.fullName, role: user.role };
+  if (data.pin) await setPinOf(db, user.id, data.pin);
+  return toCurrentUser(user);
 }

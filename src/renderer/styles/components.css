@@ -233,6 +233,11 @@ legend {
   color: var(--color-text-muted);
 }
 
+.badge-warning {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

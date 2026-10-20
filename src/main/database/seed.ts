@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../../generated/prisma-sqlite';
+import { newPinKey } from '../auth/auth';
 import { ensureDefaultHall } from '../halls/halls';
 
 /**
@@ -54,6 +55,11 @@ export async function seedDatabase(
         update: {},
         create: { key, value: JSON.stringify(value) },
       });
+    }
+
+    // The per-install key PINs are hashed with (auth.ts): made once, never changed or shown.
+    if (!(await tx.setting.findUnique({ where: { key: 'pin_key' } }))) {
+      await tx.setting.create({ data: { key: 'pin_key', value: JSON.stringify(newPinKey()) } });
     }
 
     for (const name of COUNTERS) {

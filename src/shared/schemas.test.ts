@@ -1,7 +1,6 @@
 import {
   createUserInput,
   pinCode,
-  setPinInput,
   menuItemInput,
   saveTableOrderInput,
   updateCategoryInput,
@@ -18,7 +17,7 @@ describe('update schemas leave unmentioned fields out (never reset them)', () =>
     ['category', updateCategoryInput, { id: 1 }, { id: 1 }],
     ['menu item', updateMenuItemInput, { id: 1, price: '100' }, { id: 1, price: '100' }],
     ['user', updateUserInput, { id: 1, isActive: false }, { id: 1, isActive: false }],
-    ['profile', updateProfileInput, { username: 'ali' }, { username: 'ali' }],
+    ['profile', updateProfileInput, { fullName: 'Ali' }, { fullName: 'Ali' }],
   ] as const)('%s', (_name, schema, input, expected) => {
     expect(schema.parse(input)).toEqual(expected);
   });
@@ -36,18 +35,18 @@ describe('update schemas leave unmentioned fields out (never reset them)', () =>
   });
 
   it('an explicit empty optional text clears it', () => {
-    expect(updateProfileInput.parse({ fullName: '' })).toEqual({ fullName: null });
+    expect(updateCategoryInput.parse({ id: 1, nameRu: '' })).toEqual({ id: 1, nameRu: null });
   });
 });
 
 describe('create schemas apply defaults', () => {
-  it('user defaults to STAFF, empty full name to null', () => {
-    expect(createUserInput.parse({ username: 'kassir', password: 'secret1' })).toEqual({
-      username: 'kassir',
-      password: 'secret1',
-      fullName: null,
+  it('user: a name and a phone; the role defaults to STAFF; the phone is normalized', () => {
+    expect(createUserInput.parse({ fullName: ' Zohid ', phone: '+998 (90) 123-45-67' })).toEqual({
+      fullName: 'Zohid',
+      phone: '998901234567',
       role: 'STAFF',
     });
+    expect(createUserInput.safeParse({ fullName: 'Zohid' }).success).toBe(false);
   });
 
   it('menu item cannot be both portioned and sold by weight', () => {
@@ -87,8 +86,16 @@ describe('PIN code', () => {
     }
   });
 
-  it('setPin takes a 4-digit PIN or null (remove)', () => {
-    expect(setPinInput.safeParse({ currentPassword: 'x', pin: null }).success).toBe(true);
-    expect(setPinInput.safeParse({ currentPassword: 'x', pin: '12' }).success).toBe(false);
+  it('a user update takes a 4-digit PIN, null (remove) or nothing (keep)', () => {
+    expect(updateUserInput.parse({ id: 1, pin: null })).toEqual({ id: 1, pin: null });
+    expect(updateUserInput.parse({ id: 1 })).toEqual({ id: 1 });
+    expect(updateUserInput.safeParse({ id: 1, pin: '12' }).success).toBe(false);
+  });
+
+  it('permissions: known ones only, each once, in catalogue order', () => {
+    expect(
+      updateUserInput.parse({ id: 1, permissions: ['payments', 'orders', 'payments'] }).permissions,
+    ).toEqual(['orders', 'payments']);
+    expect(updateUserInput.safeParse({ id: 1, permissions: ['root'] }).success).toBe(false);
   });
 });

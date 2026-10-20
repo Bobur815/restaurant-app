@@ -11,7 +11,7 @@ import { api } from '../../api';
 import { clearErrors, field, formError, showFormError, value } from '../../components/forms';
 import { phoneField } from '../../components/phone-field';
 import { t } from '../../i18n';
-import { appStore } from '../../store/app';
+import { appStore, can } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon, type IconName } from '../../ui/icons';
 import { playClick } from '../../ui/sound';
@@ -51,7 +51,10 @@ export function createTenderEditor(options: {
   onChange: () => void;
 }) {
   const { settings, language: lang } = appStore.get();
-  const methods = TENDER_METHODS.filter((m) => m !== 'debt' || settings?.debtEnabled !== false);
+  // Debt needs the setting on and the user's own permission to sell on credit.
+  const methods = TENDER_METHODS.filter(
+    (m) => m !== 'debt' || (settings?.debtEnabled !== false && can('debt')),
+  );
   const canSplit = settings?.splitPaymentEnabled !== false;
 
   const initialLines = options.initial?.tenders ?? [];

@@ -4,8 +4,7 @@ import { confirmDialog, openModal } from '../../components/modal';
 import { button, pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
-import { isAdmin } from '../../router/routes';
-import { appStore } from '../../store/app';
+import { appStore, can } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { formatDateTime, formatQty, localName } from '../../utils/format';
@@ -49,6 +48,8 @@ export const sessionsView: View = () => {
   el.className = 'page';
   const current = document.createElement('div');
   const history = document.createElement('div');
+  // Anyone sees the shift; opening, editing and closing it need the shifts permission.
+  const shifts = can('shifts');
   const openButton = button(t('sessions.open'), 'primary', () => void openShift());
   el.append(pageHeader(t('sessions.title'), openButton), current, history);
 
@@ -61,7 +62,7 @@ export const sessionsView: View = () => {
 
   const renderCurrent = () => {
     const open = sessions.find((s) => s.status === 'open') ?? null;
-    openButton.hidden = !!open;
+    openButton.hidden = !!open || !shifts;
     current.replaceChildren();
     if (!open) {
       current.className = 'notice notice-warning';
@@ -88,7 +89,7 @@ export const sessionsView: View = () => {
             })}
           </p>
         </div>
-        <div class="page-actions">${edit}${close}</div>
+        <div class="page-actions">${shifts ? edit : ''}${shifts ? close : ''}</div>
       </div>`,
       itemsTable(open),
     );
@@ -96,7 +97,7 @@ export const sessionsView: View = () => {
 
   const renderHistory = () => {
     const closed = sessions.filter((s) => s.status === 'closed');
-    const admin = isAdmin(appStore.get().user!.role);
+    const admin = can('corrections');
     const rows = closed.map((s) => {
       const view = button(t('sessions.view'), 'ghost', () =>
         openModal({ title: t('sessions.details', { id: s.id }), body: itemsTable(s), size: 'lg' }),

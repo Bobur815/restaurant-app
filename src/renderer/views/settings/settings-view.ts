@@ -1,4 +1,6 @@
+import type { Permission } from '@shared/permissions';
 import { t } from '../../i18n';
+import { can } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon, type IconName } from '../../ui/icons';
 import type { View, ViewInstance } from '../types';
@@ -15,26 +17,29 @@ interface Section {
   label: string;
   icon: IconName;
   view: View;
+  /** Who sees the section (main checks each call again). */
+  needs: Permission;
 }
 
 /** Settings sections, in menu order. Each is a View that renders its own page header. */
 export const SETTINGS_SECTIONS: readonly Section[] = [
-  { id: 'system', label: 'settings.sectionSystem', icon: 'sliders', view: systemSection },
-  { id: 'halls', label: 'settings.sectionHalls', icon: 'halls', view: hallsSection },
-  { id: 'orders', label: 'settings.sectionOrders', icon: 'delivery', view: ordersSection },
-  { id: 'payments', label: 'settings.sectionPayments', icon: 'cash', view: paymentsSection },
-  { id: 'receipt', label: 'settings.sectionReceipt', icon: 'receipt', view: receiptSection },
-  { id: 'printer', label: 'settings.sectionPrinter', icon: 'printer', view: printerSection },
-  { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView },
+  { id: 'system', label: 'settings.sectionSystem', icon: 'sliders', view: systemSection, needs: 'settings' },
+  { id: 'halls', label: 'settings.sectionHalls', icon: 'halls', view: hallsSection, needs: 'settings' },
+  { id: 'orders', label: 'settings.sectionOrders', icon: 'delivery', view: ordersSection, needs: 'settings' },
+  { id: 'payments', label: 'settings.sectionPayments', icon: 'cash', view: paymentsSection, needs: 'settings' },
+  { id: 'receipt', label: 'settings.sectionReceipt', icon: 'receipt', view: receiptSection, needs: 'settings' },
+  { id: 'printer', label: 'settings.sectionPrinter', icon: 'printer', view: printerSection, needs: 'settings' },
+  { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView, needs: 'users' },
 ];
 
 /**
- * Settings (admin): a section list on the left (a strip of tabs on narrow screens) and the chosen
+ * Settings: the sections this user may open (settings, users), as a section list on the left (a strip of tabs on narrow screens) and the chosen
  * section, `/settings/<section>`. `/settings` and unknown sections open the first one.
  */
 export const settingsView: View = (ctx) => {
-  const current =
-    SETTINGS_SECTIONS.find((s) => s.id === ctx.params['section']) ?? SETTINGS_SECTIONS[0]!;
+  const sections = SETTINGS_SECTIONS.filter((s) => can(s.needs));
+  // The route lets in only users with settings or users, so there is always a section.
+  const current = sections.find((s) => s.id === ctx.params['section']) ?? sections[0]!;
 
   const el = document.createElement('section');
   el.className = 'page settings-page';
@@ -44,7 +49,7 @@ export const settingsView: View = (ctx) => {
   nav.setAttribute('aria-label', t('settings.navLabel'));
   nav.append(
     html`<h2 class="settings-nav-title">${t('settings.title')}</h2>`,
-    ...SETTINGS_SECTIONS.map((s) => {
+    ...sections.map((s) => {
       const a = document.createElement('a');
       a.href = `#/settings/${s.id}`;
       a.className = 'settings-nav-link';

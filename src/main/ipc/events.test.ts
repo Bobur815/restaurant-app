@@ -26,6 +26,6 @@ describe('change events', () => {
 
   it('reads and login announce nothing', () => {
     expect(eventsFor('menu:list', {}, [])).toEqual([]);
-    expect(eventsFor('auth:login', {}, {})).toEqual([]);
+    expect(eventsFor('auth:pinLogin', {}, {})).toEqual([]);
   });
 });

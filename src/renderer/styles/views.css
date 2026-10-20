@@ -554,49 +554,6 @@
   text-align: center;
 }
 
-.lock-subtitle {
-  margin-bottom: var(--space-4);
-  font-size: var(--font-size-md);
-  color: var(--color-text-muted);
-}
-
-.lock-users {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(116px, 1fr));
-  gap: var(--space-3);
-  margin-bottom: var(--space-5);
-}
-
-.lock-user {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-4) var(--space-2);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.lock-user:hover {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-}
-
-.lock-who {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-4);
-}
-
-.lock-who h2 {
-  font-size: var(--font-size-md);
-}
-
 .pin-dots {
   display: flex;
   justify-content: center;
@@ -650,6 +607,13 @@
   transform: translateY(1px);
 }
 
+/* Locked after too many wrong PINs. */
+.pin-key:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .pin-key-muted {
   color: var(--color-text-muted);
 }
@@ -665,15 +629,64 @@
   filter: brightness(1.08);
 }
 
-.lock-back {
-  margin: 0 auto var(--space-2);
+.lock-alt {
+  display: flex;
+  margin: var(--space-2) auto 0;
+  font-weight: 600;
 }
 
-.lock-alt {
-  display: block;
-  margin-top: var(--space-3);
+.lock-card form {
+  text-align: start;
+}
+
+.auth-hint {
+  margin-bottom: var(--space-4);
+}
+
+/* The 4-digit PIN fields: wide-spaced digits. */
+.pin-input {
+  letter-spacing: 0.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Recovery code: shown once, large enough to copy by hand without mistakes. */
+.recovery-code-value {
+  margin: var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-align: center;
-  font-weight: 600;
+  user-select: all;
+}
+
+.recovery-notice {
+  align-items: center;
+  margin-bottom: var(--space-4);
+}
+
+.recovery-notice > span {
+  flex: 1;
+}
+
+/* Users: the permission checkboxes, two columns where there is room. */
+.permission-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.permission-grid legend {
+  grid-column: 1 / -1;
+}
+
+.permission-grid .check-field {
+  margin-bottom: 0;
 }
 
 .shake {

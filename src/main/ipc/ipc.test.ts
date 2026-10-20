@@ -1,5 +1,6 @@
 import type { IpcChannel } from '@shared/ipc';
 import type { Actor } from '../domain/db';
+import { toCurrentUser } from '../auth/auth';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
@@ -9,12 +10,15 @@ jest.setTimeout(60_000);
 let t: TestDb;
 let admin: Actor;
 let staff: Actor;
+/** Logged in, but with no permission at all. */
+let nobody: Actor;
 const logged: Array<[string, unknown]> = [];
 
 beforeAll(async () => {
   t = await createTestDb();
-  admin = await createUser(t.db, { username: 'admin', role: 'ADMIN', password: 'admin-pass' });
-  staff = await createUser(t.db, { username: 'staff', role: 'STAFF', password: 'staff-pass' });
+  admin = await createUser(t.db, { username: 'admin', role: 'ADMIN', pin: '1111' });
+  staff = await createUser(t.db, { username: 'staff', role: 'STAFF', pin: '2222' });
+  nobody = await createUser(t.db, { username: 'nobody', permissions: [] });
 });
 afterAll(() => t.close());
 
@@ -49,25 +53,24 @@ function caller(initial: Actor | null = null) {
 
 describe('access levels', () => {
   it('matches the reviewed list (update deliberately when adding a channel)', () => {
-    const byAccess: Record<string, string[]> = { public: [], user: [], admin: [] };
-    for (const [channel, def] of Object.entries(HANDLERS)) byAccess[def.access]!.push(channel);
+    const byAccess: Record<string, string[]> = {};
+    for (const [channel, def] of Object.entries(HANDLERS))
+      (byAccess[def.access] ??= []).push(channel);
     expect(byAccess).toEqual({
       public: [
         'app:info',
-        'auth:login',
+        'auth:pinLogin',
         'auth:logout',
         'auth:me',
-        'auth:pinUsers',
-        'auth:pinLogin',
+        'auth:recover',
+        'auth:bootstrapStatus',
+        'auth:bootstrapPin',
         'setup:status',
         'setup:complete',
         'settings:get',
         'receipt:get',
       ],
       user: [
-        'auth:changePassword',
-        'auth:pinStatus',
-        'auth:setPin',
         'users:updateProfile',
         'printing:printReceipt',
         'halls:list',
@@ -78,33 +81,18 @@ describe('access levels', () => {
         'sessions:get',
         'sessions:list',
         'sessions:pendingCarry',
-        'sessions:open',
-        'sessions:update',
-        'sessions:close',
         'orders:busyTables',
         'orders:getTable',
-        'orders:getByNumber',
-        'orders:save',
-        'orders:cancel',
-        'orders:get',
-        'orders:openList',
-        'orders:saveOpen',
-        'orders:cancelOpen',
-        'orders:setDeliveryStatus',
-        'customers:findByPhone',
-        'payments:pay',
-        'checks:list',
-        'debts:list',
-        'debts:get',
-        'debts:repay',
         'residuals:list',
-        'residuals:apply',
       ],
-      admin: [
+      users: [
+        'auth:recoveryStatus',
+        'auth:newRecoveryCode',
         'users:list',
         'users:create',
         'users:update',
-        'users:resetPassword',
+      ],
+      settings: [
         'settings:update',
         'receipt:update',
         'printing:printers',
@@ -118,6 +106,8 @@ describe('access levels', () => {
         'tables:createRange',
         'tables:update',
         'tables:delete',
+      ],
+      menu: [
         'categories:create',
         'categories:update',
         'categories:delete',
@@ -125,16 +115,24 @@ describe('access levels', () => {
         'menu:update',
         'menu:delete',
         'menu:pickImage',
-        'sessions:delete',
-        'checks:update',
-        'checks:delete',
-        'debts:writeOff',
-        'debts:void',
-        'debts:assign',
-        'customers:update',
-        'expenses:list',
-        'reports:sales',
       ],
+      shifts: ['sessions:open', 'sessions:update', 'sessions:close', 'residuals:apply'],
+      corrections: ['sessions:delete', 'checks:update', 'checks:delete'],
+      orders: [
+        'orders:save',
+        'orders:cancel',
+        'orders:get',
+        'orders:openList',
+        'orders:saveOpen',
+        'orders:cancelOpen',
+        'orders:setDeliveryStatus',
+        'customers:findByPhone',
+      ],
+      checks: ['orders:getByNumber', 'checks:list'],
+      payments: ['payments:pay'],
+      debt: ['debts:list', 'debts:get', 'debts:repay'],
+      debtsAdmin: ['debts:writeOff', 'debts:void', 'debts:assign', 'customers:update'],
+      reports: ['expenses:list', 'reports:sales'],
     });
   });
 
@@ -152,10 +150,10 @@ describe('access levels', () => {
 
   it.each(
     Object.entries(HANDLERS)
-      .filter(([, d]) => d.access === 'admin')
+      .filter(([, d]) => d.access !== 'public' && d.access !== 'user')
       .map(([c]) => c as IpcChannel),
-  )('%s refuses STAFF', async (channel) => {
-    const result = await caller(staff).call(channel, {});
+  )('%s refuses a user without its permission', async (channel) => {
+    const result = await caller(nobody).call(channel, {});
     expect(result).toEqual({ ok: false, error: expect.objectContaining({ code: 'FORBIDDEN' }) });
   });
 });
@@ -164,13 +162,11 @@ describe('invokeHandler', () => {
   it('login stores the user on that caller only; logout clears it', async () => {
     const a = caller();
     const b = caller();
-    expect(await a.call('auth:login', { username: 'staff', password: 'staff-pass' })).toMatchObject(
-      {
-        ok: true,
-        data: { username: 'staff', role: 'STAFF' },
-      },
-    );
-    expect(a.actor?.username).toBe('staff');
+    expect(await a.call('auth:pinLogin', { pin: '2222' })).toMatchObject({
+      ok: true,
+      data: { fullName: 'staff', role: 'STAFF', permissions: ['orders'] },
+    });
+    expect(a.actor?.fullName).toBe('staff');
     expect(b.actor).toBeNull();
     expect((await a.call('orders:busyTables')).ok).toBe(true);
     await a.call('auth:logout');
@@ -189,11 +185,14 @@ describe('invokeHandler', () => {
     expect(c.actor).toBeNull();
   });
 
-  it('a role change takes effect without logging in again', async () => {
+  it('a permission change takes effect without logging in again', async () => {
     const promoted = await createUser(t.db, { username: 'promoted' });
     const c = caller(promoted);
     expect((await c.call('users:list')).ok).toBe(false);
-    await t.db.user.update({ where: { id: promoted.id }, data: { role: 'ADMIN' } });
+    await t.db.user.update({
+      where: { id: promoted.id },
+      data: { permissions: JSON.stringify(['orders', 'users']) },
+    });
     expect((await c.call('users:list')).ok).toBe(true);
   });
 
@@ -307,17 +306,17 @@ describe('invokeHandler', () => {
           ),
       };
       const wizard = {
-        admin: { username: 'owner', password: 'owner-pass' },
+        admin: { fullName: 'Ega', phone: '+998 90 000 00 01', pin: '1234' },
         receipt: { restaurantName: 'Oshxona' },
       };
       expect(await c.call('setup:complete', wizard)).toMatchObject({
         ok: true,
-        data: { role: 'ADMIN' },
+        data: { user: { role: 'ADMIN' }, recoveryCode: expect.any(String) },
       });
       expect(
         await c.call('setup:complete', {
           ...wizard,
-          admin: { username: 'evil', password: 'evil-pass' },
+          admin: { fullName: 'Evil', phone: '+998 90 000 00 02', pin: '6666' },
         }),
       ).toMatchObject({
         ok: false,
@@ -347,5 +346,101 @@ describe('halls:list', () => {
     expect(await names(admin)).toContain('Yashirin zal');
     expect(await names(staff)).not.toContain('Yashirin zal');
     await t.db.hall.delete({ where: { id: hidden.id } });
+  });
+});
+
+/** A user as the main process sees them after login. */
+const actorOf = async (id: number) =>
+  toCurrentUser(await t.db.user.findUniqueOrThrow({ where: { id } }));
+
+describe('users, PINs and permissions', () => {
+  it('a user manager creates staff with a PIN; staff then log in with it; it can be removed', async () => {
+    const boss = caller(admin);
+    const created = await boss.call('users:create', {
+      fullName: 'Ofitsiant',
+      phone: '+998 91 222 33 44',
+      pin: '2468',
+    });
+    expect(created).toMatchObject({
+      ok: true,
+      data: { fullName: 'Ofitsiant', role: 'STAFF', permissions: ['orders'], hasPin: true },
+    });
+    const id = created.ok ? created.data.id : 0;
+    const window = caller();
+    expect(await window.call('auth:pinLogin', { pin: '2468' })).toMatchObject({
+      ok: true,
+      data: { id },
+    });
+    // PINs and phones are unique (only a user manager ever sees this).
+    expect(
+      await boss.call('users:create', {
+        fullName: 'Ikki',
+        phone: '+998 91 222 33 45',
+        pin: '2468',
+      }),
+    ).toMatchObject({ ok: false, error: { code: 'CONFLICT', details: { field: 'pin' } } });
+    expect(
+      await boss.call('users:create', { fullName: 'Uch', phone: '+998 91 222 33 44' }),
+    ).toMatchObject({ ok: false, error: { code: 'CONFLICT', details: { field: 'phone' } } });
+
+    expect(await caller(staff).call('users:update', { id, pin: '1357' })).toMatchObject({
+      ok: false,
+      error: { code: 'FORBIDDEN' },
+    });
+    expect(await boss.call('users:update', { id, pin: null })).toMatchObject({
+      ok: true,
+      data: { hasPin: false },
+    });
+    expect((await caller().call('auth:pinLogin', { pin: '2468' })).ok).toBe(false);
+  });
+
+  it('the role gives the defaults: cashier takes payments, staff does not; debt needs its own box', async () => {
+    const boss = caller(admin);
+    const cashier = await boss.call('users:create', {
+      fullName: 'Kassir',
+      phone: '+998 91 000 00 09',
+      role: 'CASHIER',
+    });
+    expect(cashier).toMatchObject({
+      ok: true,
+      data: { permissions: ['orders', 'payments', 'debt', 'checks', 'shifts'] },
+    });
+    const cashierId = cashier.ok ? cashier.data.id : 0;
+
+    // Staff (orders only) cannot close an order; a cashier gets past the permission check.
+    expect(
+      await caller(staff).call('payments:pay', { orderId: 999, method: 'cash' }),
+    ).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+    expect(
+      await caller(await actorOf(cashierId)).call('payments:pay', { orderId: 999, method: 'cash' }),
+    ).toMatchObject({ ok: false, error: { code: 'NOT_FOUND' } });
+
+    // Without the debt box, a cashier may not sell on debt.
+    await boss.call('users:update', {
+      id: cashierId,
+      permissions: ['orders', 'payments', 'checks', 'shifts'],
+    });
+    expect(
+      await caller(await actorOf(cashierId)).call('payments:pay', { orderId: 999, method: 'debt' }),
+    ).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+  });
+
+  it('the last user who manages users cannot lose it', async () => {
+    const boss = caller(admin);
+    // Only the admin manages users here (the user promoted in an earlier test is demoted).
+    await t.db.user.updateMany({
+      where: { id: { not: admin.id } },
+      data: { permissions: JSON.stringify(['orders']) },
+    });
+    expect(
+      await boss.call('users:update', { id: admin.id, permissions: ['orders'] }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'CONFLICT' },
+    });
+    expect(await boss.call('users:update', { id: admin.id, role: 'CASHIER' })).toMatchObject({
+      ok: false,
+      error: { code: 'CONFLICT' },
+    });
   });
 });

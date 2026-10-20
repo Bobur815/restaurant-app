@@ -23,8 +23,10 @@ datasource db {
 
 // ==================== ENUMS ====================
 
+// Templates for the permission checkboxes (feature F2); what a user may do is `permissions`.
 enum UserRole {
   ADMIN
+  CASHIER
   STAFF
 }
 
@@ -93,22 +95,24 @@ enum ExpenseType {
 // ==================== USERS & SETTINGS ====================
 
 model User {
-  id               Int       @id @default(autoincrement())
-  username         String    @unique
-  fullName         String?
-  // bcrypt hash. The plaintext never reaches the database or leaves the main process.
-  passwordHash     String
-  // Optional quick-unlock PIN (exactly 4 digits) for the lock screen, stored as a bcrypt hash like
-  // the password: this column never holds the digits. Null = no PIN set.
-  pinCode          String?
-  role             UserRole  @default(STAFF)
-  isActive         Boolean   @default(true)
-  // Login throttling (Phase 3): consecutive failures and the lock that follows them.
-  failedLoginCount Int       @default(0)
-  lockedUntil      DateTime?
-  lastLoginAt      DateTime?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id            Int       @id @default(autoincrement())
+  // Display name (required by the app; the old username was copied here by migration 0009).
+  fullName      String?
+  // 998XXXXXXXXX. Unique; required by the app (users from before phones fill it in on edit).
+  phone         String?   @unique
+  // Login is a 4-digit PIN only (feature F2). HMAC-SHA256 of the PIN with the per-install key
+  // (settings `pin_key`): deterministic, so a PIN can be looked up and kept unique. Null = cannot
+  // log in. The digits never reach the database.
+  pinHash       String?   @unique
+  // The bcrypt PIN of an older version: works once, then becomes `pinHash` (auth.ts).
+  legacyPinCode String?
+  role          UserRole  @default(STAFF)
+  // JSON list of permissions (shared/permissions.ts); the role only gives the defaults.
+  permissions   String    @default("[]")
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   ordersCreated    Order[]         @relation("OrderCreatedBy")
   paymentsTaken    Payment[]       @relation("PaymentCreatedBy")

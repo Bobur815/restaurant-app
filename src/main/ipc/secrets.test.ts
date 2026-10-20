@@ -1,6 +1,6 @@
 import type { IpcChannel } from '@shared/ipc';
 import { receiptSettingsInput } from '@shared/schemas';
-import { setPin } from '../auth/auth';
+import { newRecoveryCode } from '../auth/auth';
 import type { Actor } from '../domain/db';
 import { RECEIPT_SETTINGS_ID } from '../settings/settings';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
@@ -15,17 +15,17 @@ jest.setTimeout(60_000);
  * have both set, and the database has a shift, an order and a payment, so the read channels
  * return real rows (users, orders with createdBy, checks...).
  */
-const SECRET = /\$2[aby]\$\d\d\$|passwordHash|pinCode/;
+// bcrypt hashes, the 64-hex PIN HMACs, and the secret column names.
+const SECRET = /\$2[aby]\$\d\d\$|[0-9a-f]{64}|pinHash|legacyPinCode|pin_key|recovery_hash/;
 
 let t: TestDb;
 let admin: Actor;
 
 beforeAll(async () => {
   t = await createTestDb();
-  admin = await createUser(t.db, { username: 'boss', role: 'ADMIN', password: 'boss-pass' });
-  await setPin(t.db, admin, { currentPassword: 'boss-pass', pin: '1234' });
-  const staff = await createUser(t.db, { username: 'kassa', password: 'kassa-pass' });
-  await setPin(t.db, staff, { currentPassword: 'kassa-pass', pin: '4321' });
+  admin = await createUser(t.db, { username: 'boss', role: 'ADMIN', pin: '1234' });
+  const staff = await createUser(t.db, { username: 'kassa', pin: '4321' });
+  await newRecoveryCode(t.db);
 
   // Receipt settings, so the printing channels run their whole path (with the fake printer).
   await t.db.receiptSettings.create({
@@ -162,12 +162,13 @@ describe('no secrets over IPC', () => {
     expect(result).toMatchObject({ ok: true });
   });
 
-  it('login, PIN login and user management answers carry no hashes', async () => {
+  it('PIN login and user management answers carry no hash, key or recovery code', async () => {
     const calls: Array<[IpcChannel, unknown]> = [
-      ['auth:login', { username: 'boss', password: 'boss-pass' }],
-      ['auth:pinLogin', { userId: admin.id, pin: '1234' }],
+      ['auth:pinLogin', { pin: '1234' }],
       ['users:list', undefined],
-      ['users:create', { username: 'yangi', password: 'yangi-pass' }],
+      ['users:create', { fullName: 'Yangi', phone: '+998 91 111 11 11', pin: '5555' }],
+      ['users:update', { id: 2, pin: '6666', permissions: ['orders', 'payments'] }],
+      ['auth:recoveryStatus', undefined],
       ['users:updateProfile', { fullName: 'Boss' }],
       ['debts:repay', { customerId: 1, amount: '1000', method: 'cash' }],
       ['debts:void', { repaymentId: 1, reason: 'Tekshiruv' }],

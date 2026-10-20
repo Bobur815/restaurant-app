@@ -17,8 +17,8 @@ const sessionInclude = {
     },
     orderBy: { menuItem: { nameUz: 'asc' } },
   },
-  openedBy: { select: { username: true } },
-  closedBy: { select: { username: true } },
+  openedBy: { select: { fullName: true } },
+  closedBy: { select: { fullName: true } },
 } as const;
 
 type SessionRow = Awaited<ReturnType<typeof loadSession>>;
@@ -33,8 +33,8 @@ function toSessionDto(s: NonNullable<SessionRow>): SessionDto {
     status: s.status,
     openedAt: iso(s.openedAt),
     closedAt: isoOrNull(s.closedAt),
-    openedBy: s.openedBy?.username ?? null,
-    closedBy: s.closedBy?.username ?? null,
+    openedBy: s.openedBy?.fullName ?? null,
+    closedBy: s.closedBy?.fullName ?? null,
     items: s.items.map((i) => {
       const initial = dec(i.initialQuantity.toString());
       const sold = dec(i.soldQuantity.toString());

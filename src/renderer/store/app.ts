@@ -1,3 +1,4 @@
+import { hasPermission, type Permission } from '@shared/permissions';
 import type {
   AppSettings,
   CurrentUser,
@@ -31,6 +32,15 @@ export const appStore = createStore<AppState>({
   language: 'uz',
   theme: 'system',
 });
+
+/**
+ * Whether the logged-in user has a permission. Only for showing or hiding controls: main checks
+ * every call again (ipc-safe.ts).
+ */
+export function can(permission: Permission): boolean {
+  const user = appStore.get().user;
+  return !!user && hasPermission(user, permission);
+}
 
 // ── Per-machine UI preferences ──────────────────────────────────────────────────────────────
 // localStorage is fine here: losing it only resets these to the defaults.

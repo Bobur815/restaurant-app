@@ -1,4 +1,3 @@
-import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -107,11 +106,12 @@ describe('legacy import', () => {
     });
     expect(report.warnings).toEqual([expect.stringContaining('2025-00002')]);
 
-    // Password hashed, setup complete, receipt mapped.
-    const admin = await t.db.user.findUniqueOrThrow({ where: { username: 'admin' } });
-    expect(admin.passwordHash).not.toBe('123456');
-    expect(await bcrypt.compare('123456', admin.passwordHash)).toBe(true);
-    expect(admin.fullName).toBeNull();
+    // No password comes along (login is a PIN): the username becomes the name, the role gives
+    // the permissions; setup complete, receipt mapped.
+    const admin = await t.db.user.findFirstOrThrow({ where: { fullName: 'admin' } });
+    expect(admin).toMatchObject({ role: 'ADMIN', pinHash: null, phone: null });
+    expect(JSON.parse(admin.permissions)).toContain('users');
+    expect(JSON.stringify(admin)).not.toContain('123456');
     expect(await getSetupStatus(t.db)).toEqual({ setupComplete: true, hasAdmin: true });
     expect(await t.db.receiptSettings.findUniqueOrThrow({ where: { id: 1 } })).toMatchObject({
       restaurantName: 'Shoxona',
@@ -190,7 +190,7 @@ describe('legacy import', () => {
   });
 
   it('refuses a database that already has business data', async () => {
-    await t.db.user.create({ data: { username: 'x', passwordHash: 'h' } });
+    await t.db.user.create({ data: { fullName: 'x' } });
     await expect(importLegacy(t.db, await readLegacy(legacy))).rejects.toMatchObject({
       code: 'CONFLICT',
     });

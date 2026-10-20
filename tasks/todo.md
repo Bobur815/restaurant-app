@@ -285,6 +285,18 @@ Design rules for all three steps:
 - [ ] Upgrade test with the migrations: install the previous build, run it on a data copy, install the new build over it, compare counts and open the new screens.
 - [ ] Version: 0.2.0 (A), 0.3.0 (B), 0.4.0 (C), or one 0.2.0 if released together.
 
+## Feature F2: PIN-only login, phone instead of username, CASHIER role, permissions (2026-10-20)
+
+Decided with the user 2026-10-20: login is a 4-digit PIN only (no user list, no username, no password); PINs are unique and set only by users with the "users" permission; till lockout after 5 wrong PINs; every user has a name and a unique phone; recovery code for a forgotten admin PIN; roles ADMIN / CASHIER / STAFF are templates for per-user permission checkboxes. Replaces the uncommitted "remember me" work (no passwords left to remember).
+
+- [x] Migration 0009 (destructive by request, backed up first like every migration): drop `username` (+ its unique index), `passwordHash`, `failedLoginCount`, `lockedUntil`; add `phone` (unique, required by the app; existing users fill it in on first edit), `pinHash` (unique HMAC-SHA256 of the PIN with a per-install key, so a PIN can be looked up and kept unique), `permissions` (JSON list); `fullName` back-filled from the old username. The old bcrypt `pinCode` stays as `legacyPinCode` for one transition: an old PIN still works once and is converted.
+- [x] Permissions (checked in main on every call; the UI only hides): `orders` (take and edit orders), `payments` (close an order: payment), `debt` (sell on debt, take repayments), `checks` (view and reprint checks), `shifts` (open, edit, close shifts), `menu`, `reports`, `corrections` (edit and delete paid checks, delete closed shifts), `debtsAdmin` (forgive, void, assign, edit debtors), `settings`, `users` (users, PINs, recovery code). Defaults: ADMIN all; CASHIER orders, payments, debt, checks, shifts; STAFF orders. The last active user with `users` cannot lose it.
+- [x] Login: keypad only; 5 wrong PINs lock the keypad 5 min (doubling, kept across restarts); "PIN unutildimi?" = recovery code + new PIN for the owner admin (a new code is shown once). If no user with `users` can log in (upgrade with no PIN), a one-time "set the administrator PIN" step, like first-run setup.
+- [x] Setup wizard: admin name, phone, PIN; shows the recovery code once. Users screen: name, phone, role, permission checkboxes (role sets the defaults), PIN set/change/remove, active. Profile: name and phone. Lock = log out to the PIN keypad.
+- [x] Legacy import: users come in without PIN or phone (an admin sets them).
+- [x] Tests: auth (PIN lookup, uniqueness, lockout, legacy PIN transition, recovery, bootstrap), permissions on every channel (snapshot), users (last `users` holder), migration 0009 on a database with users, secrets (no pin key, PIN hash or recovery hash leaves main). Harness (fresh setup, users modal, staff vs cashier, recovery, lockout) and a copy of the real 0.4.0 data (migration 9, old admin PIN still valid, no bootstrap step). Installer upgrade test still to do with the release build.
+- [ ] Release: major version (operators log in differently).
+
 ## Phase 8.5: LAN access for waiter phones (first release, decided 2026-10-18)
 
 - [ ] HTTP adapter in main (posgro `local-server` pattern: plain `node:http` + its small `router.ts`, `pairing.ts`, `auth.ts`, `serve-policy.ts`; copy those and their tests, **no** Express/Fastify) over the **same** domain modules; binds to the LAN only when enabled in settings; device pairing (QR/code) → per-device token; every request resolves a user + role exactly like the IPC path.

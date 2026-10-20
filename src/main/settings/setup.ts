@@ -1,6 +1,7 @@
 import type { SetupInput } from '@shared/schemas';
-import type { CurrentUser, SetupStatus } from '@shared/types';
-import { hashPassword, toCurrentUser } from '../auth/auth';
+import type { LoginWithCodeDto, SetupStatus } from '@shared/types';
+import { PERMISSIONS } from '@shared/permissions';
+import { newRecoveryCode, setPinOf, toCurrentUser } from '../auth/auth';
 import type { Db, DbOrTx } from '../domain/db';
 import { conflict } from '../domain/errors';
 import { setDefaultTables } from '../halls/halls';
@@ -24,21 +25,20 @@ export async function getSetupStatus(db: DbOrTx): Promise<SetupStatus> {
  * First-run wizard: first admin, receipt settings and table count, all or nothing. Refused once
  * setup is complete or any admin exists, so this public endpoint cannot be used to add admins.
  */
-export async function completeSetup(db: Db, input: SetupInput): Promise<CurrentUser> {
-  const passwordHash = await hashPassword(input.admin.password); // outside the transaction: slow
-
+export async function completeSetup(db: Db, input: SetupInput): Promise<LoginWithCodeDto> {
   return db.$transaction(async (tx) => {
     const status = await getSetupStatus(tx);
     if (status.setupComplete || status.hasAdmin) throw conflict('Sozlash allaqachon bajarilgan');
 
     const admin = await tx.user.create({
       data: {
-        username: input.admin.username,
         fullName: input.admin.fullName,
-        passwordHash,
+        phone: input.admin.phone,
         role: 'ADMIN',
+        permissions: JSON.stringify(PERMISSIONS),
       },
     });
+    await setPinOf(tx, admin.id, input.admin.pin);
 
     await tx.receiptSettings.upsert({
       where: { id: RECEIPT_SETTINGS_ID },
@@ -49,6 +49,9 @@ export async function completeSetup(db: Db, input: SetupInput): Promise<CurrentU
     await setDefaultTables(tx, input.tableCount);
     await setSetting(tx, 'setupComplete', true);
 
-    return toCurrentUser(admin);
+    // Shown once by the wizard: the way back in if the admin's PIN is forgotten.
+    const recoveryCode = await newRecoveryCode(tx);
+    const user = toCurrentUser(await tx.user.findUniqueOrThrow({ where: { id: admin.id } }));
+    return { user, recoveryCode };
   });
 }

@@ -8,8 +8,7 @@ import { confirmDialog, openModal } from '../../components/modal';
 import { button, pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
-import { isAdmin } from '../../router/routes';
-import { appStore } from '../../store/app';
+import { appStore, can } from '../../store/app';
 import { html } from '../../ui/html';
 import {
   formatDate,
@@ -202,7 +201,7 @@ export const checksView: View = () => {
       return;
     }
     const l = lang();
-    const admin = isAdmin(appStore.get().user!.role);
+    const admin = can('corrections');
     const edit = button(t('checks.edit'), 'secondary', () => {
       modal.close();
       void editPayment(order);

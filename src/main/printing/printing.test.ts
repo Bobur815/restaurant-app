@@ -7,6 +7,7 @@ import { saveTableOrder } from '../orders/orders';
 import { payOrder } from '../payments/payments';
 import { openSession } from '../sessions/sessions';
 import { completeSetup } from '../settings/setup';
+import { toCurrentUser } from '../auth/auth';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import { pickPrinter, receiptWindowOptions, type PrinterService } from './printer';
 import { previewReceipt, printOrderReceipt, printTestReceipt } from './printing';
@@ -154,8 +155,8 @@ describe('printing from the database', () => {
   });
 
   it('prints the order from the database with the configured printer and width', async () => {
-    const admin = await completeSetup(t.db, {
-      admin: { username: 'boss', password: 'boss-pass', fullName: null },
+    const { user: admin } = await completeSetup(t.db, {
+      admin: { fullName: 'Boss', phone: '998900000001', pin: '1234' },
       receipt: receiptSettingsInput.parse({
         restaurantName: 'Shoxona',
         address: 'Arabmozor',
@@ -186,8 +187,7 @@ describe('printing from the database', () => {
   });
 
   it('refuses a cancelled order', async () => {
-    const admin = await t.db.user.findFirstOrThrow();
-    const actor = { id: admin.id, username: admin.username, fullName: null, role: admin.role };
+    const actor = toCurrentUser(await t.db.user.findFirstOrThrow());
     const dish = await t.db.menuItem.findFirstOrThrow();
     const order = await saveTableOrder(
       t.db,
