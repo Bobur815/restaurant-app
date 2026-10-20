@@ -38,4 +38,6 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 
 ## Tests
 
+- After a review fix, run the harness again before calling it done: an early return added for 0 totals in `settleTenders` silently broke the "Qolgan" button, which used the same function to sum the other lines (caught only by the UI run, F1-C).
+
 - A test that loops over channels must assert the call succeeded. `secrets.test.ts` passed `{}` to channels without input; they failed validation and "no secret in the result" passed on the error, so half the read channels were never checked (found in F1-A review).

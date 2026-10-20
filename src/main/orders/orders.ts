@@ -6,7 +6,7 @@ import type {
   SaveTableOrderInput,
   tableInput,
 } from '@shared/schemas';
-import type { OpenOrderSummaryDto, OrderDto, TableSummaryDto } from '@shared/types';
+import type { OpenOrderSummaryDto, OrderDto, PaymentMethod, TableSummaryDto } from '@shared/types';
 import { dec, roundMoney, sum, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
 import { LineError, priceLine } from '@shared/utils/order-line';
 import { decStr, iso, isoOrNull, type Actor, type Db, type DbOrTx, type Tx } from '../domain/db';
@@ -25,7 +25,7 @@ const orderInclude = {
     },
     orderBy: { id: 'asc' },
   },
-  payments: { orderBy: { id: 'asc' } },
+  payments: { orderBy: { id: 'asc' }, include: { customer: { select: { name: true } } } },
   createdBy: { select: { username: true } },
 } as const;
 
@@ -78,9 +78,14 @@ export function toOrderDto(o: OrderRow): OrderDto {
       id: p.id,
       orderId: p.orderId,
       amount: decStr(p.amount),
-      method: p.method,
+      // Payment rows never hold `mixed` (only the order does).
+      method: p.method as PaymentMethod,
       status: p.status,
       paidAt: iso(p.paidAt),
+      customerId: p.customerId,
+      customerName: p.customer?.name ?? null,
+      dueDate: isoOrNull(p.dueDate),
+      settledAt: isoOrNull(p.settledAt),
     })),
   };
 }

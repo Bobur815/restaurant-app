@@ -5,6 +5,7 @@ import { sql as menuItemCostPrice } from './0004_menu_item_cost_price';
 import { sql as userPinCode } from './0005_user_pin_code';
 import { sql as hallsTables } from './0006_halls_tables';
 import { sql as orderTypesCustomers } from './0007_order_types_customers';
+import { sql as splitPaymentDebt } from './0008_split_payment_debt';
 
 export interface Migration {
   /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
@@ -27,4 +28,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 5, name: 'user_pin_code', sql: userPinCode },
   { version: 6, name: 'halls_tables', sql: hallsTables },
   { version: 7, name: 'order_types_customers', sql: orderTypesCustomers },
+  { version: 8, name: 'split_payment_debt', sql: splitPaymentDebt },
 ];

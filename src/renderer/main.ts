@@ -8,6 +8,7 @@ import { lockView } from './views/lock';
 import { loginView } from './views/login';
 import { orderView } from './views/order/order-view';
 import { checksView } from './views/checks/checks-view';
+import { debtorsView } from './views/debts/debtors-view';
 import { menuView } from './views/menu/menu-view';
 import { reportsView } from './views/reports/reports-view';
 import { sessionsView } from './views/sessions/sessions-view';
@@ -36,6 +37,7 @@ const ROUTES: RouteDef<View>[] = [
   { path: '/orders/:id', access: 'user', layout: 'shell', view: orderView },
   { path: '/sessions', access: 'user', layout: 'shell', view: sessionsView },
   { path: '/checks', access: 'user', layout: 'shell', view: checksView },
+  { path: '/debtors', access: 'user', layout: 'shell', view: debtorsView },
   { path: '/profile', access: 'user', layout: 'shell', view: profileView },
   { path: '/menu', access: 'admin', layout: 'shell', view: menuView },
   { path: '/reports', access: 'admin', layout: 'shell', view: reportsView },

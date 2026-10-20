@@ -34,7 +34,16 @@ import {
   saveTableOrder,
   setDeliveryStatus,
 } from '../orders/orders';
-import { cancelPaidOrder, listChecks, payOrder, updatePayment } from '../payments/payments';
+import { cancelPaidOrder, editCheck, listChecks, payOrder } from '../payments/payments';
+import {
+  assignDebt,
+  getDebtor,
+  listDebtors,
+  repayDebt,
+  updateCustomer,
+  voidRepayment,
+  writeOffDebt,
+} from '../debts/debts';
 import { previewReceipt, printOrderReceipt, printTestReceipt } from '../printing/printing';
 import { salesReport } from '../reports/reports';
 import { applyResiduals, listExpenses, listResiduals } from '../residuals/residuals';
@@ -219,10 +228,29 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   ),
   'payments:pay': user(S.payOrderInput, (ctx, input) => payOrder(ctx.db, ctx.actor, input)),
   'checks:list': user(S.listChecksInput, (ctx, input) => listChecks(ctx.db, input)),
-  'checks:update': admin(S.updatePaymentInput, (ctx, input) => updatePayment(ctx.db, input)),
+  'checks:update': admin(S.editCheckInput, (ctx, input) => editCheck(ctx.db, ctx.actor, input)),
   'checks:delete': admin(S.orderNumberInput, (ctx, { orderNumber }) =>
     cancelPaidOrder(ctx.db, orderNumber),
   ),
+
+  // ── debt (nasiya) ────────────────────────────────────────────────────────────────────────
+  // Debtors who owe nothing now (a directory of past customers) only for admins.
+  'debts:list': user(S.listDebtorsInput, (ctx, input) =>
+    listDebtors(ctx.db, {
+      ...input,
+      includeSettled: input.includeSettled && ctx.actor.role === 'ADMIN',
+    }),
+  ),
+  'debts:get': user(S.debtorInput, (ctx, { customerId }) =>
+    getDebtor(ctx.db, customerId, { full: ctx.actor.role === 'ADMIN' }),
+  ),
+  'debts:repay': user(S.repayInput, (ctx, input) => repayDebt(ctx.db, ctx.actor, input)),
+  'debts:writeOff': admin(S.writeOffInput, (ctx, input) => writeOffDebt(ctx.db, ctx.actor, input)),
+  'debts:void': admin(S.voidRepaymentInput, (ctx, input) =>
+    voidRepayment(ctx.db, ctx.actor, input),
+  ),
+  'debts:assign': admin(S.assignDebtInput, (ctx, input) => assignDebt(ctx.db, input)),
+  'customers:update': admin(S.updateCustomerInput, (ctx, input) => updateCustomer(ctx.db, input)),
 
   // ── residuals, expenses, reports ───────────────────────────────────────────────────────────
   'residuals:list': user(S.listResidualsInput, (ctx, input) => listResiduals(ctx.db, input)),

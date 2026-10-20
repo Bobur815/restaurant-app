@@ -53,6 +53,14 @@ enum PaymentMethod {
   card
   click
   debt
+  // orders.paymentMethod only: the check was paid with several methods (one payment row each).
+  mixed
+}
+
+// A repayment of debt, or (admin) forgiving part of it (feature F1-C).
+enum DebtEntryKind {
+  PAYMENT
+  WRITE_OFF
 }
 
 enum PaymentStatus {
@@ -102,11 +110,13 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  ordersCreated   Order[]   @relation("OrderCreatedBy")
-  paymentsTaken   Payment[] @relation("PaymentCreatedBy")
-  sessionsOpened  Session[] @relation("SessionOpenedBy")
-  sessionsClosed  Session[] @relation("SessionClosedBy")
-  expensesCreated Expense[] @relation("ExpenseCreatedBy")
+  ordersCreated    Order[]         @relation("OrderCreatedBy")
+  paymentsTaken    Payment[]       @relation("PaymentCreatedBy")
+  sessionsOpened   Session[]       @relation("SessionOpenedBy")
+  sessionsClosed   Session[]       @relation("SessionClosedBy")
+  expensesCreated  Expense[]       @relation("ExpenseCreatedBy")
+  repaymentsTaken  DebtRepayment[] @relation("RepaymentCreatedBy")
+  repaymentsVoided DebtRepayment[] @relation("RepaymentVoidedBy")
 
   @@map("users")
 }
@@ -173,9 +183,36 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orders Order[]
+  orders     Order[]
+  payments   Payment[]
+  repayments DebtRepayment[]
 
   @@map("customers")
+}
+
+// Money a customer brought back against their debt, or an amount an admin forgave. Never deleted:
+// a mistake is voided (kept, struck through, left out of every balance).
+model DebtRepayment {
+  id          Int            @id @default(autoincrement())
+  customerId  Int
+  amount      Decimal
+  kind        DebtEntryKind  @default(PAYMENT)
+  // cash | card | click for PAYMENT; null for WRITE_OFF.
+  method      PaymentMethod?
+  note        String?
+  createdById Int?
+  createdAt   DateTime       @default(now())
+  voidedAt    DateTime?
+  voidedById  Int?
+  voidReason  String?
+
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  createdBy User?    @relation("RepaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  voidedBy  User?    @relation("RepaymentVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+
+  @@index([customerId, voidedAt])
+  @@index([createdAt])
+  @@map("debt_repayments")
 }
 
 // ==================== HALLS & TABLES ====================
@@ -445,16 +482,23 @@ model Payment {
   method      PaymentMethod
   status      PaymentStatus @default(paid)
   paidAt      DateTime      @default(now())
+  // Debt rows (method debt): who owes it, when it is due, and when repayments covered it (oldest
+  // debt first; status becomes paid). Null customer = imported legacy debt, not assigned yet.
+  customerId  Int?
+  dueDate     DateTime?
+  settledAt   DateTime?
   createdById Int?
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  order     Order @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  createdBy User? @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  order     Order     @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  createdBy User?     @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  customer  Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
 
   @@index([orderId])
   @@index([paidAt])
   @@index([method])
   @@index([status])
+  @@index([customerId, settledAt])
   @@map("payments")
 }

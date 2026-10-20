@@ -22,6 +22,8 @@ const SETTING_KEYS = {
   takeawayEnabled: { key: 'takeaway_enabled', schema: z.boolean() },
   deliveryEnabled: { key: 'delivery_enabled', schema: z.boolean() },
   deliveryFeeDefault: { key: 'delivery_fee_default', schema: nonNegativeDecimal },
+  splitPaymentEnabled: { key: 'split_payment_enabled', schema: z.boolean() },
+  debtEnabled: { key: 'debt_enabled', schema: z.boolean() },
   lanEnabled: { key: 'lan_enabled', schema: z.boolean() },
   setupComplete: { key: 'setup_complete', schema: z.boolean() },
 } as const satisfies Record<keyof AppSettings, { key: string; schema: z.ZodType }>;

@@ -63,6 +63,8 @@ describe('settings', () => {
       takeawayEnabled: true,
       deliveryEnabled: true,
       deliveryFeeDefault: '0',
+      splitPaymentEnabled: true,
+      debtEnabled: true,
       lanEnabled: false,
       setupComplete: false,
     });

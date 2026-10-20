@@ -10,15 +10,18 @@ describe('change events', () => {
   });
 
   it('order changes name the table and refresh the shift (stock moved)', () => {
-    const order = { tableNumber: 4 };
+    const order = { id: 7, tableNumber: 4 };
     expect(eventsFor('orders:save', {}, order)).toEqual([
-      { type: 'orders-changed', tableNumber: 4 },
+      { type: 'orders-changed', orderId: 7, tableNumber: 4 },
       { type: 'session-changed' },
     ]);
+    // A payment may add debt, so the debtors list refreshes too.
     expect(eventsFor('payments:pay', {}, order)).toEqual([
-      { type: 'orders-changed', tableNumber: 4 },
+      { type: 'orders-changed', orderId: 7, tableNumber: 4 },
+      { type: 'debts-changed' },
     ]);
     expect(eventsFor('checks:delete', {}, order)).toContainEqual({ type: 'session-changed' });
+    expect(eventsFor('debts:repay', {}, {})).toContainEqual({ type: 'debts-changed' });
   });
 
   it('reads and login announce nothing', () => {

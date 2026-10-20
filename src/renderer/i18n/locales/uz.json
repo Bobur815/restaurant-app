@@ -46,7 +46,8 @@
     "lock": "Ekranni qulflash",
     "menuToggle": "Bo'limlar",
     "menuOpen": "Menyuni ochish",
-    "menuClose": "Menyuni yopish"
+    "menuClose": "Menyuni yopish",
+    "debtors": "Qarzdorlar"
   },
   "setup": {
     "title": "SavdoChef sozlamalari",
@@ -144,10 +145,21 @@
     "debt": "Nasiya",
     "received": "Olingan summa",
     "change": "Qaytim",
-    "debtNote": "Nasiya to'lov sifatida yoziladi (holati: kutilmoqda)",
     "confirm": "To'lovni tasdiqlash",
     "done": "To'lov qabul qilindi: {{amount}}",
-    "titleOpen": "To'lov · {{type}} № {{number}}"
+    "titleOpen": "To'lov · {{type}} № {{number}}",
+    "rest": "Qolgan",
+    "splitOn": "Bo'lib to'lash",
+    "splitOff": "Bitta usulda",
+    "entered": "Kiritildi",
+    "remaining": "Qolgan",
+    "badAmount": "Summa noto'g'ri yozilgan",
+    "problem_empty": "To'lov usulini tanlang",
+    "problem_short": "Summa yetarli emas: qolganini kiriting",
+    "problem_nonCashOver": "Karta, Click va nasiya chek summasidan oshmasligi kerak (qaytim faqat naqddan)",
+    "dueDate": "Qaytarish muddati",
+    "debtFor": "Nasiya kimga yoziladi",
+    "doneChange": "To'landi: {{amount}}. Qaytim: {{change}}"
   },
   "sessions": {
     "title": "Smenalar",
@@ -272,7 +284,8 @@
     "order_pending": "To'lanmagan",
     "cashier": "Kassir",
     "paidAt": "To'lov vaqti",
-    "where": "Stol / turi"
+    "where": "Stol / turi",
+    "debtOpen": "qarz: {{amount}}"
   },
   "users": {
     "title": "Foydalanuvchilar",
@@ -352,7 +365,11 @@
     "ordersHint": "Zaldagi stollar doim bor. Bu yerda olib ketish va yetkazib berishni yoqish yoki o'chirish mumkin; ochiq buyurtmalar baribir yakunlanadi.",
     "takeawayEnabled": "Olib ketish",
     "deliveryEnabled": "Yetkazib berish",
-    "deliveryFeeDefault": "Yetkazib berish narxi (odatiy, so'm)"
+    "deliveryFeeDefault": "Yetkazib berish narxi (odatiy, so'm)",
+    "sectionPayments": "To'lov",
+    "paymentsHint": "Bo'lib to'lash: bitta chekni bir nechta usulda (naqd + karta). Nasiya: chekning hammasi yoki bir qismi mijoz nomiga qarzga yoziladi.",
+    "splitPaymentEnabled": "Bo'lib to'lash",
+    "debtEnabled": "Nasiya (qarzga sotish)"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -404,7 +421,12 @@
     "next": "Keyingi",
     "none": "Ma'lumot yo'q",
     "all": "Hammasi",
-    "deliveryFees": "shundan yetkazish xizmati: {{amount}}"
+    "deliveryFees": "shundan yetkazish xizmati: {{amount}}",
+    "received": "Kassaga tushgan",
+    "receivedNote": "naqd + karta + Click + qarz to'lovlari",
+    "debtSold": "Nasiyaga sotilgan",
+    "repayments": "Qarz to'lovlari",
+    "writtenOff": "Kechirilgan qarz"
   },
   "lock": {
     "title": "Ekran qulflangan",
@@ -490,5 +512,41 @@
     "PREPARING": "Tayyorlanmoqda",
     "ON_THE_WAY": "Yo'lda",
     "DELIVERED": "Yetkazildi"
+  },
+  "debts": {
+    "title": "Qarzdorlar",
+    "ledger": "Qarz daftari",
+    "search": "Ism yoki telefon",
+    "includeSettled": "To'langanlarni ham ko'rsatish",
+    "totalOwed": "Jami qarz",
+    "debtors": "Qarzdorlar",
+    "overdue": "Muddati o'tgan",
+    "empty": "Qarzdorlar yo'q",
+    "customer": "Mijoz",
+    "openChecks": "Ochiq cheklar",
+    "since": "Eng eski qarz",
+    "balance": "Qarz",
+    "unknown": "Noma'lum mijoz",
+    "unknownHint": "Eski dasturdan kelgan, mijozi ko'rsatilmagan qarzlar. Administrator ularni mijozga biriktirishi mumkin.",
+    "amount": "Summa",
+    "note": "Izoh",
+    "repay": "Qarz to'lash",
+    "repaid": "To'lov qabul qilindi",
+    "writeOff": "Qarzni kechirish",
+    "writtenOff": "Qarz kechirildi",
+    "reason": "Sabab",
+    "void": "Bekor qilish",
+    "voidHint": "Yozuv o'chirilmaydi: chizilgan holda qoladi va qarzga qaytadi.",
+    "voided": "Bekor qilindi",
+    "editCustomer": "Mijozni tahrirlash",
+    "assign": "Mijozga biriktirish",
+    "assignHint": "Bu qarz kimga tegishli? Telefon raqami bo'yicha topiladi yoki yangi mijoz yaratiladi.",
+    "assigned": "Biriktirildi",
+    "charge": "Chek № {{number}}",
+    "settledAt": "{{date}} da to'langan",
+    "open": "To'lanmagan",
+    "writeOffEntry": "Kechirildi",
+    "repaymentEntry": "To'lov ({{method}})",
+    "voidedBy": "bekor qildi: {{user}} ({{reason}})"
   }
 }

@@ -1,5 +1,6 @@
 import {
   closeSessionInput,
+  editCheckInput,
   listChecksInput,
   menuItemInput,
   saveTableOrderInput,
@@ -7,7 +8,7 @@ import {
 import type { Actor } from '../domain/db';
 import { dayKey } from '../domain/db';
 import { createMenuItem, updateMenuItem } from '../menu/menu-items';
-import { cancelPaidOrder, listChecks, payOrder, updatePayment } from '../payments/payments';
+import { cancelPaidOrder, editCheck, listChecks, payOrder } from '../payments/payments';
 import {
   closeSession,
   deleteSession,
@@ -177,7 +178,11 @@ describe('a trading day', () => {
       code: 'CONFLICT',
     });
 
-    const paidB = await payOrder(t.db, cashier, { orderId: b.id, method: 'debt' });
+    const paidB = await payOrder(t.db, cashier, {
+      orderId: b.id,
+      method: 'debt',
+      debtCustomer: { phone: '998901112233', name: 'Ali', dueDate: null },
+    });
     expect(paidB.payments[0]).toMatchObject({ amount: '50000', status: 'pending' });
     expect(await listBusyTables(t.db)).toEqual([]);
     expect(await sold()).toEqual({ Non: '3', Osh: '2', Shashlik: '0' });
@@ -194,8 +199,13 @@ describe('a trading day', () => {
     expect(debt).toHaveLength(1);
 
     const [{ orderNumber }] = debt as [(typeof debt)[0]];
-    const fixed = await updatePayment(t.db, { orderNumber, status: 'paid', method: 'card' });
-    expect(fixed[0]).toMatchObject({ status: 'paid', method: 'card' });
+    const fixed = await editCheck(
+      t.db,
+      cashier,
+      editCheckInput.parse({ orderNumber, tenders: [{ method: 'card', amount: '50000' }] }),
+    );
+    expect(fixed.payments).toMatchObject([{ status: 'paid', method: 'card', amount: '50000' }]);
+    expect(fixed.paymentMethod).toBe('card');
   });
 
   it('deleting a check cancels its order and returns the stock to the open shift', async () => {

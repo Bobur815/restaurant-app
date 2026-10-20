@@ -1070,3 +1070,115 @@
   margin-left: auto;
   font-size: var(--font-size-xs);
 }
+
+/* ── Split payment & debt (feature F1-C) ─────────────────────────────────────────────────── */
+.tender-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.tender-editor > .pay-total,
+.tender-editor .method-group {
+  margin-bottom: 0;
+}
+
+.tender-editor > .btn {
+  align-self: flex-start;
+}
+
+.split-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.split-row {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.split-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.split-row .input {
+  height: var(--control-height-lg);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.split-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.split-problem:empty {
+  display: none;
+}
+
+.debt-box {
+  padding: var(--space-3);
+  border: 1px dashed var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+}
+
+.debt-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-weight: 700;
+}
+
+.lines-table tr.is-overdue td:first-child {
+  box-shadow: inset 3px 0 0 var(--color-danger);
+}
+
+.lines-table tr.is-voided td {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+}
+
+.lines-table tr.is-voided td .btn {
+  text-decoration: none;
+}
+
+.debtor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.debtor-head h3 {
+  margin: 0 0 var(--space-1);
+}
+
+.debtor-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.debtor-balance strong {
+  font-size: var(--font-size-2xl);
+  font-variant-numeric: tabular-nums;
+}

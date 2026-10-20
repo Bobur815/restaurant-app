@@ -3,7 +3,7 @@ import { PAYMENT_METHODS, PAYMENT_STATUSES } from '@shared/types';
 import { dec, sum, toMoneyString } from '@shared/utils/decimal';
 import { formatPhone } from '@shared/utils/phone';
 import { api } from '../../api';
-import { field, formError, selectField, showFormError, value } from '../../components/forms';
+import { field, selectField, value } from '../../components/forms';
 import { confirmDialog, openModal } from '../../components/modal';
 import { button, pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
@@ -12,15 +12,20 @@ import { isAdmin } from '../../router/routes';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
 import {
+  formatDate,
   formatDateTime,
   formatMoney,
   formatQty,
   formatTime,
   localName,
-  toInputDecimal,
 } from '../../utils/format';
 import { printReceipt } from '../order/print-receipt';
+import { createTenderEditor } from '../order/tender-editor';
+import type { TenderMethod } from '@shared/utils/split-payment';
 import type { View } from '../types';
+
+const localDay = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /** Where an order was served: its table, or takeaway/delivery with the customer's name. */
 function where(o: {
@@ -119,7 +124,14 @@ export const checksView: View = () => {
         html`<td class="strong">${c.orderNumber}</td>
           <td>${where(c)}</td>
           <td>${formatDateTime(c.paidAt)}</td>
-          <td>${t(`payment.${c.method}`)}</td>
+          <td>
+            ${c.methods.map((m) => t(`payment.${m}`)).join(' + ')}
+            ${dec(c.debtOpen).gt(0)
+              ? html`<span class="muted small">
+                  · ${t('checks.debtOpen', { amount: formatMoney(c.debtOpen, l) })}</span
+                >`
+              : ''}
+          </td>
           <td>${statusBadge(c.status)}</td>
           <td class="num strong">${formatMoney(c.amount, l)}</td>`,
       );
@@ -265,7 +277,18 @@ export const checksView: View = () => {
             (p) =>
               html`<tr>
                 <td>${formatTime(p.paidAt)}</td>
-                <td>${t(`payment.${p.method}`)}</td>
+                <td>
+                  ${t(`payment.${p.method}`)}
+                  ${p.method === 'debt'
+                    ? html`<div class="muted small">
+                        ${p.customerName ?? t('debts.unknown')}
+                        ${p.dueDate ? ` · ${t('payment.dueDate')}: ${formatDate(p.dueDate)}` : ''}
+                        ${p.settledAt
+                          ? ` · ${t('debts.settledAt', { date: formatDate(p.settledAt) })}`
+                          : ''}
+                      </div>`
+                    : ''}
+                </td>
                 <td>${statusBadge(p.status)}</td>
                 <td class="num strong">${formatMoney(p.amount, l)}</td>
               </tr>`,
@@ -282,35 +305,42 @@ export const checksView: View = () => {
     });
   }
 
-  function editPayment(order: OrderDto) {
-    const payment = order.payments[0];
-    if (!payment) return;
-    const form = document.createElement('div');
-    form.append(
-      html`${selectField({
-        name: 'method',
-        label: t('checks.method'),
-        value: payment.method,
-        options: PAYMENT_METHODS.map((m) => ({ value: m, label: t(`payment.${m}`) })),
-      })}
-      ${selectField({
-        name: 'status',
-        label: t('checks.status'),
-        value: payment.status,
-        options: PAYMENT_STATUSES.map((s) => ({ value: s, label: t(`checks.status_${s}`) })),
-      })}
-      ${field({
-        name: 'amount',
-        label: t('checks.amount'),
-        inputmode: 'decimal',
-        value: toInputDecimal(payment.amount),
-      })}
-      ${formError()}`,
-    );
-    openModal({
+  /** Admin: the check's payments re-entered (methods, split, debt), checked like a payment. */
+  async function editPayment(order: OrderDto) {
+    const debtRow = order.payments.find((p) => p.method === 'debt');
+    // The debt customer's phone, to prefill (the check only names them).
+    let debtPhone: string | null = null;
+    if (debtRow?.customerId) {
+      debtPhone =
+        (await api.debts.get({ customerId: debtRow.customerId }).catch(() => null))?.customer
+          ?.phone ?? null;
+    }
+    let confirm: HTMLButtonElement | null = null;
+    const editor = createTenderEditor({
+      total: order.totalAmount,
+      orderCustomer: null,
+      initial: {
+        tenders: order.payments.map((p) => ({
+          method: p.method as TenderMethod,
+          amount: p.amount,
+        })),
+        debtCustomer: debtPhone
+          ? {
+              phone: debtPhone,
+              name: debtRow?.customerName ?? null,
+              // Stored as the end of a local day: back to that local YYYY-MM-DD.
+              dueDate: debtRow?.dueDate ? localDay(new Date(debtRow.dueDate)) : null,
+            }
+          : null,
+      },
+      onChange: () => {
+        if (confirm) confirm.disabled = !editor.canSubmit();
+      },
+    });
+    const modal = openModal({
       title: t('checks.edit'),
-      body: form,
-      size: 'sm',
+      body: editor.el,
+      size: 'md',
       actions: [
         { label: t('app.cancel') },
         {
@@ -318,28 +348,31 @@ export const checksView: View = () => {
           kind: 'primary',
           submit: true,
           onClick: async () => {
+            editor.clearErrors();
+            if (!editor.canSubmit()) return false;
             try {
               await api.checks.update({
                 orderNumber: order.orderNumber,
-                method: value(form, 'method') as PaymentMethod,
-                status: value(form, 'status') as PaymentStatus,
-                amount: value(form, 'amount').replace(/\s/g, '').replace(',', '.'),
+                expectedVersion: order.version,
+                ...editor.result(),
               });
               toast(t('checks.saved'), 'success');
               await load();
             } catch (e) {
-              showFormError(form, e);
+              editor.showError(e);
               return false;
             }
           },
         },
       ],
     });
+    confirm = modal.dialog.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (confirm) confirm.disabled = !editor.canSubmit();
   }
 
   void load();
   const stop = api.events.subscribe((e) => {
-    if (e.type === 'orders-changed') void load();
+    if (e.type === 'orders-changed' || e.type === 'debts-changed') void load();
   });
   return { el, destroy: stop };
 };

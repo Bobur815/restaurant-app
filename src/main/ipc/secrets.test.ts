@@ -80,6 +80,36 @@ beforeAll(async () => {
       totalAmount: '5000',
     },
   });
+
+  // Debt: the customer owes on order 1, repaid once (by staff) and once voided (by the admin);
+  // and an imported debt without a customer. The debt channels then return real rows.
+  await t.db.payment.create({
+    data: {
+      orderId: 1,
+      amount: '20000',
+      method: 'debt',
+      status: 'pending',
+      customerId: customer.id,
+      createdById: staff.id,
+    },
+  });
+  await t.db.debtRepayment.create({
+    data: { customerId: customer.id, amount: '5000', method: 'cash', createdById: staff.id },
+  });
+  await t.db.debtRepayment.create({
+    data: {
+      customerId: customer.id,
+      amount: '1000',
+      method: 'card',
+      createdById: staff.id,
+      voidedAt: new Date(),
+      voidedById: admin.id,
+      voidReason: 'Xato',
+    },
+  });
+  await t.db.payment.create({
+    data: { orderId: 1, amount: '3000', method: 'debt', status: 'pending' },
+  });
 });
 afterAll(() => t.close());
 
@@ -88,6 +118,7 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'halls:list': { includeInactive: true },
   'printing:printReceipt': { orderId: 1 },
   'orders:get': { id: 1 },
+  'debts:get': { customerId: 1 },
   'customers:findByPhone': { phone: '+998 90 123 45 67' },
   'residuals:list': {},
   'expenses:list': {},
@@ -138,6 +169,10 @@ describe('no secrets over IPC', () => {
       ['users:list', undefined],
       ['users:create', { username: 'yangi', password: 'yangi-pass' }],
       ['users:updateProfile', { fullName: 'Boss' }],
+      ['debts:repay', { customerId: 1, amount: '1000', method: 'cash' }],
+      ['debts:void', { repaymentId: 1, reason: 'Tekshiruv' }],
+      ['debts:list', { includeSettled: true }],
+      ['debts:get', { customerId: null }],
     ];
     for (const [channel, input] of calls) {
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx(admin), input);

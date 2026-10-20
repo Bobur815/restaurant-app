@@ -94,8 +94,17 @@ export const reportsView: View = () => {
         ${note ? html`<span class="stat-note">${note}</span>` : ''}
       </div>`;
     /** Range total of one by-order-type column. */
-    const byType = (k: 'dineIn' | 'takeaway' | 'delivery' | 'deliveryFees') =>
-      toMoneyString(sum(daily.map((d) => d[k])));
+    const byType = (
+      k:
+        | 'dineIn'
+        | 'takeaway'
+        | 'delivery'
+        | 'deliveryFees'
+        | 'received'
+        | 'repayments'
+        | 'debt'
+        | 'writtenOff',
+    ) => toMoneyString(sum(daily.map((d) => d[k])));
 
     if (daily.length === 0) {
       content.replaceChildren(
@@ -150,6 +159,16 @@ export const reportsView: View = () => {
             formatMoney(byType('delivery'), l),
             t('reports.deliveryFees', { amount: formatMoney(byType('deliveryFees'), l) }),
           )}
+        </div>
+        <div class="stat-row">
+          ${tile(
+            t('reports.received'),
+            formatMoney(byType('received'), l),
+            t('reports.receivedNote'),
+          )}
+          ${tile(t('reports.debtSold'), formatMoney(byType('debt'), l))}
+          ${tile(t('reports.repayments'), formatMoney(byType('repayments'), l))}
+          ${tile(t('reports.writtenOff'), formatMoney(byType('writtenOff'), l))}
         </div>
         <div class="card">
           <h2 class="card-title">${t('reports.chartTitle')}</h2>

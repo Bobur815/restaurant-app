@@ -1,13 +1,9 @@
 import type { DeliveryStatus, OrderDto } from '@shared/types';
 import { dec, isDecimalString } from '@shared/utils/decimal';
-import {
-  formatUzPhoneInput,
-  isUzPhoneComplete,
-  normalizeUzPhone,
-  phoneToDigits,
-} from '@shared/utils/phone';
+import { isUzPhoneComplete, normalizeUzPhone } from '@shared/utils/phone';
 import { api } from '../../api';
 import { clearErrors, field, formError, showFormError, value } from '../../components/forms';
+import { phoneField } from '../../components/phone-field';
 import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
@@ -60,19 +56,37 @@ export function createCustomerPanel(options: {
   typeSwitch.setAttribute('role', 'radiogroup');
   typeSwitch.setAttribute('aria-label', t('orderType.label'));
 
-  const phoneField = field({
+  // Phone: masked as typed; a complete known number fills the empty fields (never overwrites).
+  let lookup = 0;
+  const phone = phoneField({
     name: 'customerPhone',
     label: t('customer.phone'),
-    type: 'tel',
-    inputmode: 'tel',
-    autocomplete: 'off',
+    onInput: () => {
+      known.hidden = true;
+      lookup++;
+      options.onChange();
+    },
+    onComplete: async (digits) => {
+      const mine = ++lookup;
+      const c = await api.customers.findByPhone({ phone: digits }).catch(() => null);
+      if (mine !== lookup || !c) return;
+      known.hidden = false;
+      const fill = (name: string, v: string | null) => {
+        if (v && !input(name).value.trim()) input(name).value = v;
+      };
+      fill('customerName', c.name);
+      if (type === 'DELIVERY') {
+        fill('deliveryAddress', c.address);
+        fill('deliveryNote', c.landmark);
+      }
+      options.onChange();
+    },
   });
-  const phone = phoneField.querySelector('input')!;
   const known = document.createElement('span');
   known.className = 'badge badge-success customer-known';
   known.hidden = true;
   known.textContent = t('customer.known');
-  phoneField.querySelector('label')!.append(known);
+  phone.el.querySelector('label')!.append(known);
 
   const nameField = field({ name: 'customerName', label: t('customer.name'), autocomplete: 'off' });
   const addressField = field({ name: 'deliveryAddress', label: t('customer.address') });
@@ -88,7 +102,7 @@ export function createCustomerPanel(options: {
 
   el.append(
     typeSwitch,
-    html`<div class="customer-grid">${phoneField}${nameField}</div>
+    html`<div class="customer-grid">${phone.el}${nameField}</div>
       <div class="customer-grid">${addressField}${noteField}${feeField}</div>`,
     statusBox,
     formError(),
@@ -168,38 +182,6 @@ export function createCustomerPanel(options: {
     renderStatus();
   }
 
-  // Phone: mask as typed; a complete known number fills the empty fields (never overwrites).
-  let lookup = 0;
-  let lastDigits = '';
-  const typedDigits = () => phoneToDigits(phone.value.replace(/^\+998\s*\(?/, ''));
-  phone.addEventListener('focus', () => {
-    if (!phone.value) phone.value = formatUzPhoneInput('');
-  });
-  phone.addEventListener('input', async (event) => {
-    let digits = typedDigits();
-    // Backspace over a mask character (")", " ", "-") removes no digit: take the digit before
-    // it, or the mask would put the character straight back and the number could not be erased.
-    if ((event as InputEvent).inputType?.startsWith('delete') && digits === lastDigits)
-      digits = digits.slice(0, -1);
-    lastDigits = digits;
-    phone.value = formatUzPhoneInput(digits);
-    known.hidden = true;
-    options.onChange();
-    if (!isUzPhoneComplete(digits)) return;
-    const mine = ++lookup;
-    const c = await api.customers.findByPhone({ phone: digits }).catch(() => null);
-    if (mine !== lookup || !c) return;
-    known.hidden = false;
-    const fill = (name: string, v: string | null) => {
-      if (v && !input(name).value.trim()) input(name).value = v;
-    };
-    fill('customerName', c.name);
-    if (type === 'DELIVERY') {
-      fill('deliveryAddress', c.address);
-      fill('deliveryNote', c.landmark);
-    }
-    options.onChange();
-  });
   for (const name of ['customerName', 'deliveryAddress', 'deliveryNote', 'deliveryFee'])
     input(name).addEventListener('input', () => options.onChange());
 
@@ -207,8 +189,7 @@ export function createCustomerPanel(options: {
   function setOrder(next: OrderDto | null) {
     order = next;
     if (next && next.orderType !== 'DINE_IN') type = next.orderType;
-    phone.value = next?.customerPhone ? formatUzPhoneInput(next.customerPhone) : '';
-    lastDigits = typedDigits();
+    phone.set(next?.customerPhone);
     input('customerName').value = next?.customerName ?? '';
     input('deliveryAddress').value = next?.deliveryAddress ?? '';
     input('deliveryNote').value = next?.deliveryNote ?? '';
@@ -222,7 +203,7 @@ export function createCustomerPanel(options: {
 
   /** What would be saved. Phone as typed (main normalizes); fee null when not a number. */
   function values(): CustomerValues & { feeValid: boolean } {
-    const digits = typedDigits();
+    const digits = phone.digits();
     const fee = type === 'DELIVERY' ? moneyInput(value(el, 'deliveryFee')) : '0';
     return {
       orderType: type,

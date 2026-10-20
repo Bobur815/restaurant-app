@@ -11,6 +11,8 @@ export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
 export type DeliveryStatus = 'PREPARING' | 'ON_THE_WAY' | 'DELIVERED';
 export type PaymentMethod = 'cash' | 'card' | 'click' | 'debt';
 export type PaymentStatus = 'paid' | 'pending' | 'refunded';
+/** An order's method: one of the payment methods, or `mixed` when it was split. */
+export type OrderPaymentMethod = PaymentMethod | 'mixed';
 export type SessionStatus = 'open' | 'closed';
 export type ResidualAction = 'CARRY_TO_NEXT' | 'WRITE_OFF';
 export type ResidualStatus = 'pending' | 'applied';
@@ -63,6 +65,9 @@ export interface AppSettings {
   deliveryEnabled: boolean;
   /** Pre-filled delivery fee, editable per order. */
   deliveryFeeDefault: DecimalString;
+  /** Payment options (F1-C). */
+  splitPaymentEnabled: boolean;
+  debtEnabled: boolean;
   lanEnabled: boolean;
   setupComplete: boolean;
 }
@@ -90,6 +95,60 @@ export interface ReceiptSettingsDto {
 export interface PrinterInfo {
   name: string;
   isDefault: boolean;
+}
+
+// ── Debt (nasiya) ────────────────────────────────────────────────────────────────────────────
+
+export interface DebtorDto {
+  /** null: imported legacy debt that has no customer yet. */
+  customerId: number | null;
+  name: string | null;
+  phone: string | null;
+  /** Owed now: debt rows minus repayments and write-offs (computed, never stored). */
+  balance: DecimalString;
+  /** Unpaid debt checks, and the oldest and the next due date among them. */
+  openChecks: number;
+  oldestDebtAt: string | null;
+  nextDueDate: string | null;
+  overdue: boolean;
+}
+
+export interface DebtChargeDto {
+  paymentId: number;
+  orderId: number;
+  orderNumber: string;
+  amount: DecimalString;
+  paidAt: string;
+  dueDate: string | null;
+  /** When repayments covered it (oldest first); null while (partly) unpaid. */
+  settledAt: string | null;
+}
+
+export interface DebtRepaymentDto {
+  id: number;
+  kind: 'PAYMENT' | 'WRITE_OFF';
+  method: 'cash' | 'card' | 'click' | null;
+  amount: DecimalString;
+  note: string | null;
+  createdAt: string;
+  createdBy: string | null;
+  voidedAt: string | null;
+  voidedBy: string | null;
+  voidReason: string | null;
+}
+
+export interface DebtorDetailDto {
+  customer: {
+    id: number;
+    phone: string;
+    name: string | null;
+    address: string | null;
+    landmark: string | null;
+    note: string | null;
+  } | null;
+  balance: DecimalString;
+  charges: DebtChargeDto[];
+  repayments: DebtRepaymentDto[];
 }
 
 // ── Halls & tables ───────────────────────────────────────────────────────────────────────────
@@ -205,8 +264,14 @@ export interface PaymentDto {
   orderId: number;
   amount: DecimalString;
   method: PaymentMethod;
+  /** paid; a debt row is pending until repayments cover it. */
   status: PaymentStatus;
   paidAt: string;
+  /** Debt rows: who owes it (null = imported legacy debt), when it is due, when it was covered. */
+  customerId: number | null;
+  customerName: string | null;
+  dueDate: string | null;
+  settledAt: string | null;
 }
 
 export interface OrderDto {
@@ -218,7 +283,7 @@ export interface OrderDto {
   status: OrderStatus;
   sessionId: number;
   totalAmount: DecimalString;
-  paymentMethod: PaymentMethod | null;
+  paymentMethod: OrderPaymentMethod | null;
   /** Send back as expectedVersion when saving, to detect edits from another device. */
   version: number;
   createdAt: string;
@@ -283,16 +348,22 @@ export interface StockShortage {
 }
 
 /** One row of the checks (cheklar) list. */
+/** One paid order in the checks list (its payments summed; split checks list every method). */
 export interface CheckDto {
-  paymentId: number;
   orderId: number;
   orderNumber: string;
   orderType: OrderType;
   tableNumber: number | null;
   customerName: string | null;
+  methods: PaymentMethod[];
+  /** The debt part, and how much of it is still unpaid. */
+  debtAmount: DecimalString;
+  debtOpen: DecimalString;
+  /** Sum of the order's payments (= its total). */
   amount: DecimalString;
-  method: PaymentMethod;
+  /** pending while any of its debt is unpaid. */
   status: PaymentStatus;
+  /** When it was paid (its first payment). */
   paidAt: string;
 }
 
@@ -363,6 +434,14 @@ export interface DailyReportRow {
   delivery: DecimalString;
   /** Delivery fees inside `delivery`, each order counted once. */
   deliveryFees: DecimalString;
+  /** Debt repaid that day (money received for older checks), by method; and forgiven debt. */
+  repayments: DecimalString;
+  repaymentCash: DecimalString;
+  repaymentCard: DecimalString;
+  repaymentClick: DecimalString;
+  writtenOff: DecimalString;
+  /** Money actually received that day: cash + card + click + repayments (debt excluded). */
+  received: DecimalString;
   expenseTotal: DecimalString;
   residualWriteOff: DecimalString;
   waste: DecimalString;

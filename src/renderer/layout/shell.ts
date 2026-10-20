@@ -20,6 +20,7 @@ const MAIN_NAV: NavItem[] = [
   { path: '/tables', label: 'nav.tables', icon: 'tables' },
   { path: '/sessions', label: 'nav.sessions', icon: 'sessions' },
   { path: '/checks', label: 'nav.checks', icon: 'checks' },
+  { path: '/debtors', label: 'nav.debtors', icon: 'debt' },
 ];
 const ADMIN_NAV: NavItem[] = [
   { path: '/menu', label: 'nav.menu', icon: 'menu' },

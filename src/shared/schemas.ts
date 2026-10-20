@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { isDecimalString } from './utils/decimal';
+import { dec, isDecimalString } from './utils/decimal';
 import { PORTION_FACTORS } from './utils/order-line';
 import { digitsOnly, isUzPhoneComplete, normalizeUzPhone } from './utils/phone';
+import { TENDER_METHODS } from './utils/split-payment';
 
 /**
  * Input schemas for every IPC channel. The main process parses every payload with these before
@@ -21,6 +22,20 @@ export const nonNegativeDecimal = decimalString.refine((s) => !s.startsWith('-')
 });
 
 export const positiveDecimal = nonNegativeDecimal.refine((s) => /[1-9]/.test(s), {
+  message: "Noldan katta bo'lishi kerak",
+});
+
+/** A money amount someone types at the till: > 0, at most 2 decimals, at most 1 billion. */
+/** A money amount someone types at the till, 0 allowed: at most 2 decimals, at most 1 billion. */
+export const moneyOrZero = nonNegativeDecimal
+  .refine((s) => !/\.\d{3,}$/.test(s), { message: "Ko'pi bilan 2 ta kasr raqam" })
+  .refine(
+    (s) => s.replace(/^0+(?=\d)/, '').split('.')[0]!.length <= 10 && dec(s).lte(1_000_000_000),
+    { message: 'Juda katta summa' },
+  );
+
+/** The same, and more than 0 (repayments, write-offs). */
+export const moneyAmount = moneyOrZero.refine((s) => dec(s).gt(0), {
   message: "Noldan katta bo'lishi kerak",
 });
 
@@ -48,6 +63,21 @@ const optionalText = (max: number) =>
 
 /** YYYY-MM-DD, interpreted in the till's local time. */
 export const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'Sana YYYY-MM-DD' });
+
+/** YYYY-MM-DD that exists in the calendar (2026-02-31 does not). */
+function isRealDate(s: string): boolean {
+  const [y, m, d] = s.split('-').map(Number) as [number, number, number];
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+/** Local YYYY-MM-DD, `days` from today. */
+export function localDate(days = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 export const role = z.enum(['ADMIN', 'STAFF']);
 export const paymentMethod = z.enum(['cash', 'card', 'click', 'debt']);
@@ -192,6 +222,8 @@ export const updateSettingsInput = z
     takeawayEnabled: z.boolean(),
     deliveryEnabled: z.boolean(),
     deliveryFeeDefault: feeAmount,
+    splitPaymentEnabled: z.boolean(),
+    debtEnabled: z.boolean(),
     lanEnabled: z.boolean(),
   })
   .partial();
@@ -401,6 +433,11 @@ export const deliveryStatusInput = z.object({
   expectedVersion: z.number().int().min(0).optional(),
 });
 
+/** A phone that must be there (debt needs a customer). */
+export const requiredPhone = optionalPhone.refine((v): v is string => v !== null, {
+  message: 'Telefon raqami kerak',
+});
+
 export const phoneLookupInput = z.object({ phone: z.string().trim().max(32) });
 
 export const tableInput = z.object({ tableNumber });
@@ -410,11 +447,39 @@ export const cancelTableOrderInput = z.object({
 });
 export const orderNumberInput = z.object({ orderNumber: z.string().regex(/^\d{4}-\d{5,}$/) });
 
-export const payOrderInput = z.object({
-  orderId: id,
-  method: paymentMethod,
-  expectedVersion: z.number().int().min(0).optional(),
+const tenderLine = z.object({ method: z.enum(TENDER_METHODS), amount: moneyOrZero });
+const tenders = z.array(tenderLine).min(1, { message: "To'lov usulini tanlang" }).max(8);
+
+/**
+ * Who owes the debt part of a payment: found or created by phone (a new customer needs a name),
+ * with an optional due date. Optional when the order already has a customer (takeaway/delivery).
+ */
+export const debtCustomerInput = z.object({
+  phone: requiredPhone,
+  name: optionalText(60),
+  dueDate: isoDate
+    .refine(isRealDate, { message: "Bunday sana yo'q" })
+    .refine((s) => s <= localDate(366), { message: "Muddat ko'pi bilan bir yil" })
+    .nullish()
+    .transform((v) => v ?? null),
 });
+
+/**
+ * Pays an order: `tenders` (split payment, shared/utils/split-payment.ts), or the legacy single
+ * `method` for the whole total. Debt needs `debtCustomer` unless the order has a customer.
+ */
+export const payOrderInput = z
+  .object({
+    orderId: id,
+    method: paymentMethod.optional(),
+    tenders: tenders.optional(),
+    debtCustomer: debtCustomerInput.optional(),
+    expectedVersion: z.number().int().min(0).optional(),
+  })
+  .refine((v) => (v.method === undefined) !== (v.tenders === undefined), {
+    message: "To'lov usulini tanlang",
+    path: ['tenders'],
+  });
 
 export const listChecksInput = z.object({
   startDate: isoDate,
@@ -427,12 +492,57 @@ export const listChecksInput = z.object({
   direction: z.enum(['asc', 'desc']).default('desc'),
 });
 
-export const updatePaymentInput = z.object({
+/** Admin correction of a paid check: its payments replaced, checked like a new payment. */
+export const editCheckInput = z.object({
   orderNumber: z.string().regex(/^\d{4}-\d{5,}$/),
-  amount: nonNegativeDecimal.optional(),
-  method: paymentMethod.optional(),
-  status: paymentStatus.optional(),
-  paidAt: z.iso.datetime({ offset: true }).optional(),
+  tenders,
+  debtCustomer: debtCustomerInput.optional(),
+  /** The order version the admin saw (another device may have changed the check since). */
+  expectedVersion: z.number().int().min(0).optional(),
+});
+
+// ── Debt (nasiya) ────────────────────────────────────────────────────────────────────────────
+
+export const listDebtorsInput = z
+  .object({
+    q: z.string().trim().max(60).optional(),
+    /** Also customers who owe nothing now (paid off). */
+    includeSettled: z.boolean().default(false),
+  })
+  .default({ includeSettled: false });
+
+/** customerId null: imported legacy debt without a customer. */
+export const debtorInput = z.object({ customerId: id.nullable() });
+
+export const repayInput = z.object({
+  customerId: id,
+  amount: moneyAmount,
+  method: z.enum(['cash', 'card', 'click']),
+  note: optionalText(200),
+});
+
+export const writeOffInput = z.object({
+  customerId: id,
+  amount: moneyAmount,
+  note: trimmed(1, 200, 'Sabab'),
+});
+
+export const voidRepaymentInput = z.object({ repaymentId: id, reason: trimmed(1, 200, 'Sabab') });
+
+/** Gives an imported (customer-less) debt to a customer, found or created by phone. */
+export const assignDebtInput = z.object({
+  paymentId: id,
+  phone: requiredPhone,
+  name: optionalText(60),
+});
+
+export const updateCustomerInput = z.object({
+  id,
+  phone: requiredPhone.optional(),
+  name: optionalText(60).optional(),
+  address: optionalText(200).optional(),
+  landmark: optionalText(200).optional(),
+  note: optionalText(200).optional(),
 });
 
 // ── Residuals, expenses, reports ─────────────────────────────────────────────────────────────

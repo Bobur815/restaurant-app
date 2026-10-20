@@ -254,6 +254,40 @@ describe('migration 7 (order types) on a database with orders', () => {
   });
 });
 
+describe('migration 8 (split payment, debt) on a database with payments', () => {
+  it('keeps every payment; old debt stays open, without a customer, until assigned', async () => {
+    const dbFile = newDbFile();
+    const v7 = await openAt(dbFile, { migrations: MIGRATIONS.slice(0, 7) });
+    const p = v7.prisma;
+    await p.$executeRawUnsafe(
+      `INSERT INTO "sessions" ("id", "status", "openGuard", "updatedAt") VALUES (1, 'open', 1, CURRENT_TIMESTAMP)`,
+    );
+    await p.$executeRawUnsafe(
+      `INSERT INTO "orders" ("id", "orderNumber", "tableNumber", "status", "sessionId", "totalAmount", "updatedAt") VALUES (1, '2026-00001', 2, 'completed', 1, 15000, CURRENT_TIMESTAMP)`,
+    );
+    for (const [method, status] of [
+      ['cash', 'paid'],
+      ['debt', 'pending'],
+    ] as const) {
+      await p.$executeRawUnsafe(
+        `INSERT INTO "payments" ("orderId", "amount", "method", "status", "updatedAt") VALUES (1, 7500, '${method}', '${status}', CURRENT_TIMESTAMP)`,
+      );
+    }
+    await p.$disconnect();
+
+    const v8 = await openAt(dbFile);
+    expect(v8.migration.applied).toContain('8_split_payment_debt');
+    const payments = await v8.prisma.payment.findMany({ orderBy: { id: 'asc' } });
+    expect(
+      payments.map((x) => [x.method, x.status, x.amount.toString(), x.customerId, x.settledAt]),
+    ).toEqual([
+      ['cash', 'paid', '7500', null, null],
+      ['debt', 'pending', '7500', null, null],
+    ]);
+    expect(await v8.prisma.debtRepayment.count()).toBe(0);
+  });
+});
+
 describe('database-level guarantees', () => {
   let prisma: PrismaClient;
   let menuItemId: number;

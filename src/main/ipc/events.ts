@@ -32,6 +32,8 @@ export const READ_ONLY_CHANNELS = [
   'orders:get',
   'orders:openList',
   'customers:findByPhone',
+  'debts:list',
+  'debts:get',
   'checks:list',
   'residuals:list',
   'expenses:list',
@@ -50,6 +52,7 @@ const MENU: AppEvent = { type: 'menu-changed' };
 const SETTINGS: AppEvent = { type: 'settings-changed' };
 const USERS: AppEvent = { type: 'users-changed' };
 const HALLS: AppEvent = { type: 'halls-changed' };
+const DEBTS: AppEvent = { type: 'debts-changed' };
 
 /**
  * What each successful change announces to every window (replaces legacy's `session-updated` /
@@ -95,9 +98,15 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'orders:saveOpen': (_input, order) => [orders(order), SESSION],
   'orders:cancelOpen': (_input, order) => [orders(order), SESSION],
   'orders:setDeliveryStatus': (_input, order) => [orders(order)],
-  'payments:pay': (_input, order) => [orders(order)],
-  'checks:update': () => [orders()],
-  'checks:delete': (_input, order) => [orders(order), SESSION],
+  // A payment may add debt; a check edit or delete may change it.
+  'payments:pay': (_input, order) => [orders(order), DEBTS],
+  'checks:update': (_input, order) => [orders(order), DEBTS],
+  'checks:delete': (_input, order) => [orders(order), SESSION, DEBTS],
+  'debts:repay': () => [DEBTS, orders()],
+  'debts:writeOff': () => [DEBTS, orders()],
+  'debts:void': () => [DEBTS, orders()],
+  'debts:assign': () => [DEBTS, orders()],
+  'customers:update': () => [DEBTS],
   'residuals:apply': () => [SESSION],
 };
 

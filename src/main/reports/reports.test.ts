@@ -53,7 +53,13 @@ beforeAll(async () => {
       actor,
       saveTableOrderInput.parse({ tableNumber: table, lines }),
     );
-    await payOrder(t.db, actor, { orderId: o.id, method });
+    await payOrder(t.db, actor, {
+      orderId: o.id,
+      method,
+      ...(method === 'debt'
+        ? { debtCustomer: { phone: '998901112233', name: 'Ali', dueDate: null } }
+        : {}),
+    });
   };
   await pay(
     1,
@@ -94,6 +100,12 @@ describe('sales report', () => {
         takeaway: '0',
         delivery: '0',
         deliveryFees: '0',
+        repayments: '0',
+        repaymentCash: '0',
+        repaymentCard: '0',
+        repaymentClick: '0',
+        writtenOff: '0',
+        received: '59000',
         expenseTotal: '25000',
         residualWriteOff: '25000',
         waste: '0',

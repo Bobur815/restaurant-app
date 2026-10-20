@@ -1,4 +1,4 @@
-import type { Language, OrderDto, PaymentMethod, ReceiptSettingsDto } from '@shared/types';
+import type { Language, OrderDto, ReceiptSettingsDto } from '@shared/types';
 import { escapeHtml } from '@shared/utils/escape-html';
 import {
   formatDate,
@@ -44,6 +44,7 @@ const LABELS: Record<Language, Record<string, string>> = {
     address: 'Manzil',
     note: "Mo'ljal",
     remark: 'Izoh',
+    due: 'Qaytarish muddati',
     deliveryFee: 'Yetkazib berish xizmati',
   },
   ru: {
@@ -68,6 +69,7 @@ const LABELS: Record<Language, Record<string, string>> = {
     address: 'Адрес',
     note: 'Ориентир',
     remark: 'Комментарий',
+    due: 'Вернуть до',
     deliveryFee: 'Услуга доставки',
   },
 };
@@ -157,10 +159,16 @@ export function buildReceiptHtml(
     ? `<div class="row"><span>${e(L.deliveryFee)}</span><span class="amount">${e(formatMoney(order.deliveryFee, lang))}</span></div>`
     : '';
 
-  const method: PaymentMethod | null = order.payments[0]?.method ?? order.paymentMethod;
-  const paymentBlock = method
-    ? `<div class="row"><span>${e(L.method)}: ${e(L[method])}</span><span class="amount">${e(formatMoney(order.payments[0]?.amount ?? order.totalAmount, lang))}</span></div>`
-    : '';
+  // One row per payment method (split checks list each); the debt part names who owes it.
+  const tenderRow = (p: OrderDto['payments'][number]) =>
+    `<div class="row"><span>${e(L[p.method])}${p.method === 'debt' && p.customerName ? ` (${e(p.customerName)})` : ''}</span><span class="amount">${e(formatMoney(p.amount, lang))}</span></div>` +
+    (p.method === 'debt' && p.dueDate
+      ? `<div class="muted">${e(L.due)}: ${e(formatDate(new Date(p.dueDate)))}</div>`
+      : '');
+  const paymentBlock =
+    order.payments.length > 0
+      ? `<div class="muted">${e(L.method)}:</div>${order.payments.map(tenderRow).join('')}`
+      : '';
 
   return `<!doctype html>
 <html lang="${lang}">
@@ -266,7 +274,18 @@ export function sampleOrder(lang: Language): OrderDto {
       line(4, 'Choy', 'Чай', '3', '3000', '9000'),
     ],
     payments: [
-      { id: 0, orderId: 0, amount: '129600', method: 'cash', status: 'paid', paidAt: now },
+      {
+        id: 0,
+        orderId: 0,
+        amount: '129600',
+        method: 'cash',
+        status: 'paid',
+        paidAt: now,
+        customerId: null,
+        customerName: null,
+        dueDate: null,
+        settledAt: null,
+      },
     ],
   };
 }

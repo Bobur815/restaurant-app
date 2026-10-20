@@ -20,6 +20,9 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   takeaway_enabled: true,
   delivery_enabled: true,
   delivery_fee_default: '0',
+  // Payment options (feature F1-C): both on.
+  split_payment_enabled: true,
+  debt_enabled: true,
   // LAN access for waiter phones (Phase 8.5); off until enabled in settings.
   lan_enabled: false,
 };

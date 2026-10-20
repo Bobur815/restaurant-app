@@ -103,9 +103,18 @@ export interface IpcChannels {
   'customers:findByPhone': Channel<In<typeof S.phoneLookupInput>, T.CustomerLookupDto | null>;
   'payments:pay': Channel<In<typeof S.payOrderInput>, T.OrderDto>;
   'checks:list': Channel<In<typeof S.listChecksInput>, T.CheckDto[]>;
-  'checks:update': Channel<In<typeof S.updatePaymentInput>, T.PaymentDto[]>;
+  'checks:update': Channel<In<typeof S.editCheckInput>, T.OrderDto>;
   /** Removes the check's payments and cancels its order (stock back if the shift is open). */
   'checks:delete': Channel<In<typeof S.orderNumberInput>, T.OrderDto>;
+
+  // debt (nasiya, feature F1-C): any user records and takes repayments; admins correct
+  'debts:list': Channel<In<typeof S.listDebtorsInput>, T.DebtorDto[]>;
+  'debts:get': Channel<In<typeof S.debtorInput>, T.DebtorDetailDto>;
+  'debts:repay': Channel<In<typeof S.repayInput>, T.DebtorDetailDto>;
+  'debts:writeOff': Channel<In<typeof S.writeOffInput>, T.DebtorDetailDto>;
+  'debts:void': Channel<In<typeof S.voidRepaymentInput>, T.DebtorDetailDto>;
+  'debts:assign': Channel<In<typeof S.assignDebtInput>, T.DebtorDetailDto>;
+  'customers:update': Channel<In<typeof S.updateCustomerInput>, T.DebtorDetailDto>;
 
   // residuals, expenses, reports
   'residuals:list': Channel<In<typeof S.listResidualsInput>, T.ResidualList>;
@@ -189,6 +198,13 @@ export const IPC_CHANNELS = [
   'checks:list',
   'checks:update',
   'checks:delete',
+  'debts:list',
+  'debts:get',
+  'debts:repay',
+  'debts:writeOff',
+  'debts:void',
+  'debts:assign',
+  'customers:update',
   'residuals:list',
   'residuals:apply',
   'expenses:list',
@@ -238,7 +254,8 @@ export type AppEvent =
   | { type: 'menu-changed' }
   | { type: 'settings-changed' }
   | { type: 'users-changed' }
-  | { type: 'halls-changed' };
+  | { type: 'halls-changed' }
+  | { type: 'debts-changed' };
 
 export const APP_EVENT_TYPES = [
   'orders-changed',
@@ -247,6 +264,7 @@ export const APP_EVENT_TYPES = [
   'settings-changed',
   'users-changed',
   'halls-changed',
+  'debts-changed',
 ] as const satisfies ReadonlyArray<AppEvent['type']>;
 
 /** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */
