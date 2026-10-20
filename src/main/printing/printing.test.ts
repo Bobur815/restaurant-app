@@ -10,6 +10,7 @@ import { completeSetup } from '../settings/setup';
 import { toCurrentUser } from '../auth/auth';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import { pickPrinter, receiptWindowOptions, type PrinterService } from './printer';
+import { legacyLayout, updateReceiptLayout } from './layouts';
 import { previewReceipt, printOrderReceipt, printTestReceipt } from './printing';
 import { buildReceiptHtml, sampleOrder } from './receipt';
 
@@ -35,6 +36,12 @@ const settings = (over: Partial<ReceiptSettingsDto> = {}): ReceiptSettingsDto =>
   printShowOrderNumber: true,
   ...over,
 });
+
+/** A 1x1 PNG, as the image store would hand it out. */
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const TOP = `${'a'.repeat(32)}.png`;
+const BOTTOM = `${'b'.repeat(32)}.png`;
+const noImages = () => null;
 
 describe('receipt HTML', () => {
   const order = sampleOrder('uz');
@@ -96,6 +103,68 @@ describe('receipt HTML', () => {
     expect(html).toContain('Итого к оплате');
     expect(html).toContain('сум');
   });
+
+  it('each order type has its own switches, customer block and footer', () => {
+    const delivery = sampleOrder('uz', 'DELIVERY');
+    const base = { ...legacyLayout(settings()), orderType: 'DELIVERY' as const };
+    const full = buildReceiptHtml(delivery, settings(), {
+      layout: { ...base, footerNote: 'Yoqimli ishtaha!' },
+    });
+    expect(full).toContain('Yetkazib berish');
+    expect(full).toContain('Aziza');
+    expect(full).toContain('Chilonzor 9');
+    expect(full).toMatch(/10\s000/); // the delivery fee
+    expect(full).toContain('Yoqimli ishtaha!');
+    expect(full).not.toContain('Rahmat!'); // the shared settings' old footer is not used
+
+    const bare = buildReceiptHtml(delivery, settings(), {
+      layout: { ...base, showCustomer: false, showAddress: false, footerNote: '' },
+    });
+    expect(bare).not.toContain('Aziza');
+    expect(bare).not.toContain('Arabmozor');
+    expect(bare).not.toContain('class="footer"');
+  });
+
+  it('puts the top and bottom pictures at their width, and prints on without a missing one', () => {
+    const layout = {
+      ...legacyLayout(settings()),
+      topImage: TOP,
+      topImageWidth: 70,
+      bottomImage: BOTTOM,
+      bottomImageWidth: 35,
+    };
+    const html = buildReceiptHtml(order, settings(), {
+      layout,
+      image: (name) => (name === TOP || name === BOTTOM ? PNG : null),
+    });
+    const top = html.indexOf('class="picture picture-top"');
+    const bottom = html.indexOf('class="picture picture-bottom"');
+    expect(top).toBeGreaterThan(-1);
+    expect(top).toBeLessThan(html.indexOf('class="brand"'));
+    expect(bottom).toBeGreaterThan(html.indexOf('class="total"'));
+    expect(html).toContain('style="width: 70%"');
+    expect(html).toContain('style="width: 35%"');
+
+    // A file gone from the store, or anything that is not an image, is left out.
+    const missing = buildReceiptHtml(order, settings(), {
+      layout,
+      image: (name) => (name === TOP ? 'javascript:alert(1)' : null),
+    });
+    expect(missing).not.toContain('<img');
+    expect(missing).toContain('class="brand"');
+  });
+
+  it('sample orders follow the order type', () => {
+    expect(sampleOrder('uz', 'TAKEAWAY')).toMatchObject({
+      orderType: 'TAKEAWAY',
+      tableNumber: null,
+      customerName: 'Aziz',
+    });
+    expect(sampleOrder('uz', 'DELIVERY')).toMatchObject({
+      deliveryFee: '10000',
+      totalAmount: '139600',
+    });
+  });
 });
 
 describe('printer choice', () => {
@@ -122,7 +191,7 @@ describe('printer choice', () => {
 
 describe('print window', () => {
   it('is sandboxed, isolated, without preload or node', () => {
-    const o = receiptWindowOptions(420);
+    const o = receiptWindowOptions();
     expect(o.show).toBe(false);
     expect(o.webPreferences).toMatchObject({
       sandbox: true,
@@ -135,7 +204,7 @@ describe('print window', () => {
 
 describe('printing from the database', () => {
   let t: TestDb;
-  const printed: Array<{ html: string; preferredName: string | null; widthPx: number }> = [];
+  const printed: Array<{ html: string; preferredName: string | null }> = [];
   const fakePrinter: PrinterService = {
     list: async () => [],
     print: async (html, opts) => {
@@ -151,10 +220,12 @@ describe('printing from the database', () => {
   afterAll(() => t.close());
 
   it('refuses until receipt settings exist', async () => {
-    await expect(printTestReceipt(t.db, fakePrinter)).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(printTestReceipt(t.db, fakePrinter, 'DINE_IN', noImages)).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
   });
 
-  it('prints the order from the database with the configured printer and width', async () => {
+  it('prints the order from the database with the configured printer', async () => {
     const { user: admin } = await completeSetup(t.db, {
       admin: { fullName: 'Boss', phone: '998900000001', pin: '1234' },
       receipt: receiptSettingsInput.parse({
@@ -178,12 +249,42 @@ describe('printing from the database', () => {
     );
     await payOrder(t.db, admin, { orderId: order.id, method: 'card' });
 
-    expect(await printOrderReceipt(t.db, fakePrinter, order.id)).toEqual({ printer: 'XP-80' });
+    expect(await printOrderReceipt(t.db, fakePrinter, order.id, noImages)).toEqual({
+      printer: 'XP-80',
+    });
     const job = printed.at(-1)!;
-    expect(job).toMatchObject({ preferredName: 'XP-80C', widthPx: 380 });
+    expect(job).toMatchObject({ preferredName: 'XP-80C' });
+    // Laid out at the paper's printable width, whatever the old pixel setting says.
+    expect(job.html).toContain('width: 72.1mm');
+    expect(job.html).not.toContain('380px');
     expect(job.html).toContain('&lt;b&gt;Non&lt;/b&gt;');
     expect(job.html).toMatch(/15\s000/);
     expect(job.html).toContain('Karta');
+  });
+
+  it("prints with the layout of the order's type, pictures from the store", async () => {
+    const order = await t.db.order.findFirstOrThrow({ where: { status: 'completed' } });
+    await updateReceiptLayout(t.db, { orderType: 'DINE_IN', footerNote: 'Stol uchun' });
+    await updateReceiptLayout(t.db, {
+      orderType: 'DELIVERY',
+      footerNote: 'Yetkazib berdik',
+      topImage: TOP,
+    });
+    const image = (name: string) => (name === TOP ? PNG : null);
+
+    await printOrderReceipt(t.db, fakePrinter, order.id, image);
+    expect(printed.at(-1)!.html).toContain('Stol uchun');
+    expect(printed.at(-1)!.html).not.toContain('<img');
+
+    await t.db.order.update({ where: { id: order.id }, data: { orderType: 'DELIVERY' } });
+    await printOrderReceipt(t.db, fakePrinter, order.id, image);
+    expect(printed.at(-1)!.html).toContain('Yetkazib berdik');
+    expect(printed.at(-1)!.html).toContain(PNG);
+    await t.db.order.update({ where: { id: order.id }, data: { orderType: 'DINE_IN' } });
+
+    await printTestReceipt(t.db, fakePrinter, 'DELIVERY', image);
+    expect(printed.at(-1)!.html).toContain('Aziza');
+    expect(printed.at(-1)!.html).toContain('Yetkazib berdik');
   });
 
   it('refuses a cancelled order', async () => {
@@ -195,18 +296,29 @@ describe('printing from the database', () => {
       saveTableOrderInput.parse({ tableNumber: 5, lines: [{ menuItemId: dish.id, quantity: 1 }] }),
     );
     await t.db.order.update({ where: { id: order.id }, data: { status: 'cancelled' } });
-    await expect(printOrderReceipt(t.db, fakePrinter, order.id)).rejects.toMatchObject({
+    await expect(printOrderReceipt(t.db, fakePrinter, order.id, noImages)).rejects.toMatchObject({
       code: 'CONFLICT',
     });
   });
 
-  it('preview applies unsaved form values over the saved settings', async () => {
-    const url = await previewReceipt(t.db, fakePrinter, {
-      restaurantName: 'Yangi nom',
-      locale: 'ru',
-    });
+  it('preview applies unsaved form values over the saved settings and layout', async () => {
+    const url = await previewReceipt(
+      t.db,
+      fakePrinter,
+      {
+        orderType: 'TAKEAWAY',
+        receipt: { restaurantName: 'Yangi nom', locale: 'ru' },
+        layout: { footerNote: 'Saqlanmagan izoh', bottomImage: BOTTOM },
+      },
+      (name) => (name === BOTTOM ? PNG : null),
+    );
     const html = decodeURIComponent(url.replace('data:text/html,', ''));
     expect(html).toContain('Yangi nom');
     expect(html).toContain('Итого к оплате');
+    expect(html).toContain('С собой');
+    expect(html).toContain('Saqlanmagan izoh');
+    expect(html).toContain('class="picture picture-bottom"');
+    // Nothing was saved.
+    expect(await t.db.receiptLayout.findUnique({ where: { orderType: 'TAKEAWAY' } })).toBeNull();
   });
 });

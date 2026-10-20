@@ -3,7 +3,7 @@ import { setLanguage } from './i18n';
 import { createShell } from './layout/shell';
 import { startRouter, type Router } from './router/router';
 import type { RouteDef } from './router/routes';
-import { appStore, loadPrefs, type ThemeChoice } from './store/app';
+import { appStore, can, loadPrefs, type ThemeChoice } from './store/app';
 import { loginView } from './views/login';
 import { orderView } from './views/order/order-view';
 import { checksView } from './views/checks/checks-view';
@@ -104,8 +104,18 @@ async function boot(): Promise<void> {
     }
   });
 
+  // The updater's state, only for who may act on it (main refuses the call for anyone else).
+  const refreshUpdate = async () => {
+    appStore.set({ update: can('settings') ? await api.updater.status().catch(() => null) : null });
+  };
+  void refreshUpdate();
+  appStore.subscribe((s, prev) => {
+    if (s.user !== prev.user) void refreshUpdate();
+  });
+
   // Keep shared state fresh when anything changes (in this window or another).
   api.events.subscribe(async (e) => {
+    if (e.type === 'update-changed') void refreshUpdate();
     const { user: me } = appStore.get();
     if (e.type === 'settings-changed') {
       const [s, r] = await Promise.all([api.settings.get(), api.receipt.get()]);

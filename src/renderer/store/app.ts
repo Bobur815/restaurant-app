@@ -6,6 +6,7 @@ import type {
   ReceiptSettingsDto,
   SessionDto,
   SetupStatus,
+  UpdateStatusDto,
 } from '@shared/types';
 import { createStore } from './store';
 
@@ -21,6 +22,8 @@ export interface AppState {
   /** This machine's UI choices (localStorage), defaulting to the shop settings. */
   language: Language;
   theme: ThemeChoice;
+  /** The software updater's state, for users with the settings permission; else null. */
+  update: UpdateStatusDto | null;
 }
 
 export const appStore = createStore<AppState>({
@@ -31,7 +34,14 @@ export const appStore = createStore<AppState>({
   openSession: undefined,
   language: 'uz',
   theme: 'system',
+  update: null,
 });
+
+/** A newer version is known (found, downloading or ready to install): Settings shows a dot. */
+export function updatePending(): boolean {
+  const state = appStore.get().update?.state;
+  return state === 'available' || state === 'downloading' || state === 'downloaded';
+}
 
 /**
  * Whether the logged-in user has a permission. Only for showing or hiding controls: main checks

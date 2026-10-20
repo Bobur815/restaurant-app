@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, type WebContents } from 'electron';
 import { APP_EVENT_CHANNEL, IPC_CHANNELS, type AppEvent } from '@shared/ipc';
 import type { Actor, Db } from '../domain/db';
-import { importImage } from '../images/image-store';
+import { imageDataUrl, importImage } from '../images/image-store';
 import { logger } from '../logger';
 import { createPrinterService } from '../printing/printer';
+import type { UpdaterService } from '../updater/updater';
 import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-safe';
@@ -30,7 +31,11 @@ function actorStoreFor(sender: WebContents) {
   };
 }
 
-function servicesFor(sender: WebContents, imageDir: string): HandlerServices {
+function servicesFor(
+  sender: WebContents,
+  imageDir: string,
+  updater: UpdaterService,
+): HandlerServices {
   return {
     appInfo: () => ({ name: app.getName(), version: app.getVersion(), isPackaged: app.isPackaged }),
     printer,
@@ -47,6 +52,8 @@ function servicesFor(sender: WebContents, imageDir: string): HandlerServices {
       const picked = result.canceled ? undefined : result.filePaths[0];
       return picked ? importImage(picked, imageDir) : null;
     },
+    receiptImage: (fileName) => imageDataUrl(imageDir, fileName),
+    updater,
   };
 }
 
@@ -60,14 +67,18 @@ export function broadcast(events: AppEvent[]): void {
 }
 
 /** Registers every channel in HANDLERS with ipcMain; successful changes are broadcast. */
-export function registerIpcHandlers(getDb: () => Db, imageDir: string): void {
+export function registerIpcHandlers(
+  getDb: () => Db,
+  imageDir: string,
+  updater: UpdaterService,
+): void {
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, async (event, rawInput: unknown) => {
       const store = actorStoreFor(event.sender);
       const ctx: HandlerContext = {
         db: getDb(),
         ...store,
-        services: servicesFor(event.sender, imageDir),
+        services: servicesFor(event.sender, imageDir, updater),
         log: (message, error) => logger.error(message, error),
       };
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx, rawInput);

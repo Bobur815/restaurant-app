@@ -8,6 +8,7 @@ import {
   ImageImportError,
   resolveImagePath,
   sniffImage,
+  imageDataUrl,
 } from '../images/image-store';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import { createCategory, deleteCategory, listCategories, updateCategory } from './categories';
@@ -141,6 +142,19 @@ describe('image store', () => {
     ]) {
       expect(resolveImagePath(dir, bad)).toBeNull();
     }
+  });
+
+  it('hands a stored picture out as a data URL, and nothing that is not one of ours', () => {
+    const imgDir = path.join(dir, 'data-url');
+    fs.mkdirSync(imgDir, { recursive: true });
+    const good = 'c'.repeat(32) + '.png';
+    const fake = 'd'.repeat(32) + '.png';
+    fs.writeFileSync(path.join(imgDir, good), png);
+    fs.writeFileSync(path.join(imgDir, fake), 'not an image');
+    expect(imageDataUrl(imgDir, good)).toBe(`data:image/png;base64,${png.toString('base64')}`);
+    expect(imageDataUrl(imgDir, fake)).toBeNull();
+    expect(imageDataUrl(imgDir, 'e'.repeat(32) + '.png')).toBeNull(); // gone
+    expect(imageDataUrl(imgDir, '../' + good)).toBeNull();
   });
 
   it('cleanup removes only old, unreferenced pictures with our names', () => {

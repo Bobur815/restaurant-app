@@ -4,6 +4,7 @@ import { newRecoveryCode } from '../auth/auth';
 import type { Actor } from '../domain/db';
 import { RECEIPT_SETTINGS_ID } from '../settings/settings';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
+import { unsupportedUpdater } from '../test-utils/updater';
 import { READ_ONLY_CHANNELS } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
@@ -143,6 +144,8 @@ function ctx(actor: Actor | null): HandlerContext {
         preview: async () => 'data:image/png;base64,',
       },
       pickImage: async () => null,
+      receiptImage: () => null,
+      updater: unsupportedUpdater(),
     },
     log: () => undefined,
   };

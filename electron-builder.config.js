@@ -61,8 +61,14 @@ module.exports = {
     deleteAppDataOnUninstall: false,
   },
 
-  // Updates are manual installers (scripts/release.mjs): tills are offline and the repo private.
-  publish: null,
+  // Feature F4: the build writes latest.yml + .blockmap for this feed and app-update.yml into the
+  // app; `npm run deploy:pos` uploads them (scripts/upload-release.mjs). Keep in sync with
+  // UPDATE_FEED_URL in src/main/updater/updater.ts.
+  publish: {
+    provider: 'generic',
+    url: 'https://panel.posgro.uz/releases/savdochef/',
+    channel: 'latest',
+  },
 
   linux: {
     target: ['AppImage', 'deb'],

@@ -1,3 +1,6 @@
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { BrowserWindow, type BrowserWindowConstructorOptions } from 'electron';
 import { AppError } from '../domain/errors';
 
@@ -13,13 +16,22 @@ export interface PrintResult {
 /** What handlers use; injected so they are testable without a printer. */
 export interface PrinterService {
   list(): Promise<PrinterInfo[]>;
-  print(
-    html: string,
-    options: { preferredName: string | null; widthPx: number },
-  ): Promise<PrintResult>;
+  print(html: string, options: { preferredName: string | null }): Promise<PrintResult>;
   /** PNG data URL of the document as the receipt printer would get it. */
-  preview(html: string, widthPx: number): Promise<string>;
+  preview(html: string): Promise<string>;
 }
+
+/**
+ * The receipt page is exactly the printable width of 80 mm roll paper: the XP-80/XP-80C driver's
+ * forms are all "80(72.1) x ... mm", i.e. 72.1 mm wide. Chromium on Windows scales and centres
+ * each page into the driver's paper, so a page wider than that (80 mm) or a document wider than
+ * the page (the old 420 px body) came out shifted down and clipped at the right and bottom.
+ * The receipt document (receipt.ts) lays itself out at RECEIPT_CONTENT_MM inside this page.
+ */
+export const RECEIPT_PAGE_MICRONS = 72_100;
+const MICRONS_PER_PX = 25_400 / 96;
+/** The page width in CSS px: the hidden window is this wide, so measuring matches printing. */
+export const RECEIPT_PAGE_PX = Math.round(RECEIPT_PAGE_MICRONS / MICRONS_PER_PX);
 
 /**
  * Electron's printer list has no default flag any more; on Windows the driver options carry it
@@ -68,13 +80,14 @@ export function pickPrinter(printers: PrinterInfo[], preferredName: string | nul
 }
 
 /**
- * The receipt window: hidden, sandboxed, no preload, no node, its own session-less data URL.
+ * The receipt window: hidden, sandboxed, no preload, no node.
  * It only ever loads the receipt document built in main (whose CSP allows no scripts).
  */
-export function receiptWindowOptions(widthPx: number): BrowserWindowConstructorOptions {
+export function receiptWindowOptions(): BrowserWindowConstructorOptions {
   return {
     show: false,
-    width: Math.max(200, Math.round(widthPx)),
+    width: RECEIPT_PAGE_PX,
+    useContentSize: true,
     height: 1200,
     backgroundColor: '#ffffff',
     paintWhenInitiallyHidden: true,
@@ -83,6 +96,9 @@ export function receiptWindowOptions(widthPx: number): BrowserWindowConstructorO
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: true,
+      // Its own in-memory session: the receipt (a file:// document) shares no storage with the
+      // main window.
+      partition: 'receipt',
       spellcheck: false,
       // Main measures the page with executeJavaScript (not page script; the document's CSP
       // forbids scripts).
@@ -93,7 +109,6 @@ export function receiptWindowOptions(widthPx: number): BrowserWindowConstructorO
   };
 }
 
-const MICRONS_PER_PX = 25_400 / 96;
 export const PRINT_TIMEOUT_MS = 20_000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => void): Promise<T> {
@@ -115,15 +130,47 @@ function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => void):
   });
 }
 
-async function openReceiptWindow(html: string, widthPx: number): Promise<BrowserWindow> {
-  const win = new BrowserWindow(receiptWindowOptions(widthPx));
+/**
+ * Loads the receipt from a private temp file, not a data: URL: Chromium refuses URLs over 2 MB
+ * (ERR_INVALID_URL), and a logo inlined as base64 easily gets there. The file is read once on
+ * load, so it is removed right after.
+ */
+const RECEIPT_TMP_PREFIX = 'savdochef-receipt-';
+
+/**
+ * Removes receipt folders a crash left behind (they hold customer names and addresses). Start-up
+ * housekeeping; never throws.
+ */
+export async function removeLeftoverReceiptFiles(): Promise<void> {
+  try {
+    const names = await readdir(tmpdir());
+    await Promise.all(
+      names
+        .filter((n) => n.startsWith(RECEIPT_TMP_PREFIX))
+        .map((n) => rm(join(tmpdir(), n), { recursive: true, force: true })),
+    );
+  } catch {
+    // Housekeeping only.
+  }
+}
+
+async function openReceiptWindow(html: string): Promise<BrowserWindow> {
+  const win = new BrowserWindow(receiptWindowOptions());
   // Any attempt by the document to open or navigate anywhere is refused.
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('will-navigate', (event) => event.preventDefault());
-  await win.loadURL(
-    `data:text/html;charset=utf-8;base64,${Buffer.from(html, 'utf8').toString('base64')}`,
-  );
-  return win;
+  const dir = await mkdtemp(join(tmpdir(), RECEIPT_TMP_PREFIX));
+  try {
+    const file = join(dir, 'receipt.html');
+    await writeFile(file, html, 'utf8');
+    await win.loadFile(file);
+    return win;
+  } catch (err) {
+    win.destroy();
+    throw err;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 }
 
 async function contentHeight(win: BrowserWindow): Promise<number> {
@@ -147,15 +194,16 @@ export function createPrinterService(): PrinterService {
       }
     },
 
-    async print(html, { preferredName, widthPx }) {
-      const win = await openReceiptWindow(html, widthPx);
+    async print(html, { preferredName }) {
+      const win = await openReceiptWindow(html);
       try {
         const printers = (await win.webContents.getPrintersAsync()).map(toPrinterInfo);
         const deviceName = pickPrinter(printers, preferredName);
         if (!deviceName)
           throw new AppError('CONFLICT', 'Printer topilmadi', { reason: 'NO_PRINTER' });
 
-        // Page as long as the receipt (80 mm wide): no metre of blank paper after it.
+        // Page as wide as the paper's printable area and as long as the receipt (plus a little
+        // for the cutter): no metre of blank paper after it, nothing for Chromium to scale.
         const heightMicrons = Math.ceil((await contentHeight(win)) * MICRONS_PER_PX) + 5_000;
         const printed = new Promise<PrintResult>((resolve, reject) => {
           win.webContents.print(
@@ -166,7 +214,10 @@ export function createPrinterService(): PrinterService {
               color: false,
               landscape: false,
               margins: { marginType: 'none' },
-              pageSize: { width: 80_000, height: heightMicrons },
+              pageSize: { width: RECEIPT_PAGE_MICRONS, height: heightMicrons },
+              // As the legacy app sent them: no driver-side scaling, the thermal head's dpi.
+              scaleFactor: 100,
+              dpi: { horizontal: 203, vertical: 203 },
             },
             (success, failureReason) => {
               if (success) resolve({ printer: deviceName });
@@ -186,11 +237,11 @@ export function createPrinterService(): PrinterService {
       }
     },
 
-    async preview(html, widthPx) {
-      const win = await openReceiptWindow(html, widthPx);
+    async preview(html) {
+      const win = await openReceiptWindow(html);
       try {
         const height = await contentHeight(win);
-        win.setContentSize(Math.round(widthPx), height);
+        win.setContentSize(RECEIPT_PAGE_PX, height);
         await new Promise((r) => setTimeout(r, 150)); // let the hidden frame repaint at the new size
         const image = await win.webContents.capturePage(undefined, { stayHidden: true });
         return image.toDataURL();

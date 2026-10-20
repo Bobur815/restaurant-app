@@ -13,11 +13,14 @@ export const READ_ONLY_CHANNELS = [
   'setup:status',
   'settings:get',
   'receipt:get',
+  'receipt:layouts',
+  'receipt:pickImage', // stores a file; the layout changes on receipt:updateLayout
   // Printing changes no data.
   'printing:printers',
   'printing:printReceipt',
   'printing:test',
   'printing:preview',
+  'updater:status',
   'halls:list',
   'categories:list',
   'menu:list',
@@ -71,6 +74,7 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'setup:complete': () => [SETTINGS, USERS],
   'settings:update': () => [SETTINGS],
   'receipt:update': () => [SETTINGS],
+  'receipt:updateLayout': () => [SETTINGS],
   'halls:create': () => [HALLS],
   'halls:update': () => [HALLS],
   'halls:reorder': () => [HALLS],
@@ -106,6 +110,10 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'debts:assign': () => [DEBTS, orders()],
   'customers:update': () => [DEBTS],
   'residuals:apply': () => [SESSION],
+  // The updater broadcasts update-changed itself as its state moves (updater.ts onChange).
+  'updater:check': () => [],
+  'updater:download': () => [],
+  'updater:install': () => [],
 };
 
 export function eventsFor<C extends IpcChannel>(

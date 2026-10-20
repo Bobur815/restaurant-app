@@ -206,8 +206,50 @@ export const receiptSettingsInput = z.object({
 
 export const updateReceiptSettingsInput = z.object(receiptFields).partial();
 
-/** Receipt preview: the saved settings with these (unsaved) form values on top. */
-export const previewReceiptInput = updateReceiptSettingsInput.default({});
+// ── Receipt layouts per order type (feature F3) ──────────────────────────────────────────────
+
+/** A picture from the image store: only names the store issues (main/images/image-store.ts). */
+const receiptImage = z
+  .string()
+  .regex(/^[a-f0-9]{32}\.(jpg|png|webp)$/, { message: "Rasm fayli noto'g'ri" })
+  .nullable();
+/** Image width in % of the 72 mm paper. */
+const imageWidth = z.number().int().min(20).max(100);
+
+const receiptLayoutFields = {
+  showAddress: z.boolean(),
+  showPhone: z.boolean(),
+  showDateTime: z.boolean(),
+  showOrderNumber: z.boolean(),
+  /** Delivery and takeaway: who it is for, phone, address, note. */
+  showCustomer: z.boolean(),
+  footerNote: z.string().trim().max(200),
+  topImage: receiptImage,
+  topImageWidth: imageWidth,
+  bottomImage: receiptImage,
+  bottomImageWidth: imageWidth,
+};
+
+export const receiptLayoutValues = z.object(receiptLayoutFields).partial();
+
+export const updateReceiptLayoutInput = receiptLayoutValues.extend({ orderType });
+
+/**
+ * Receipt preview of one order type: the saved settings and layout with these (unsaved) form
+ * values on top.
+ */
+export const previewReceiptInput = z
+  .object({
+    orderType: orderType.default('DINE_IN'),
+    receipt: updateReceiptSettingsInput.optional(),
+    layout: receiptLayoutValues.optional(),
+  })
+  .default({ orderType: 'DINE_IN' });
+
+/** Test print of one order type's sample receipt. */
+export const testPrintInput = z
+  .object({ orderType: orderType.default('DINE_IN') })
+  .default({ orderType: 'DINE_IN' });
 
 export const printReceiptInput = z.object({ orderId: id });
 

@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import path from 'path';
 import {
   closeDatabase,
@@ -7,11 +8,17 @@ import {
   initializeDatabase,
 } from './database/sqlite-client';
 import { cleanupOrphanImages } from './images/image-store';
+import { receiptImageNames } from './printing/layouts';
+import { removeLeftoverReceiptFiles } from './printing/printer';
 import { handleImageScheme, registerImageScheme } from './images/images-protocol';
-import { registerIpcHandlers } from './ipc/register';
+import { broadcast, registerIpcHandlers } from './ipc/register';
 import { initLogger, logger } from './logger';
 import { installSecurityHandlers } from './security';
+import { createUpdater, UPDATE_FEED_URL, type UpdaterEngine } from './updater/updater';
 import { createWindow, DEV_SERVER_URL, INDEX_HTML_PATH } from './window';
+
+/** The quiet update check waits for start-up to settle (database, first window, printers). */
+const STARTUP_UPDATE_CHECK_MS = 15_000;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -22,7 +29,12 @@ async function removeOrphanImages(imageDir: string): Promise<void> {
       where: { imageFile: { not: null } },
       select: { imageFile: true },
     });
-    const removed = cleanupOrphanImages(imageDir, new Set(rows.map((r) => r.imageFile!)));
+    // Dish pictures and the receipt layouts' top and bottom pictures share the store.
+    const referenced = new Set([
+      ...rows.map((r) => r.imageFile!),
+      ...(await receiptImageNames(getPrisma())),
+    ]);
+    const removed = cleanupOrphanImages(imageDir, referenced);
     if (removed.length) logger.info(`[img] removed ${removed.length} unused picture(s)`);
   } catch (error) {
     logger.warn('[img] cleanup failed', error);
@@ -71,7 +83,25 @@ if (!app.requestSingleInstanceLock()) {
     const imageDir = path.join(app.getPath('userData'), 'img');
     handleImageScheme(imageDir);
     void removeOrphanImages(imageDir);
-    registerIpcHandlers(getPrisma, imageDir);
+    void removeLeftoverReceiptFiles();
+    const updater = createUpdater({
+      currentVersion: app.getVersion(),
+      // The NSIS build only: dev and unpacked runs have no app-update.yml and nothing to replace.
+      supported: app.isPackaged && process.platform === 'win32',
+      // autoUpdater is created on first access, so a dev run never builds one.
+      engine: () => {
+        autoUpdater.setFeedURL({ provider: 'generic', url: UPDATE_FEED_URL });
+        autoUpdater.logger = logger;
+        return autoUpdater as unknown as UpdaterEngine;
+      },
+      onChange: () => broadcast([{ type: 'update-changed' }]),
+      // Only the database: quitAndInstall then quits the app itself. Destroying the windows here
+      // fired window-all-closed -> app.quit() before quitAndInstall ran, so nothing installed.
+      beforeInstall: () => closeDatabase(),
+      log: logger,
+    });
+    registerIpcHandlers(getPrisma, imageDir, updater);
+    setTimeout(() => void updater.check({ quiet: true }), STARTUP_UPDATE_CHECK_MS).unref();
 
     mainWindow = createWindow();
     mainWindow.on('closed', () => {

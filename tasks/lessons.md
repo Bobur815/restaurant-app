@@ -41,3 +41,6 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 - After a review fix, run the harness again before calling it done: an early return added for 0 totals in `settleTenders` silently broke the "Qolgan" button, which used the same function to sum the other lines (caught only by the UI run, F1-C).
 
 - A test that loops over channels must assert the call succeeded. `secrets.test.ts` passed `{}` to channels without input; they failed validation and "no secret in the result" passed on the error, so half the read channels were never checked (found in F1-A review).
+- Receipt window: never load generated HTML as a data: URL; Chromium refuses URLs over 2 MB (ERR_INVALID_URL -300) and inlined logos get there. Load a temp file (printer.ts openReceiptWindow).
+- Updater install: never destroy the windows before `quitAndInstall`; the last one going fires `window-all-closed` -> `app.quit()` and the app exits without installing. Close the database, then let `quitAndInstall` quit (security review F4).
+- Git Bash's ssh cannot use the key in the Windows ssh-agent (`posgro-vps` asks for a passphrase -> "Permission denied (publickey)"); use `C:\Windows\System32\OpenSSH\ssh.exe`/`sftp.exe` (upload-release.mjs does).

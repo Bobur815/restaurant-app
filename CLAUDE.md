@@ -15,6 +15,7 @@ npm test -- <pattern>  # one suite, e.g. npm test -- printing
 npm run build          # prisma generate + electron-vite build (dist-electron/, dist-renderer/)
 npm run dist:win       # build + NSIS installer -> dist/SavdoChef-Setup-<version>.exe
 npm run release -- patch|minor|major   # check, version + tag, installer + sha256 in release/
+npm run deploy:pos     # installer + upload to the update feed panel.posgro.uz/releases/savdochef/ (outward-facing: only when asked)
 npm run build:icons    # regenerate build/icons + favicon from src/shared/branding/brand.ts
 npm run import:legacy  # legacy database -> new database (usage in scripts/import-legacy.ts header)
 ```
@@ -44,6 +45,8 @@ scripts/        build-icons.mjs, import-legacy.ts, release.mjs
 **Domain:** dishes (`portions` 1 / 0.7 / 0.5, `soldByWeight`), one pending order per table (DB trigger), order number `YYYY-00007`, payments `cash | card | click | debt`, one open shift (DB trigger) with per-dish initial/sold quantity, leftovers carried or written off at close and applied when the next shift opens, receipt settings singleton, users `ADMIN | STAFF` with bcrypt passwords and optional 4-digit PIN (lock screen).
 
 **Printing:** main builds the receipt HTML from the database (`main/printing/receipt.ts`, escaped, own CSP) and silent-prints it from a hidden sandboxed window without preload; the renderer only sends an order id. Preview = PNG of the same document.
+
+**Updates:** electron-updater (generic feed `https://panel.posgro.uz/releases/savdochef/`, served from `/home/bobur/releases/savdochef/` on `posgro-vps`). `main/updater/updater.ts` is the only owner: one quiet check after start, download and install only from Settings → Dastur yangilanishi (`settings` permission). `npm run deploy:pos` publishes; a version already on the server is refused. Only the packaged Windows build updates (dev = `unsupported`).
 
 ## Hard rules
 

@@ -4,7 +4,6 @@ import {
   checkboxField,
   checked,
   clearErrors,
-  field,
   formError,
   selectField,
   showFormError,
@@ -61,13 +60,6 @@ export const printerSection: View = () => {
           ${printers.length === 0
             ? html`<p class="notice notice-info">${t('printing.noPrinters')}</p>`
             : ''}
-          ${field({
-            name: 'printWidthPx',
-            label: t('settings.printWidthPx'),
-            type: 'number',
-            inputmode: 'numeric',
-            value: String(receipt?.printWidthPx ?? 420),
-          })}
           ${checkboxField({
             name: 'printAfterPayment',
             label: t('printing.printAfterPayment'),
@@ -105,10 +97,7 @@ export const printerSection: View = () => {
         try {
           // The printer belongs to the receipt settings, which exist after setup.
           if (receipt) {
-            await api.receipt.update({
-              printerName: value(form, 'printerName') || null,
-              printWidthPx: Number(value(form, 'printWidthPx')),
-            });
+            await api.receipt.update({ printerName: value(form, 'printerName') || null });
           }
           await api.settings.update({ printAfterPayment: checked(form, 'printAfterPayment') });
           toast(t('settings.saved'), 'success');

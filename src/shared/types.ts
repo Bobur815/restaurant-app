@@ -102,6 +102,48 @@ export interface ReceiptSettingsDto {
   printShowOrderNumber: boolean;
 }
 
+/** One order type's receipt layout (feature F3); `saved` false = inherited, not stored yet. */
+/** Software update (main/updater/updater.ts). */
+export type UpdateState =
+  | 'unsupported'
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error';
+
+export interface UpdateStatusDto {
+  state: UpdateState;
+  currentVersion: string;
+  /** The newer version, once one is known. */
+  version: string | null;
+  releaseDate: string | null;
+  /** Download progress, 0-100 while downloading. */
+  percent: number | null;
+  /** Uzbek, when state is error. */
+  message: string | null;
+  /** ISO time of the last answer from the server. */
+  checkedAt: string | null;
+}
+
+export interface ReceiptLayoutDto {
+  orderType: OrderType;
+  showAddress: boolean;
+  showPhone: boolean;
+  showDateTime: boolean;
+  showOrderNumber: boolean;
+  showCustomer: boolean;
+  footerNote: string;
+  /** File name in the image store, shown through `savdochef-img:`. */
+  topImage: string | null;
+  topImageWidth: number;
+  bottomImage: string | null;
+  bottomImageWidth: number;
+  saved: boolean;
+}
+
 export interface PrinterInfo {
   name: string;
   isDefault: boolean;

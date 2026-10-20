@@ -43,13 +43,24 @@ export interface IpcChannels {
   'settings:update': Channel<In<typeof S.updateSettingsInput>, T.AppSettings>;
   'receipt:get': Channel<undefined, T.ReceiptSettingsDto | null>;
   'receipt:update': Channel<In<typeof S.updateReceiptSettingsInput>, T.ReceiptSettingsDto>;
+  'receipt:layouts': Channel<undefined, T.ReceiptLayoutDto[]>;
+  'receipt:updateLayout': Channel<In<typeof S.updateReceiptLayoutInput>, T.ReceiptLayoutDto>;
+  /** Copies a picked picture into the image store; its file name, or null when cancelled. */
+  'receipt:pickImage': Channel<undefined, string | null>;
 
   // printing (content always built in main from the database)
   'printing:printers': Channel<undefined, T.PrinterInfo[]>;
   'printing:printReceipt': Channel<In<typeof S.printReceiptInput>, { printer: string }>;
-  'printing:test': Channel<undefined, { printer: string }>;
+  'printing:test': Channel<In<typeof S.testPrintInput>, { printer: string }>;
   /** PNG data URL of the sample receipt. */
   'printing:preview': Channel<In<typeof S.previewReceiptInput>, string>;
+
+  // software update (feature F4); the updater pushes 'update-changed' as its state moves
+  'updater:status': Channel<undefined, T.UpdateStatusDto>;
+  'updater:check': Channel<undefined, T.UpdateStatusDto>;
+  'updater:download': Channel<undefined, T.UpdateStatusDto>;
+  /** Quits the app, installs silently and starts the new version. */
+  'updater:install': Channel<undefined, null>;
 
   // halls & tables
   'halls:list': Channel<In<typeof S.listHallsInput>, T.HallDto[]>;
@@ -152,10 +163,17 @@ export const IPC_CHANNELS = [
   'settings:update',
   'receipt:get',
   'receipt:update',
+  'receipt:layouts',
+  'receipt:updateLayout',
+  'receipt:pickImage',
   'printing:printers',
   'printing:printReceipt',
   'printing:test',
   'printing:preview',
+  'updater:status',
+  'updater:check',
+  'updater:download',
+  'updater:install',
   'halls:list',
   'halls:create',
   'halls:update',
@@ -255,7 +273,9 @@ export type AppEvent =
   | { type: 'settings-changed' }
   | { type: 'users-changed' }
   | { type: 'halls-changed' }
-  | { type: 'debts-changed' };
+  | { type: 'debts-changed' }
+  /** The software updater's state moved (re-read updater:status). */
+  | { type: 'update-changed' };
 
 export const APP_EVENT_TYPES = [
   'orders-changed',
@@ -265,6 +285,7 @@ export const APP_EVENT_TYPES = [
   'users-changed',
   'halls-changed',
   'debts-changed',
+  'update-changed',
 ] as const satisfies ReadonlyArray<AppEvent['type']>;
 
 /** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */

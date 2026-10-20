@@ -2,6 +2,7 @@ import type { IpcChannel } from '@shared/ipc';
 import type { Actor } from '../domain/db';
 import { toCurrentUser } from '../auth/auth';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
+import { unsupportedUpdater } from '../test-utils/updater';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
 
@@ -39,6 +40,8 @@ function caller(initial: Actor | null = null) {
         preview: async () => 'data:image/png;base64,',
       },
       pickImage: async () => null,
+      receiptImage: () => null,
+      updater: unsupportedUpdater(),
     },
     log: (message, error) => logged.push([message, error]),
   });
@@ -95,6 +98,13 @@ describe('access levels', () => {
       settings: [
         'settings:update',
         'receipt:update',
+        'receipt:layouts',
+        'receipt:updateLayout',
+        'receipt:pickImage',
+        'updater:status',
+        'updater:check',
+        'updater:download',
+        'updater:install',
         'printing:printers',
         'printing:test',
         'printing:preview',
@@ -228,6 +238,8 @@ describe('invokeHandler', () => {
             preview: async () => 'data:image/png;base64,',
           },
           pickImage: async () => null,
+          receiptImage: () => null,
+          updater: unsupportedUpdater(),
         },
         log: (m, e) => logged.push([m, e]),
       },
@@ -268,6 +280,8 @@ describe('invokeHandler', () => {
             preview: async () => 'data:image/png;base64,',
           },
           pickImage: async () => null,
+          receiptImage: () => null,
+          updater: unsupportedUpdater(),
         },
         log: (m, e) => logged.push([m, e]),
       },
@@ -299,6 +313,8 @@ describe('invokeHandler', () => {
                   preview: async () => 'data:image/png;base64,',
                 },
                 pickImage: async () => null,
+                receiptImage: () => null,
+                updater: unsupportedUpdater(),
               },
               log: () => undefined,
             },

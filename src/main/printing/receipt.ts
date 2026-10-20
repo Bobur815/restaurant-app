@@ -1,4 +1,10 @@
-import type { Language, OrderDto, ReceiptSettingsDto } from '@shared/types';
+import type {
+  Language,
+  OrderDto,
+  OrderType,
+  ReceiptLayoutDto,
+  ReceiptSettingsDto,
+} from '@shared/types';
 import { escapeHtml } from '@shared/utils/escape-html';
 import {
   formatDate,
@@ -10,6 +16,7 @@ import {
 } from '@shared/utils/format';
 import { formatPhone } from '@shared/utils/phone';
 import { dec } from '@shared/utils/decimal';
+import { legacyLayout } from './layouts';
 
 /**
  * The customer receipt as a standalone HTML document, built in the main process from the
@@ -18,7 +25,8 @@ import { dec } from '@shared/utils/decimal';
  *
  * Layout follows the legacy receipt: brand, address and phones, separator, table / order /
  * date / time, numbered lines, positions count, total, payment method, footer note. The
- * receipt-settings switches decide which parts appear; `locale` picks the language.
+ * order type's layout (layouts.ts) decides which parts appear and adds its top and bottom
+ * pictures; the shared receipt settings give the shop details, separator and language.
  */
 
 const LABELS: Record<Language, Record<string, string>> = {
@@ -79,6 +87,26 @@ const e = (value: string | number | null | undefined) => escapeHtml(String(value
 export interface ReceiptOptions {
   /** Time printed on the receipt; default: when the order was paid, else now. */
   printedAt?: Date;
+  /** The order type's layout; default: what receipts printed before layouts (old switches). */
+  layout?: ReceiptLayoutDto;
+  /**
+   * A stored picture as a `data:` URL (the document may load nothing else), or null when it is
+   * missing: the receipt then prints without it.
+   */
+  image?: (fileName: string) => string | null;
+}
+
+/** A layout picture, centred at its width in % of the paper; nothing when it cannot be loaded. */
+function picture(
+  fileName: string | null,
+  width: number,
+  load: ReceiptOptions['image'],
+  cls: string,
+): string {
+  const src = fileName && load ? load(fileName) : null;
+  if (!src || !src.startsWith('data:image/')) return '';
+  const pct = Math.min(100, Math.max(20, Math.round(width)));
+  return `<div class="picture ${cls}"><img src="${e(src)}" alt="" style="width: ${pct}%" /></div>`;
 }
 
 export function receiptLanguage(settings: Pick<ReceiptSettingsDto, 'locale'>): Language {
@@ -92,6 +120,7 @@ export function buildReceiptHtml(
 ): string {
   const lang = receiptLanguage(settings);
   const L = LABELS[lang];
+  const layout = options.layout ?? legacyLayout(settings);
   const when =
     options.printedAt ?? new Date(order.completedAt ?? order.payments[0]?.paidAt ?? Date.now());
   const separator = settings.printUseStarsSep
@@ -101,10 +130,10 @@ export function buildReceiptHtml(
   const phones = [settings.phone, settings.extraPhones].filter((p) => p.trim()).join(', ');
   const header = [
     `<h1 class="brand">${e(settings.restaurantName)}</h1>`,
-    settings.printShowAddress && settings.address.trim()
+    layout.showAddress && settings.address.trim()
       ? `<p class="center">${e(settings.address)}</p>`
       : '',
-    settings.printShowPhone && phones ? `<p class="center">${e(phones)}</p>` : '',
+    layout.showPhone && phones ? `<p class="center">${e(phones)}</p>` : '',
   ].join('');
 
   const meta = [
@@ -113,11 +142,11 @@ export function buildReceiptHtml(
       : order.tableNumber !== null
         ? `<div><b>${e(L.table)}:</b> ${e(order.tableNumber)}</div>`
         : '<div></div>',
-    settings.printShowOrderNumber
+    layout.showOrderNumber
       ? `<div class="right"><b>${e(L.order)}:</b> #${e(order.orderNumber)}</div>`
       : '<div></div>',
-    settings.printShowDateTime ? `<div><b>${e(L.date)}:</b> ${e(formatDate(when))}</div>` : '',
-    settings.printShowDateTime
+    layout.showDateTime ? `<div><b>${e(L.date)}:</b> ${e(formatDate(when))}</div>` : '',
+    layout.showDateTime
       ? `<div class="right"><b>${e(L.time)}:</b> ${e(formatTime(when))}</div>`
       : '',
   ].join('');
@@ -140,7 +169,7 @@ export function buildReceiptHtml(
 
   // Takeaway/delivery: who it is for and where it goes, as saved with the order.
   const customer =
-    order.orderType === 'DINE_IN'
+    order.orderType === 'DINE_IN' || !layout.showCustomer
       ? ''
       : [
           order.customerName ? `<div><b>${e(L.customer)}:</b> ${e(order.customerName)}</div>` : '',
@@ -177,27 +206,34 @@ export function buildReceiptHtml(
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:" />
 <title>${e(order.orderNumber)}</title>
 <style>
-  @page { size: 80mm auto; margin: 0; }
+  /* 72.1 mm = the printable width of 80 mm roll paper (printer.ts RECEIPT_PAGE_MICRONS). */
+  @page { size: 72.1mm auto; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: #fff; color: #000; }
-  body { width: ${Math.round(settings.printWidthPx)}px; padding: 8px 10px 16px; font: 13px/1.35 Arial, sans-serif; }
+  body { width: 72.1mm; padding: 2mm 2mm 4mm; font: 13px/1.35 Arial, sans-serif; overflow-wrap: anywhere; }
   .brand { margin: 0 0 4px; font-size: 18px; text-align: center; }
   .center { margin: 0 0 4px; text-align: center; }
   .sep { margin: 6px 0; overflow: hidden; white-space: nowrap; text-align: center; letter-spacing: 1px; }
   hr { margin: 6px 0; border: 0; border-top: 1px dashed #000; }
-  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; margin: 4px 0; }
-  .right { text-align: right; }
+  .meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; margin: 4px 0; }
+  .right { text-align: right; white-space: nowrap; }
   .line { margin: 4px 0; }
   .name { font-weight: 600; }
   .calc, .row { display: flex; justify-content: space-between; gap: 8px; }
+  .calc > span:first-child, .row > span:first-child { min-width: 0; }
   .amount { white-space: nowrap; font-weight: 600; }
   .total { display: flex; justify-content: space-between; margin: 8px 0; font-size: 17px; font-weight: 700; }
   .muted { font-size: 12px; }
   .customer { margin: 4px 0; overflow-wrap: anywhere; }
   .footer { margin-top: 10px; text-align: center; }
+  .picture { text-align: center; line-height: 0; }
+  .picture img { max-width: 100%; height: auto; filter: grayscale(1); }
+  .picture-top { margin-bottom: 6px; }
+  .picture-bottom { margin-top: 10px; }
 </style>
 </head>
 <body>
+${picture(layout.topImage, layout.topImageWidth, options.image, 'picture-top')}
 ${header}
 ${separator}
 <div class="meta">${meta}</div>
@@ -209,13 +245,14 @@ ${lines}
 ${fee}
 <div class="total"><span>${e(L.total)}:</span><span class="amount">${e(formatMoney(order.totalAmount, lang))}</span></div>
 ${paymentBlock}
-${settings.footerNote.trim() ? `${separator}<p class="footer">${e(settings.footerNote)}</p>` : ''}
+${layout.footerNote.trim() ? `${separator}<p class="footer">${e(layout.footerNote)}</p>` : ''}
+${picture(layout.bottomImage, layout.bottomImageWidth, options.image, 'picture-bottom')}
 </body>
 </html>`;
 }
 
 /** A realistic sample order for the settings preview and the test print. */
-export function sampleOrder(lang: Language): OrderDto {
+export function sampleOrder(lang: Language, type: OrderType = 'DINE_IN'): OrderDto {
   const now = new Date().toISOString();
   const line = (
     id: number,
@@ -241,10 +278,24 @@ export function sampleOrder(lang: Language): OrderDto {
     stockQuantity: quantity,
     ...extra,
   });
+  // Delivery adds a fee; takeaway and delivery carry who it is for.
+  const fee = type === 'DELIVERY' ? '10000' : '0';
+  const total = dec('129600').plus(fee).toFixed();
+  const sample: Record<OrderType, Partial<OrderDto>> = {
+    DINE_IN: {},
+    TAKEAWAY: { tableNumber: null, customerName: lang === 'ru' ? 'Азиз' : 'Aziz' },
+    DELIVERY: {
+      tableNumber: null,
+      customerName: lang === 'ru' ? 'Азиза' : 'Aziza',
+      customerPhone: '998901234567',
+      deliveryAddress: lang === 'ru' ? 'Чиланзар 9, дом 12' : 'Chilonzor 9, 12-uy',
+      deliveryNote: lang === 'ru' ? 'Возле школы' : 'Maktab yonida',
+      deliveryFee: fee,
+    },
+  };
   return {
     id: 0,
     orderNumber: `${new Date().getFullYear()}-00000`,
-    orderType: 'DINE_IN',
     tableNumber: 1,
     customerId: null,
     customerName: null,
@@ -256,7 +307,7 @@ export function sampleOrder(lang: Language): OrderDto {
     courierName: null,
     status: 'completed',
     sessionId: 0,
-    totalAmount: '129600',
+    totalAmount: total,
     paymentMethod: 'cash',
     version: 0,
     createdAt: now,
@@ -277,7 +328,7 @@ export function sampleOrder(lang: Language): OrderDto {
       {
         id: 0,
         orderId: 0,
-        amount: '129600',
+        amount: total,
         method: 'cash',
         status: 'paid',
         paidAt: now,
@@ -287,5 +338,7 @@ export function sampleOrder(lang: Language): OrderDto {
         settledAt: null,
       },
     ],
+    ...sample[type],
+    orderType: type,
   };
 }

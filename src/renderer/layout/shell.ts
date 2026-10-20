@@ -3,7 +3,7 @@ import { SavdoChefIcon } from '../branding';
 import { t } from '../i18n';
 import type { ShellInstance } from '../router/router';
 import { canAccess, homeFor, type Access } from '../router/routes';
-import { appStore, savePrefs, type ThemeChoice } from '../store/app';
+import { appStore, savePrefs, updatePending, type ThemeChoice } from '../store/app';
 import { html, refs } from '../ui/html';
 import { icon, type IconName } from '../ui/icons';
 import { playClick } from '../ui/sound';
@@ -241,6 +241,10 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     const themeLabel = `${t('nav.theme')}: ${t(THEME_LABEL[s.theme])}`;
     themeButton.setAttribute('aria-label', themeLabel);
     themeButton.title = themeLabel;
+    // A dot on Settings while a newer version of the app waits (only set for who may update).
+    navLinks
+      .find((a) => a.dataset['path'] === '/settings')
+      ?.classList.toggle('has-dot', updatePending());
   };
   renderState();
   const unsubscribe = appStore.subscribe(renderState);

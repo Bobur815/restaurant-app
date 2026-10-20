@@ -52,6 +52,7 @@ import {
   voidRepayment,
   writeOffDebt,
 } from '../debts/debts';
+import { getReceiptLayouts, updateReceiptLayout } from '../printing/layouts';
 import { previewReceipt, printOrderReceipt, printTestReceipt } from '../printing/printing';
 import { salesReport } from '../reports/reports';
 import { applyResiduals, listExpenses, listResiduals } from '../residuals/residuals';
@@ -156,17 +157,32 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'receipt:update': need('settings', S.updateReceiptSettingsInput, (ctx, input) =>
     updateReceiptSettings(ctx.db, input),
   ),
+  // Layouts per order type (feature F3): General, takeaway, delivery.
+  'receipt:layouts': need('settings', S.empty, (ctx) => getReceiptLayouts(ctx.db)),
+  'receipt:updateLayout': need('settings', S.updateReceiptLayoutInput, (ctx, input) =>
+    updateReceiptLayout(ctx.db, input),
+  ),
+  'receipt:pickImage': need('settings', S.empty, (ctx) => ctx.services.pickImage()),
+
+  // ── software update (feature F4) ──────────────────────────────────────────────────────────
+  'updater:status': need('settings', S.empty, async (ctx) => ctx.services.updater.status()),
+  'updater:check': need('settings', S.empty, (ctx) => ctx.services.updater.check()),
+  'updater:download': need('settings', S.empty, async (ctx) => ctx.services.updater.download()),
+  'updater:install': need('settings', S.empty, async (ctx) => {
+    await ctx.services.updater.install();
+    return null;
+  }),
 
   // ── printing ─────────────────────────────────────────────────────────────────────────────
   'printing:printers': need('settings', S.empty, (ctx) => ctx.services.printer.list()),
   'printing:printReceipt': user(S.printReceiptInput, (ctx, { orderId }) =>
-    printOrderReceipt(ctx.db, ctx.services.printer, orderId),
+    printOrderReceipt(ctx.db, ctx.services.printer, orderId, ctx.services.receiptImage),
   ),
-  'printing:test': need('settings', S.empty, (ctx) =>
-    printTestReceipt(ctx.db, ctx.services.printer),
+  'printing:test': need('settings', S.testPrintInput, (ctx, { orderType }) =>
+    printTestReceipt(ctx.db, ctx.services.printer, orderType, ctx.services.receiptImage),
   ),
   'printing:preview': need('settings', S.previewReceiptInput, (ctx, input) =>
-    previewReceipt(ctx.db, ctx.services.printer, input),
+    previewReceipt(ctx.db, ctx.services.printer, input, ctx.services.receiptImage),
   ),
 
   // ── halls & tables ───────────────────────────────────────────────────────────────────────

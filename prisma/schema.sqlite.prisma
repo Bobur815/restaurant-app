@@ -164,6 +164,28 @@ model ReceiptSettings {
   @@map("receipt_settings")
 }
 
+// What one order type's receipt shows (feature F3): DINE_IN is "General", then TAKEAWAY and
+// DELIVERY. The restaurant's name, address, phones, language and separator stay shared in
+// receipt_settings. No row = the type prints like General; no General row = like the old
+// receipt_settings switches and footer (printing/layouts.ts). Images are file names in the
+// image store (userData/img), widths in % of the paper.
+model ReceiptLayout {
+  orderType        OrderType @id
+  showAddress      Boolean   @default(true)
+  showPhone        Boolean   @default(true)
+  showDateTime     Boolean   @default(true)
+  showOrderNumber  Boolean   @default(true)
+  showCustomer     Boolean   @default(true)
+  footerNote       String    @default("")
+  topImage         String?
+  topImageWidth    Int       @default(60)
+  bottomImage      String?
+  bottomImageWidth Int       @default(40)
+  updatedAt        DateTime  @updatedAt
+
+  @@map("receipt_layouts")
+}
+
 // Named sequences, incremented inside the caller's transaction ("orders" -> orderNumber).
 model Counter {
   name  String @id

@@ -793,6 +793,86 @@
   top: 0;
 }
 
+/* Receipt section (feature F3): shared card, then the per-type layout with its tabs. */
+.receipt-forms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.receipt-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.receipt-tabs {
+  align-self: flex-start;
+}
+
+.receipt-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.receipt-image {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The picture on white, as on paper; grayscale like the thermal head prints it. */
+.receipt-image-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: 120px;
+  padding: var(--space-2);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  color: #6b7280;
+  font-size: var(--font-size-sm);
+}
+
+.receipt-image-thumb img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: grayscale(1);
+}
+
+.receipt-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.receipt-image-width {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.receipt-image-width input {
+  flex: 1;
+  accent-color: var(--color-primary);
+}
+
+.receipt-image-width output {
+  min-width: 3.5em;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
 .field-with-action {
   display: flex;
   align-items: flex-end;
@@ -1194,4 +1274,62 @@
 .debtor-balance strong {
   font-size: var(--font-size-2xl);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Software update (settings) ──────────────────────────────────────────────────────────── */
+.update-card {
+  max-width: 560px;
+}
+
+.update-version {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--font-size-lg);
+}
+
+.update-status {
+  margin: var(--space-3) 0 var(--space-2);
+  font-weight: 600;
+}
+
+.update-status.is-new {
+  color: var(--color-primary);
+}
+
+.update-status.is-error {
+  color: var(--color-danger);
+}
+
+.update-progress {
+  width: 100%;
+  height: 10px;
+  accent-color: var(--color-primary);
+}
+
+/* A newer version waits: a dot on Settings in the sidebar and on its menu entry. */
+.nav-link.has-dot,
+.settings-nav-link.has-dot {
+  position: relative;
+}
+
+.nav-link.has-dot::after,
+.settings-nav-link.has-dot::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 34px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-danger);
+}
+
+.settings-nav-link.has-dot::after {
+  left: 22px;
+}
+
+.update-card .form-actions + p {
+  margin-top: var(--space-3);
 }

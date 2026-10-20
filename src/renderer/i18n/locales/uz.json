@@ -332,7 +332,6 @@
     "phone": "Telefon",
     "extraPhones": "Qo'shimcha telefonlar",
     "footerNote": "Chek ostidagi matn",
-    "printWidthPx": "Chek kengligi (px)",
     "separatorChar": "Ajratuvchi belgi",
     "separatorCount": "Ajratuvchi uzunligi",
     "useStarsSep": "Ajratuvchi chiziqni ko'rsatish",
@@ -350,7 +349,6 @@
     "sectionPrinter": "Printer",
     "sectionUsers": "Foydalanuvchilar",
     "receiptContent": "Chek mazmuni",
-    "receiptLayout": "Ko'rinish",
     "printerHint": "Chek 80 mm qog'ozga chiqadi. Printer tanlanmasa, XP-80 turidagi termoprinter, bo'lmasa standart printer olinadi.",
     "sectionOrders": "Buyurtma turlari",
     "ordersHint": "Zaldagi stollar doim bor. Bu yerda olib ketish va yetkazib berishni yoqish yoki o'chirish mumkin; ochiq buyurtmalar baribir yakunlanadi.",
@@ -360,7 +358,8 @@
     "sectionPayments": "To'lov",
     "paymentsHint": "Bo'lib to'lash: bitta chekni bir nechta usulda (naqd + karta). Nasiya: chekning hammasi yoki bir qismi mijoz nomiga qarzga yoziladi.",
     "splitPaymentEnabled": "Bo'lib to'lash",
-    "debtEnabled": "Nasiya (qarzga sotish)"
+    "debtEnabled": "Nasiya (qarzga sotish)",
+    "sectionUpdate": "Dastur yangilanishi"
   },
   "reports": {
     "title": "Hisobotlar",
@@ -570,5 +569,39 @@
     "admin": "Administrator",
     "pin": "PIN kod (4 raqam)",
     "submit": "Saqlash va kirish"
+  },
+  "receiptLayout": {
+    "general": "Umumiy (zal)",
+    "typeLabel": "Buyurtma turi",
+    "title": "Chek ko'rinishi: {{type}}",
+    "sharedHint": "Bu ma'lumotlar barcha cheklarda bir xil. Har bir buyurtma turining ko'rinishi pastda.",
+    "inherited": "Bu tur hali saqlanmagan: «Umumiy» sozlamalari bilan chiqadi. O'zgartirib saqlang.",
+    "showCustomer": "Mijoz ma'lumotlarini ko'rsatish (ism, telefon, manzil)",
+    "topImage": "Chek tepasidagi rasm (logotip)",
+    "bottomImage": "Chek ostidagi rasm (logotip yoki QR kod)",
+    "chooseImage": "Rasm tanlash",
+    "changeImage": "Boshqa rasm",
+    "removeImage": "O'chirish",
+    "noImage": "Rasm yo'q",
+    "imageWidth": "Kengligi",
+    "testHint": "Saqlangan sozlamalar bilan namuna chek chiqaradi"
+  },
+  "update": {
+    "current": "O'rnatilgan versiya",
+    "loading": "Yuklanmoqda...",
+    "unsupported": "Yangilanish faqat o'rnatilgan dasturda ishlaydi (hozir ishlab chiqish rejimi).",
+    "idle": "Yangi versiya borligini tekshirish uchun \"Tekshirish\" tugmasini bosing.",
+    "checking": "Tekshirilmoqda...",
+    "upToDate": "Sizda eng so'nggi versiya o'rnatilgan.",
+    "available": "Yangi versiya bor: {{version}}",
+    "downloading": "{{version}} yuklab olinmoqda: {{percent}}%",
+    "downloaded": "{{version}} yuklab olindi va o'rnatishga tayyor.",
+    "checkedAt": "Oxirgi tekshiruv: {{time}}",
+    "check": "Tekshirish",
+    "download": "Yuklab olish",
+    "install": "O'rnatish va qayta ishga tushirish",
+    "installTitle": "Yangilanishni o'rnatish",
+    "installConfirm": "Dastur yopiladi, yangi versiya o'rnatiladi va dastur o'zi qayta ochiladi. Ma'lumotlar saqlanib qoladi. Avval ochiq buyurtmani saqlang va hozir sotuv bo'lmayotganiga ishonch hosil qiling.",
+    "hint": "Dastur ishga tushganda yangilanishni o'zi tekshiradi. Yuklab olish va o'rnatish faqat siz bosganingizda bo'ladi."
   }
 }

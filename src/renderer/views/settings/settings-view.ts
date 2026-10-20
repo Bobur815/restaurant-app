@@ -1,6 +1,6 @@
 import type { Permission } from '@shared/permissions';
 import { t } from '../../i18n';
-import { can } from '../../store/app';
+import { appStore, can, updatePending } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon, type IconName } from '../../ui/icons';
 import type { View, ViewInstance } from '../types';
@@ -11,6 +11,7 @@ import { paymentsSection } from './payments-section';
 import { printerSection } from './printer-section';
 import { receiptSection } from './receipt-section';
 import { systemSection } from './system-section';
+import { updateSection } from './update-section';
 
 interface Section {
   id: string;
@@ -30,6 +31,7 @@ export const SETTINGS_SECTIONS: readonly Section[] = [
   { id: 'receipt', label: 'settings.sectionReceipt', icon: 'receipt', view: receiptSection, needs: 'settings' },
   { id: 'printer', label: 'settings.sectionPrinter', icon: 'printer', view: printerSection, needs: 'settings' },
   { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView, needs: 'users' },
+  { id: 'update', label: 'settings.sectionUpdate', icon: 'update', view: updateSection, needs: 'settings' },
 ];
 
 /**
@@ -54,6 +56,7 @@ export const settingsView: View = (ctx) => {
       a.href = `#/settings/${s.id}`;
       a.className = 'settings-nav-link';
       if (s === current) a.setAttribute('aria-current', 'page');
+      a.dataset['section'] = s.id;
       a.append(
         icon(s.icon),
         Object.assign(document.createElement('span'), { textContent: t(s.label) }),
@@ -61,6 +64,11 @@ export const settingsView: View = (ctx) => {
       return a;
     }),
   );
+  // A dot on "Dastur yangilanishi" while a newer version waits.
+  const updateLink = nav.querySelector<HTMLElement>('[data-section="update"]');
+  const renderDot = () => updateLink?.classList.toggle('has-dot', updatePending());
+  renderDot();
+  const stopDot = appStore.subscribe(renderDot);
 
   const content = document.createElement('div');
   content.className = 'settings-content';
@@ -70,7 +78,10 @@ export const settingsView: View = (ctx) => {
 
   return {
     el,
-    destroy: () => section.destroy?.(),
+    destroy: () => {
+      stopDot();
+      section.destroy?.();
+    },
     canLeave: () => section.canLeave?.() ?? true,
   };
 };

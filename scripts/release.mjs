@@ -1,6 +1,7 @@
 /**
- * Builds a release installer for manual distribution (no auto-updater: tills are offline and the
- * repo is private, decided 2026-10-19).
+ * Cuts a release: version bump + tag + installer. Publishing it to the tills' update feed is a
+ * separate step (feature F4): `node scripts/upload-release.mjs` uploads what this built, or
+ * `npm run deploy:pos` builds and uploads the current version in one go.
  *
  *   node scripts/release.mjs patch|minor|major
  *
@@ -48,4 +49,8 @@ const sha = createHash('sha256')
   .digest('hex');
 fs.writeFileSync(path.join(releaseDir, `${name}.sha256`), `${sha}  ${name}\n`);
 
-console.log(`\n${releaseDir}/${name}\nsha256 ${sha}\nPush when ready: git push && git push --tags`);
+console.log(
+  `\n${releaseDir}/${name}\nsha256 ${sha}\n` +
+    `Publish to the tills: node scripts/upload-release.mjs (--dry-run first to check)\n` +
+    `Push when ready: git push && git push --tags`,
+);

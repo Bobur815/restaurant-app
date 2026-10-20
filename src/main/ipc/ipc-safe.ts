@@ -7,6 +7,7 @@ import type { Actor, Db } from '../domain/db';
 import { AppError, forbidden, notAuthenticated, prismaCode } from '../domain/errors';
 import { ImageImportError } from '../images/image-store';
 import type { PrinterService } from '../printing/printer';
+import type { UpdaterService } from '../updater/updater';
 
 /**
  * Who may call a handler: `public` (setup, login, settings for the login screen), `user` (any
@@ -21,6 +22,9 @@ export interface HandlerServices {
   appInfo(): { name: string; version: string; isPackaged: boolean };
   printer: PrinterService;
   pickImage(): Promise<string | null>;
+  /** A stored picture as a `data:` URL for the receipt, or null when it cannot be read. */
+  receiptImage(fileName: string): string | null;
+  updater: UpdaterService;
 }
 
 export interface HandlerContext {

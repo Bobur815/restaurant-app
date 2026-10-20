@@ -68,6 +68,25 @@ export const IMAGE_MIME: Record<Kind, string> = {
   webp: 'image/webp',
 };
 
+/**
+ * A stored picture as a `data:` URL, for documents that may load nothing else (the receipt's CSP
+ * allows only `img-src data:`). Null when the name is not one we issue, the file is gone, too big
+ * or not really an image: the caller prints without it.
+ */
+export function imageDataUrl(imageDir: string, fileName: string): string | null {
+  const full = resolveImagePath(imageDir, fileName);
+  if (!full) return null;
+  try {
+    const stat = fs.statSync(full);
+    if (!stat.isFile() || stat.size > MAX_IMAGE_BYTES) return null;
+    const data = fs.readFileSync(full);
+    const kind = sniffImage(data.subarray(0, 16));
+    return kind ? `data:${IMAGE_MIME[kind]};base64,${data.toString('base64')}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export const ORPHAN_MIN_AGE_MS = 24 * 60 * 60 * 1000;
 
 /**
