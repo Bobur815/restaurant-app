@@ -77,6 +77,7 @@ beforeAll(async () => {
     actor,
     closeSessionInput.parse({
       sessionId: s.id,
+      countedCash: '0',
       actions: [{ menuItemId: osh, writeOffQuantity: '1', note: 'Kuyib qoldi' }],
     }),
   );

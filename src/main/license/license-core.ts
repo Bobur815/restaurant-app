@@ -142,7 +142,10 @@ export function tillState(input: {
 
 // ── What the till refuses ──────────────────────────────────────────────────────────────────
 
-/** New business: refused while read-only. Paying, closing, reports and settings stay open. */
+/**
+ * New business: refused while read-only. Paying, cash in/out of the open shift's drawer, X/Z
+ * reports, closing, reports and settings stay open (a till blocked mid-shift must still count out).
+ */
 export const READONLY_REFUSED: ReadonlySet<IpcChannel> = new Set<IpcChannel>([
   'orders:save',
   'orders:saveOpen',

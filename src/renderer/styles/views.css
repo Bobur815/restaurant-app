@@ -558,7 +558,7 @@
   display: flex;
   justify-content: center;
   gap: var(--space-4);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .pin-dot {
@@ -1152,11 +1152,21 @@
   overflow-wrap: anywhere;
 }
 
+.open-order-status {
+  display: flex;
+}
+
 .open-order-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1) var(--space-2);
   margin-top: var(--space-1);
+}
+
+/* Total and number each stay on one line; the number wraps under the total when narrow. */
+.open-order-foot > * {
+  white-space: nowrap;
 }
 
 .open-order-foot .muted {
@@ -1422,4 +1432,146 @@
   min-width: 0;
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+/* ── Shift cash drawer and unlimited dishes (feature F6) ───────────────────────────────────── */
+.cash-tiles .stat-tile {
+  background: var(--color-surface-2);
+}
+
+.stat-tile.is-strong .stat-value {
+  font-size: var(--font-size-xl);
+}
+
+.is-negative,
+.stat-tile.is-negative .stat-value {
+  color: var(--color-danger);
+}
+
+.is-positive,
+.stat-tile.is-positive .stat-value {
+  color: var(--color-success);
+}
+
+.cash-sales-line {
+  margin: calc(-1 * var(--space-2)) 0 var(--space-3);
+}
+
+.lines-table th.center,
+.lines-table td.center {
+  text-align: center;
+}
+
+.unlimited-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.unlimited-mark {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+.close-cash {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-2);
+}
+
+.close-cash .field {
+  margin-bottom: 0;
+}
+
+.close-cash-expected {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-lg);
+}
+
+.counted-cash {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.cash-diff {
+  min-height: 1.4em;
+  margin: 0;
+  font-weight: 700;
+}
+
+/* Payment window: print-receipt choice under the tenders. */
+.payment-print {
+  margin-top: var(--space-4);
+}
+
+/* ── Moving an order to another table ────────────────────────────────────────────────────── */
+/* A busy card and its move button: the button sits over the card's top-right corner. */
+.table-cell {
+  position: relative;
+  display: grid;
+}
+
+.table-move {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.order-move {
+  margin-left: auto;
+}
+
+.move-table {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.move-table > .hall-heading {
+  margin: 0;
+  font-size: var(--font-size-md);
+}
+
+.move-table-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: var(--space-2);
+}
+
+.move-table-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-height: 72px;
+  padding: var(--space-3);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.move-table-option:hover:not(:disabled),
+.move-table-option.is-picked {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.move-table-option .table-number {
+  font-size: var(--font-size-xl);
 }

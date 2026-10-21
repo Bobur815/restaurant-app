@@ -44,7 +44,6 @@
     "roleSTAFF": "Xodim",
     "sectionMain": "Asosiy",
     "sectionAdmin": "Boshqaruv",
-    "lock": "Ekranni qulflash",
     "menuToggle": "Bo'limlar",
     "menuOpen": "Menyuni ochish",
     "menuClose": "Menyuni yopish",
@@ -90,6 +89,14 @@
     "openOrders": "Olib ketish va yetkazib berish",
     "noCustomer": "Mijoz ko'rsatilmagan"
   },
+  "moveTable": {
+    "button": "Stolni almashtirish",
+    "title": "Stol {{n}} buyurtmasini ko'chirish",
+    "hint": "Bo'sh stolni tanlang: buyurtma o'sha stolga o'tadi.",
+    "loading": "Yuklanmoqda…",
+    "noneFree": "Bo'sh stol yo'q.",
+    "done": "Buyurtma {{from}}-stoldan {{to}}-stolga o'tkazildi"
+  },
   "order": {
     "title": "Stol {{n}}",
     "orderNumber": "Buyurtma № {{number}}",
@@ -134,7 +141,8 @@
     "perKg": "/ kg",
     "cancelConfirmOpen": "№ {{number}} buyurtmani bekor qilasizmi? Taomlar qoldiqqa qaytariladi.",
     "saveFirst": "Avval o'zgarishlarni saqlang",
-    "closed": "Bu buyurtma allaqachon yopilgan"
+    "closed": "Bu buyurtma allaqachon yopilgan",
+    "unlimited": "Cheksiz"
   },
   "payment": {
     "title": "To'lov — Stol {{n}}",
@@ -147,6 +155,7 @@
     "received": "Olingan summa",
     "change": "Qaytim",
     "confirm": "To'lovni tasdiqlash",
+    "printReceipt": "Chekni chop etish",
     "done": "To'lov qabul qilindi: {{amount}}",
     "titleOpen": "To'lov · {{type}} № {{number}}",
     "rest": "Qolgan",
@@ -210,7 +219,10 @@
     "invalidQty": "Miqdor noto'g'ri",
     "status_open": "Ochiq",
     "status_closed": "Yopilgan",
-    "view": "Ko'rish"
+    "view": "Ko'rish",
+    "unlimited": "Cheksiz",
+    "unlimitedHint": "Bu smenada sanalmaydi: tugamaydi, qoldig'i bo'lmaydi (choy, non, ichimliklar)",
+    "leftoversTitle": "Qoldiqlar"
   },
   "menu": {
     "title": "Menyu",
@@ -700,5 +712,40 @@
       "open": "Obuna",
       "askAdmin": "Administratorga murojaat qiling."
     }
+  },
+  "cash": {
+    "title": "Kassa",
+    "opening": "Boshlang'ich naqd",
+    "openingField": "Kassadagi boshlang'ich naqd (so'm)",
+    "cashSales": "Naqd savdo",
+    "repayments": "Qarz to'lovlari (naqd)",
+    "payIn": "Kirim",
+    "payOut": "Chiqim",
+    "payInTitle": "Kassaga naqd kiritish",
+    "payOutTitle": "Kassadan naqd chiqarish",
+    "payInHint": "Savdodan tashqari kassaga qo'yilgan pul (masalan, mayda pul).",
+    "payOutHint": "Kassadan olingan pul (masalan, xarid yoki egasiga topshirildi). Izohga sababini yozing.",
+    "payInDone": "Naqd kiritildi",
+    "payOutDone": "Naqd chiqarildi",
+    "expected": "Kutilayotgan naqd",
+    "counted": "Haqiqiy naqd",
+    "countedField": "Kassadagi haqiqiy naqd (sanab kiriting)",
+    "countedRequired": "Kassadagi naqdni kiriting",
+    "difference": "Farq",
+    "exact": "Farq yo'q",
+    "shortage": "Kamomad",
+    "overage": "Ortiqcha",
+    "otherSales": "Karta: {{card}} · Click: {{click}} · Nasiya: {{debt}} · Cheklar: {{checks}}",
+    "time": "Vaqt",
+    "type": "Turi",
+    "note": "Izoh",
+    "by": "Kim",
+    "amount": "Summa",
+    "noMovements": "Kirim-chiqim yo'q",
+    "xReport": "X-hisobot",
+    "zReport": "Z-hisobot",
+    "printZ": "Z-hisobotni chop etish",
+    "reportSent": "{{kind}}-hisobot printerga yuborildi: {{printer}}",
+    "correction": "Yopilgandan keyingi tuzatish"
   }
 }

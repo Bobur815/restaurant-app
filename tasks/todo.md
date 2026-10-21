@@ -405,7 +405,6 @@ and the super admin's control panel. **Server side: `C:\Users\user\posgro\tasks\
   - `electron-security-reviewer` + `prisma-reviewer`.
 - [x] Controls outside the plan are hidden (2026-10-21, `licensed()` in `store/app.ts`): takeaway/delivery start buttons and type switch, debt as a payment method, report ranges longer than a day (per-day picker + note), a second hall (add / show hidden), receipt pictures (note; saved without them). Main still refuses each one.
 - [ ] **Release:** posgro server deployed first (its todo, steps 8-11), then a SavdoChef minor release (`npm run release -- minor`, `npm run deploy:pos`). Tills on 0.5.0 update in-app and get the 14-day unlinked allowance.
-      (`npm run release -- minor`, `npm run deploy:pos`).
 
 **Answered (2026-10-20):**
 - code through the existing posgro Telegram bot (no SMS for now);
@@ -414,7 +413,37 @@ and the super admin's control panel. **Server side: `C:\Users\user\posgro\tasks\
 - one trial per phone.
 
 QR: `qrcode-generator` 2.0.4 (exact, 2025-08), drawn as SVG nodes (`renderer/ui/qr.ts`).
-Not built (deliberately small): hiding feature-gated buttons in the UI. Main refuses them with a clear message ("... Pro tarifida bor"); greying the buttons out is a later polish.
+
+## Feature F6: unlimited (∞) dishes in a shift, and the shift's cash drawer like posgro (approved and built 2026-10-21, committed 2026-10-21)
+
+**Decided (2026-10-21):** ∞ is set per shift and remembered; cash in/out is drawer only (like posgro, not an expense); anyone with the `shifts` permission handles cash; X/Z reports print on the receipt printer.
+
+**Before / after (stock):** today every dish in a shift has a starting quantity and sales stop at zero (`sessions/stock.ts`, all-or-nothing). After: a dish can be **∞** in a shift. It is still listed in the shift and its sold quantity still counts (reports, Z-report), but there is no upper limit and it has no leftover at close (nothing to carry or write off). Limited dishes behave exactly as today.
+
+**Before / after (cash):** today a shift knows nothing about money in the drawer. After, as in posgro:
+- opening cash counted at open (0 allowed);
+- cash in (kirim) / cash out (chiqim) during the shift, each with an amount and a note, never edited or deleted (a mistake is corrected with the opposite movement, as posgro);
+- expected cash = opening + cash payments of the shift's orders + cash debt repayments taken while the shift was open (not voided) + cash in − cash out;
+- at close the counted cash is entered: expected, counted and shortage/overage (kamomad / ortiqcha) shown live, stored on the shift. Expected is frozen at close, so a later check correction does not change a closed shift's figures;
+- X-report (any time while open) and Z-report (printed at close, reprint from history).
+
+Steps:
+- [x] **Migration 0012 (additive)** via `prisma-migration`, then `migration-reviewer`:
+  - `session_items.unlimited` Boolean default false;
+  - `sessions.openingCash` Decimal default 0, `sessions.countedCash` Decimal? and `sessions.expectedCash` Decimal? (set at close);
+  - new table `cash_movements` (id, sessionId → sessions RESTRICT, type `PAY_IN | PAY_OUT`, amount > 0, note, createdById, createdAt), index on sessionId.
+  - Shifts closed before F6: opening 0, counted/expected null → history shows "—".
+- [x] **Stock (main):** `applyStockDeltas` skips the upper limit for ∞ items (sold still tracked, never below 0). `openSession` / `updateOpenSession` take `unlimited` per item (quantity ignored, stored 0); switching ∞ off in the open shift needs a quantity ≥ sold (same rule as today). `closeSession` skips ∞ items (no leftover). New read-only `sessions:lastUnlimited` (dish ids that were ∞ in the last closed shift) for the pre-tick. Tests for each.
+- [x] **Cash (main):** `openSession` takes `openingCash`; new `sessions:addCashMovement` (`shifts`, emits `session-changed`, open shift only, amount > 0, note ≤ 200); new read-only `sessions:cashSummary` (opening, cash / card / click / debt sales, cash debt repayments, cash in, cash out, expected, counted, difference, movements); `closeSession` takes `countedCash` (required) and stores counted + expected in the same transaction. Decimal throughout. Tests: expected-cash formula (split tenders, debt, repayments in and outside the shift window, voided repayment), close snapshot, movement on a closed shift refused.
+- [x] **X/Z reports:** `printing:shiftReport({ sessionId, kind: 'X' | 'Z' })` (`shifts`). Main builds the document from the database like the receipt (escaped, own CSP, hidden sandboxed window, same printer and paper width): restaurant, shift number, opened/closed by and when, sales by method, orders count, cash in/out lines, expected / counted / difference (Z), sold quantities per dish. X only for the open shift, Z only for a closed one. Close offers "print Z-report" (on by default; printing never blocks the close: failure is a toast).
+- [x] **UI, open/edit shift window:** opening cash field (open only); per dish an ∞ switch next to the quantity (quantity disabled while on); pre-ticked from the last shift; search unchanged.
+- [x] **UI, current shift card:** cash tiles (opening, cash sales, card, click, debt repayments, cash in, cash out, expected) for `shifts` users; buttons Kirim, Chiqim, X-hisobot; movements list; ∞ shown in the stock table instead of initial/remaining.
+- [x] **UI, close window:** counted cash with live expected and shortage/overage, the leftovers table (∞ dishes not listed), "print Z-report" checkbox.
+- [x] **UI, history:** columns expected / counted / difference; details show the cash summary, movements, and Z-report reprint.
+- [x] **Order screen:** ∞ dishes never show "sold out" and show no remaining count (`draft.ts available()` returns unlimited).
+- [x] uz/ru strings; `npm run check`; `prisma-reviewer` (stock + money) and `electron-security-reviewer` (new channels, print window); harness on a copy of real data: open with ∞ + opening cash, sell past any number on an ∞ dish, cash in/out, X-report to a virtual printer (PDF), close with a shortage, Z-report, history; migration v11 → v12 on the copy.
+- [x] Review fixes (2026-10-21): drawer figures on `sessions:get/list/getOpen` only for `shifts` users; a closed shift shows "corrections after close" so its lines still add up; a cash debt repayment needs an open shift (else it lands in no drawer); payments, check edits and cash repayments refresh the shift view; expected may go negative after a correction (documented); ∞ takes in a carried leftover (documented).
+- Verified on a copy of the real data (v11 → v12): edit shift #2 → Bishteks ∞, sold 300 past any limit, Kirim 50 000 / Chiqim 20 000 through the buttons, expected 6 243 000 = 0 + 6 155 000 + 58 000 + 50 000 − 20 000, X-report, close counted 6 238 000 → Kamomad −5 000, Z-report (both prints captured as pictures, no paper), history + details, next shift pre-ticks Bishteks ∞ and asks for opening cash.
 
 ## Phase 8.5: LAN access for waiter phones (first release, decided 2026-10-18)
 
@@ -443,3 +472,12 @@ Not built (deliberately small): hiding feature-gated buttons in the UI. Main ref
 4. Printer: XP-80/XP-80C 80 mm thermal via the Windows driver (from the legacy code); keep Chromium silent print, ESC/POS optional later.
 5. Bootstrap: dropped entirely.
 6. Waiter phones: needed in the first release → Phase 8.5.
+
+## Order flow changes (2026-10-21, committed with F6)
+
+- [x] Saving any order returns to the tables screen.
+- [x] A delivery order prints its receipt on every save (background, like after payment).
+- [x] Payment window: "Chekni chop etish" checkbox; starts from the print-after-payment setting, unticked for delivery (already printed at save).
+- [x] Open-order cards: status on its own line, total + number on the bottom row (the number was clipped next to "Tayyorlanmoqda").
+- [x] Move a table's unpaid order to a free table (`orders:moveTable`): ⇄ button on busy grid cards and "Stolni almashtirish" on the order page; only free, shown tables; version-checked; the pendingTable trigger moves the one-order-per-table lock. No migration. prisma-reviewer: no bugs; its test and stale-dialog suggestions applied.
+- Verified on a data copy (harnesses smoke-save, smoke-cards, smoke-move); `npm run check` 486 tests.

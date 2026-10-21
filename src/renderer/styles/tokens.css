@@ -26,6 +26,7 @@
   --topbar-height: 60px;
   --sidebar-rail-width: 72px;
   --sidebar-drawer-width: 248px;
+  --ease-drawer: cubic-bezier(0.22, 1, 0.36, 1);
   --shell-gap: 12px;
   --control-height: 40px;
   --control-height-lg: 48px;

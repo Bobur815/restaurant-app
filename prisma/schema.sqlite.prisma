@@ -86,6 +86,12 @@ enum ResidualStatus {
   applied
 }
 
+// Cash added to or taken out of the shift's drawer outside of sales (feature F6, like posgro).
+enum CashMovementType {
+  PAY_IN
+  PAY_OUT
+}
+
 enum ExpenseType {
   residual_writeoff
   waste
@@ -121,6 +127,7 @@ model User {
   expensesCreated  Expense[]       @relation("ExpenseCreatedBy")
   repaymentsTaken  DebtRepayment[] @relation("RepaymentCreatedBy")
   repaymentsVoided DebtRepayment[] @relation("RepaymentVoidedBy")
+  cashMovements    CashMovement[]  @relation("CashMovementCreatedBy")
 
   @@map("users")
 }
@@ -327,26 +334,33 @@ model MenuItem {
 // ==================== SESSIONS (trading day) ====================
 
 model Session {
-  id         Int           @id @default(autoincrement())
-  status     SessionStatus @default(open)
+  id           Int           @id @default(autoincrement())
+  status       SessionStatus @default(open)
   // 1 while open, NULL once closed. UNIQUE, so the database itself allows only one open
   // session (SQLite treats NULLs as distinct). Prisma cannot express a partial unique index.
   // Maintained by triggers from `status` (migration 0002): code never writes it. Create
   // sessions as open; inserting a closed one while another is open would hit the guard.
-  openGuard  Int?          @unique @default(1)
-  openedAt   DateTime      @default(now())
-  closedAt   DateTime?
-  openedById Int?
-  closedById Int?
-  updatedAt  DateTime      @updatedAt
+  openGuard    Int?          @unique @default(1)
+  openedAt     DateTime      @default(now())
+  closedAt     DateTime?
+  openedById   Int?
+  closedById   Int?
+  updatedAt    DateTime      @updatedAt
+  // The drawer (feature F6): counted at open; counted again at close, with the expected amount
+  // frozen at that moment so a later check correction does not change a closed shift's figures.
+  // Shifts closed before F6 have 0 / null / null.
+  openingCash  Decimal       @default(0)
+  countedCash  Decimal?
+  expectedCash Decimal?
 
-  openedBy         User?         @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
-  closedBy         User?         @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
+  openedBy         User?          @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy         User?          @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
   items            SessionItem[]
   orders           Order[]
-  residuals        Residual[]    @relation("ResidualSession")
-  appliedResiduals Residual[]    @relation("ResidualAppliedSession")
+  residuals        Residual[]     @relation("ResidualSession")
+  appliedResiduals Residual[]     @relation("ResidualAppliedSession")
   expenses         Expense[]
+  cashMovements    CashMovement[]
 
   @@index([status])
   @@map("sessions")
@@ -359,6 +373,9 @@ model SessionItem {
   menuItemId      Int
   initialQuantity Decimal @default(0)
   soldQuantity    Decimal @default(0)
+  // Not counted (feature F6): no upper limit and no leftover at close; initialQuantity stays 0
+  // and soldQuantity still counts what was sold.
+  unlimited       Boolean @default(false)
 
   session  Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
@@ -366,6 +383,24 @@ model SessionItem {
   @@unique([sessionId, menuItemId])
   @@index([menuItemId])
   @@map("session_items")
+}
+
+// Cash in (PAY_IN) or out (PAY_OUT) of the open shift's drawer, never edited or deleted: a
+// mistake is corrected with the opposite movement (posgro's SmenaMovement).
+model CashMovement {
+  id          Int              @id @default(autoincrement())
+  sessionId   Int
+  type        CashMovementType
+  amount      Decimal
+  note        String           @default("")
+  createdById Int?
+  createdAt   DateTime         @default(now())
+
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  createdBy User?   @relation("CashMovementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([sessionId])
+  @@map("cash_movements")
 }
 
 // Leftover stock at session close. One row per (session, dish, action): legacy keyed the

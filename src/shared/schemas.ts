@@ -385,18 +385,31 @@ export const idInput = z.object({ id });
 
 // ── Sessions ─────────────────────────────────────────────────────────────────────────────────
 
+// `unlimited` (feature F6): not counted in this shift; its quantity is ignored and stored as 0.
 const sessionItems = z
-  .array(z.object({ menuItemId: id, initialQuantity: nonNegativeDecimal }))
+  .array(
+    z.object({
+      menuItemId: id,
+      initialQuantity: nonNegativeDecimal.default('0'),
+      unlimited: z.boolean().default(false),
+    }),
+  )
   .min(1, { message: "Kamida bitta taom qo'shing" })
   .refine((items) => new Set(items.map((i) => i.menuItemId)).size === items.length, {
     message: 'Bir taom ikki marta kiritilgan',
   });
 
-export const openSessionInput = z.object({ items: sessionItems });
+export const openSessionInput = z.object({
+  items: sessionItems,
+  /** Counted into the drawer at open (feature F6). */
+  openingCash: moneyOrZero.default('0'),
+});
 export const updateSessionInput = z.object({ sessionId: id, items: sessionItems });
 
 export const closeSessionInput = z.object({
   sessionId: id,
+  /** Counted out of the drawer at close (feature F6). */
+  countedCash: moneyOrZero,
   actions: z
     .array(
       z.object({
@@ -408,6 +421,16 @@ export const closeSessionInput = z.object({
     )
     .default([]),
 });
+
+/** Cash in or out of the open shift's drawer (feature F6). */
+export const addCashMovementInput = z.object({
+  type: z.enum(['PAY_IN', 'PAY_OUT']),
+  amount: moneyAmount,
+  note: z.string().trim().max(200).default(''),
+});
+
+/** X-report: the open shift so far; Z-report: a closed shift. */
+export const shiftReportInput = z.object({ sessionId: id, kind: z.enum(['X', 'Z']) });
 
 export const listSessionsInput = z
   .object({
@@ -486,6 +509,18 @@ export const cancelTableOrderInput = z.object({
   tableNumber,
   expectedVersion: z.number().int().min(0).optional(),
 });
+/** Moves a table's unpaid order to another, free table. */
+export const moveTableInput = z
+  .object({
+    fromTable: tableNumber,
+    toTable: tableNumber,
+    expectedVersion: z.number().int().min(0),
+  })
+  .refine((v) => v.fromTable !== v.toTable, {
+    message: 'Boshqa stolni tanlang',
+    path: ['toTable'],
+  });
+export type MoveTableInput = z.infer<typeof moveTableInput>;
 export const orderNumberInput = z.object({ orderNumber: z.string().regex(/^\d{4}-\d{5,}$/) });
 
 const tenderLine = z.object({ method: z.enum(TENDER_METHODS), amount: moneyOrZero });
@@ -627,18 +662,17 @@ export const licenseSignupStartInput = z.object({ phone: requiredPhone });
 export const licenseSignupStatusInput = z.object({ verificationId });
 export const licenseSignupCompleteInput = z.object({
   verificationId,
-  code: z.string().trim().regex(/^\d{6}$/, { message: "Kod 6 ta raqamdan iborat" }),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, { message: 'Kod 6 ta raqamdan iborat' }),
   restaurantName: z.string().trim().min(1, { message: 'Restoran nomini kiriting' }).max(120),
   ownerName: z.string().trim().min(1, { message: 'Egasining ismini kiriting' }).max(120),
   address: z.string().trim().max(300).optional(),
 });
 export const licenseActivateInput = z.object({
   phone: requiredPhone,
-  activationCode: z
-    .string()
-    .trim()
-    .min(8, { message: "Faollashtirish kodini kiriting" })
-    .max(16),
+  activationCode: z.string().trim().min(8, { message: 'Faollashtirish kodini kiriting' }).max(16),
 });
 
 export const salesReportInput = z.object({

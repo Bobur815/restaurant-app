@@ -268,6 +268,16 @@ async function addCredit(
   await db.$transaction(async (tx) => {
     if (!(await tx.customer.findUnique({ where: { id: data.customerId } })))
       throw notFound('Mijoz');
+    // Cash goes into the open shift's drawer (feature F6); with no shift it would be in none.
+    if (data.kind === 'PAYMENT' && data.method === 'cash') {
+      const open = await tx.session.findFirst({ where: { status: 'open' }, select: { id: true } });
+      if (!open) {
+        throw conflict(
+          "Naqd to'lov uchun smena ochiq bo'lishi kerak. Smenani oching yoki karta/Click bilan qabul qiling",
+          { reason: 'NO_OPEN_SHIFT' },
+        );
+      }
+    }
     const balance = await balanceOf(tx, data.customerId);
     if (dec(data.amount).gt(balance)) {
       throw invalid(`Qarzdan ko'p: qarz ${toMoneyString(balance)}`, {

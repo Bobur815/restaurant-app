@@ -7,16 +7,57 @@ import { errorMessage, toast } from '../../components/toast';
 import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
-import { formatQty, localName, toInputDecimal } from '../../utils/format';
+import { formatMoney, formatQty, localName, toInputDecimal } from '../../utils/format';
 import { button } from '../../components/page';
+import { differenceText, moneyIn, printShiftReport } from './cash-panel';
 
 /**
- * Close the shift: per dish with a leftover, how much carries to the next shift and how much is
- * written off. As in legacy, the two fields are kept in step (carry + write-off = leftover).
+ * Close the shift: the cash counted in the drawer (feature F6: expected and shortage/overage shown
+ * as it is typed, Z-report printed after the close), then per dish with a leftover how much
+ * carries to the next shift and how much is written off. As in legacy, the two fields are kept in
+ * step (carry + write-off = leftover). Unlimited (∞) dishes have no leftover.
  */
 export async function closeShiftModal(session: SessionDto): Promise<SessionCloseResult | null> {
   const lang = appStore.get().language;
-  const leftovers = session.items.filter((i) => dec(i.remainingQuantity).gt(0));
+  const leftovers = session.items.filter((i) => !i.unlimited && dec(i.remainingQuantity).gt(0));
+  const summary = await api.sessions.cashSummary({ id: session.id });
+
+  // ── the drawer ─────────────────────────────────────────────────────────────────────────────
+  const counted = document.createElement('input');
+  counted.type = 'text';
+  counted.inputMode = 'decimal';
+  counted.id = 'counted-cash';
+  counted.className = 'counted-cash';
+  const diffLine = document.createElement('p');
+  diffLine.className = 'cash-diff';
+  diffLine.setAttribute('role', 'status');
+  const renderDiff = () => {
+    const raw = moneyIn(counted.value);
+    if (!raw || !isDecimalString(raw) || raw.startsWith('-')) {
+      diffLine.textContent = '';
+      diffLine.className = 'cash-diff';
+      return;
+    }
+    const d = differenceText(dec(raw).minus(summary.expectedCash).toFixed());
+    diffLine.textContent = `${d.label}: ${d.text}`;
+    diffLine.className = `cash-diff ${d.cls}`;
+  };
+  counted.addEventListener('input', renderDiff);
+  const printZ = document.createElement('input');
+  printZ.type = 'checkbox';
+  printZ.checked = true;
+  const drawer = html`<div class="close-cash">
+    <div class="close-cash-expected">
+      <span class="muted">${t('cash.expected')}</span>
+      <strong>${formatMoney(summary.expectedCash, lang)}</strong>
+    </div>
+    <div class="field">
+      <label for="counted-cash">${t('cash.countedField')}</label>
+      ${counted}
+    </div>
+    ${diffLine}
+    <label class="check-field">${printZ}<span>${t('cash.printZ')}</span></label>
+  </div>`;
 
   const rows = leftovers.map((item) => {
     const remaining = dec(item.remainingQuantity);
@@ -73,7 +114,9 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
 
   const error = formError();
   const body = leftovers.length
-    ? html`<p class="muted">${t('sessions.closeHint')}</p>
+    ? html`${drawer}
+        <h3 class="section-title">${t('sessions.leftoversTitle')}</h3>
+        <p class="muted">${t('sessions.closeHint')}</p>
         <div class="bulk-actions">
           ${button(t('sessions.allCarry'), 'secondary', allTo('carry'))}${button(
             t('sessions.allWriteOff'),
@@ -98,7 +141,8 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
           </table>
         </div>
         ${error}`
-    : html`<p class="notice notice-info">${t('sessions.noLeftovers')}</p>
+    : html`${drawer}
+        <p class="notice notice-info">${t('sessions.noLeftovers')}</p>
         ${error}`;
 
   let result: SessionCloseResult | null = null;
@@ -106,6 +150,7 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
     title: t('sessions.closeTitle'),
     body,
     size: 'lg',
+    initialFocus: () => counted,
     actions: [
       { label: t('app.cancel') },
       {
@@ -113,6 +158,14 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
         kind: 'danger',
         onClick: async () => {
           error.textContent = '';
+          counted.removeAttribute('aria-invalid');
+          const countedCash = moneyIn(counted.value);
+          if (!countedCash || !isDecimalString(countedCash) || countedCash.startsWith('-')) {
+            counted.setAttribute('aria-invalid', 'true');
+            error.textContent = t('cash.countedRequired');
+            counted.focus();
+            return false;
+          }
           const actions = [];
           for (const r of rows) {
             const carry = r.parse(r.carry);
@@ -130,7 +183,7 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
             });
           }
           try {
-            result = await api.sessions.close({ sessionId: session.id, actions });
+            result = await api.sessions.close({ sessionId: session.id, countedCash, actions });
             toast(
               t('sessions.closedToast', {
                 carried: result.carried.length,
@@ -147,5 +200,7 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
     ],
   });
   await modal.closed;
+  // The Z-report never holds up the close: a printer problem is only a toast.
+  if (result && printZ.checked) void printShiftReport(session.id, 'Z');
   return result;
 }

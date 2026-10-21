@@ -264,7 +264,10 @@ export interface SessionItemDto {
   imageFile: string | null;
   initialQuantity: DecimalString;
   soldQuantity: DecimalString;
+  /** 0 for an unlimited dish: use `unlimited`. */
   remainingQuantity: DecimalString;
+  /** Not counted in this shift (feature F6): no limit, no leftover. */
+  unlimited: boolean;
 }
 
 export interface SessionDto {
@@ -275,6 +278,55 @@ export interface SessionDto {
   openedBy: string | null;
   closedBy: string | null;
   items: SessionItemDto[];
+  /**
+   * The drawer (feature F6). Null counted/expected: still open, or closed before F6. All three are
+   * null for a user without the shifts permission.
+   */
+  openingCash: DecimalString | null;
+  countedCash: DecimalString | null;
+  expectedCash: DecimalString | null;
+}
+
+export type CashMovementType = 'PAY_IN' | 'PAY_OUT';
+
+export interface CashMovementDto {
+  id: number;
+  type: CashMovementType;
+  amount: DecimalString;
+  note: string;
+  createdAt: string;
+  createdBy: string | null;
+}
+
+/**
+ * A shift's drawer (feature F6, like posgro). expected = opening + cash sales + cash debt
+ * repayments + cash in - cash out; for a closed shift `expectedCash` is the figure frozen at close.
+ */
+export interface ShiftCashSummaryDto {
+  sessionId: number;
+  status: SessionStatus;
+  openedAt: string;
+  closedAt: string | null;
+  openingCash: DecimalString;
+  /** Paid checks of this shift, by method (debt = sold on credit). */
+  sales: { cash: DecimalString; card: DecimalString; click: DecimalString; debt: DecimalString };
+  salesTotal: DecimalString;
+  checksCount: number;
+  /** Debt repaid in cash while the shift was open (not voided). */
+  debtRepaymentsCash: DecimalString;
+  payIn: DecimalString;
+  payOut: DecimalString;
+  expectedCash: DecimalString;
+  countedCash: DecimalString | null;
+  /** counted - expected: negative = shortage, positive = overage. */
+  difference: DecimalString | null;
+  /**
+   * A closed shift whose checks or cash repayments were corrected after the close: what the
+   * breakdown (from today's data) is short of the frozen expected (frozen - live), so the lines
+   * still add up to it; null when nothing changed.
+   */
+  correctionAfterClose: DecimalString | null;
+  movements: CashMovementDto[];
 }
 
 export interface PendingCarryDto {
@@ -384,6 +436,8 @@ export interface CustomerLookupDto {
 export interface TableSummaryDto {
   tableNumber: number;
   orderId: number;
+  /** For a change straight from the grid (moving to another table). */
+  version: number;
   orderNumber: string;
   totalAmount: DecimalString;
   lineCount: number;

@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type {
   deliveryStatusInput,
+  MoveTableInput,
   orderIdInput,
   SaveOpenOrderInput,
   SaveTableOrderInput,
@@ -121,6 +122,7 @@ export async function listBusyTables(db: DbOrTx): Promise<TableSummaryDto[]> {
   return rows.map((o) => ({
     tableNumber: o.tableNumber,
     orderId: o.id,
+    version: o.version,
     orderNumber: o.orderNumber,
     totalAmount: decStr(o.totalAmount),
     lineCount: o._count.items,
@@ -346,6 +348,51 @@ export async function cancelTableOrder(
     return order.id;
   });
   return getOrder(db, id);
+}
+
+/**
+ * Moves a table's unpaid order to another table: the guests changed seats. Only to a table that
+ * exists, is shown and is free; the order keeps its number, lines, total, stock and shift. The
+ * database moves the one-unpaid-order-per-table lock with it (pendingTable trigger, 0003), so two
+ * moves to the same table at once cannot both succeed.
+ */
+export async function moveTableOrder(db: Db, input: MoveTableInput): Promise<OrderDto> {
+  const busy = () =>
+    conflict(`${input.toTable}-stol band. Bo'sh stolni tanlang`, {
+      reason: 'TABLE_BUSY',
+      tableNumber: input.toTable,
+    });
+  try {
+    const id = await db.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({ where: { pendingTable: input.fromTable } });
+      // Paid, cancelled or moved elsewhere since it was loaded.
+      if (!order) throw staleOrder(null);
+      if (order.version !== input.expectedVersion) throw staleOrder(order.version);
+
+      const table = await tx.diningTable.findFirst({
+        where: { number: input.toTable, isActive: true, hall: { isActive: true } },
+      });
+      if (!table) {
+        throw conflict("Bunday stol yo'q yoki yashirilgan", {
+          reason: 'TABLE_UNAVAILABLE',
+          tableNumber: input.toTable,
+        });
+      }
+      if (await tx.order.findUnique({ where: { pendingTable: input.toTable } })) throw busy();
+
+      const res = await tx.order.updateMany({
+        where: { id: order.id, version: order.version, status: 'pending' },
+        data: { tableNumber: input.toTable, version: { increment: 1 } },
+      });
+      if (res.count !== 1) throw staleOrder(null);
+      return order.id;
+    });
+    return getOrder(db, id);
+  } catch (error) {
+    // pendingTable is UNIQUE: an order was opened on the target table at the same moment.
+    if (isUniqueViolation(error)) throw busy();
+    throw error;
+  }
 }
 
 // ── Takeaway and delivery (feature F1-B) ─────────────────────────────────────────────────────

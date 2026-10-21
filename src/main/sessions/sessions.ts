@@ -1,14 +1,25 @@
 import type { z } from 'zod';
-import type {
-  closeSessionInput,
-  listSessionsInput,
-  openSessionInput,
-  updateSessionInput,
-} from '@shared/schemas';
+import type { closeSessionInput, listSessionsInput } from '@shared/schemas';
 import type { PendingCarryDto, SessionCloseResult, SessionDto } from '@shared/types';
 import { dec, roundMoney, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
 import { decStr, iso, isoOrNull, type Actor, type Db, type DbOrTx, type Tx } from '../domain/db';
 import { conflict, invalid, isUniqueViolation, notFound, prismaCode } from '../domain/errors';
+import { cashFigures } from './cash';
+
+/**
+ * Domain inputs. Fields with schema defaults are optional here so callers (tests, the importer)
+ * need not spell them out; the IPC path always passes the parsed, defaulted values.
+ */
+type ShiftItemInput = { menuItemId: number; initialQuantity?: string; unlimited?: boolean };
+type OpenShiftInput = { items: ShiftItemInput[]; openingCash?: string };
+type UpdateShiftInput = { sessionId: number; items: ShiftItemInput[] };
+
+/**
+ * An unlimited dish is stored with quantity 0 (feature F6). Opening marks every pending carried
+ * leftover applied, so a carried dish made ∞ takes its leftover in: it is not counted any more.
+ */
+const quantityOf = (i: ShiftItemInput) =>
+  i.unlimited ? '0' : toQtyString(i.initialQuantity ?? '0');
 
 const sessionInclude = {
   items: {
@@ -35,6 +46,9 @@ function toSessionDto(s: NonNullable<SessionRow>): SessionDto {
     closedAt: isoOrNull(s.closedAt),
     openedBy: s.openedBy?.fullName ?? null,
     closedBy: s.closedBy?.fullName ?? null,
+    openingCash: decStr(s.openingCash),
+    countedCash: decStr(s.countedCash),
+    expectedCash: decStr(s.expectedCash),
     items: s.items.map((i) => {
       const initial = dec(i.initialQuantity.toString());
       const sold = dec(i.soldQuantity.toString());
@@ -46,7 +60,8 @@ function toSessionDto(s: NonNullable<SessionRow>): SessionDto {
         imageFile: i.menuItem.imageFile,
         initialQuantity: decStr(i.initialQuantity),
         soldQuantity: decStr(i.soldQuantity),
-        remainingQuantity: toQtyString(atLeastZero(initial.minus(sold))),
+        remainingQuantity: i.unlimited ? '0' : toQtyString(atLeastZero(initial.minus(sold))),
+        unlimited: i.unlimited,
       };
     }),
   };
@@ -85,6 +100,16 @@ export async function listSessions(
   return rows.map(toSessionDto);
 }
 
+/** Dishes that were unlimited (∞) in the last closed shift: pre-ticked when opening the next. */
+export async function getLastUnlimited(db: DbOrTx): Promise<number[]> {
+  const last = await db.session.findFirst({
+    where: { status: 'closed' },
+    orderBy: { id: 'desc' },
+    select: { items: { where: { unlimited: true }, select: { menuItemId: true } } },
+  });
+  return (last?.items ?? []).map((i) => i.menuItemId);
+}
+
 /** Leftovers carried from closed shifts, not yet taken into a new one: pre-fill for opening. */
 export async function getPendingCarry(db: DbOrTx): Promise<PendingCarryDto[]> {
   const rows = await db.residual.findMany({
@@ -121,7 +146,7 @@ async function assertActiveDishes(tx: Tx, ids: number[]): Promise<void> {
 export async function openSession(
   db: Db,
   actor: Actor,
-  input: z.infer<typeof openSessionInput>,
+  input: OpenShiftInput,
 ): Promise<SessionDto> {
   try {
     const id = await db.$transaction(async (tx) => {
@@ -132,10 +157,12 @@ export async function openSession(
       const session = await tx.session.create({
         data: {
           openedById: actor.id,
+          openingCash: toMoneyString(input.openingCash ?? '0'),
           items: {
             create: input.items.map((i) => ({
               menuItemId: i.menuItemId,
-              initialQuantity: toQtyString(i.initialQuantity),
+              initialQuantity: quantityOf(i),
+              unlimited: !!i.unlimited,
             })),
           },
         },
@@ -159,10 +186,7 @@ export async function openSession(
  * are left as they are (never removed). A quantity below what is already sold (which includes
  * unpaid orders) is refused with the offending dishes in `details.violations`.
  */
-export async function updateOpenSession(
-  db: Db,
-  input: z.infer<typeof updateSessionInput>,
-): Promise<SessionDto> {
+export async function updateOpenSession(db: Db, input: UpdateShiftInput): Promise<SessionDto> {
   await db.$transaction(async (tx) => {
     const session = await tx.session.findUnique({
       where: { id: input.sessionId },
@@ -178,11 +202,12 @@ export async function updateOpenSession(
     const violations: Array<{ menuItemId: number; soldQuantity: string; proposed: string }> = [];
     for (const i of input.items) {
       const ex = existing.get(i.menuItemId);
-      if (ex && dec(i.initialQuantity).lt(dec(ex.soldQuantity.toString()))) {
+      // An unlimited dish has no limit to fall below; switching ∞ off needs at least what is sold.
+      if (ex && !i.unlimited && dec(quantityOf(i)).lt(dec(ex.soldQuantity.toString()))) {
         violations.push({
           menuItemId: i.menuItemId,
           soldQuantity: decStr(ex.soldQuantity),
-          proposed: i.initialQuantity,
+          proposed: quantityOf(i),
         });
       }
     }
@@ -192,13 +217,22 @@ export async function updateOpenSession(
 
     for (const i of input.items) {
       const ex = existing.get(i.menuItemId);
-      const qty = toQtyString(i.initialQuantity);
+      const qty = quantityOf(i);
+      const unlimited = !!i.unlimited;
       if (!ex) {
         await tx.sessionItem.create({
-          data: { sessionId: session.id, menuItemId: i.menuItemId, initialQuantity: qty },
+          data: {
+            sessionId: session.id,
+            menuItemId: i.menuItemId,
+            initialQuantity: qty,
+            unlimited,
+          },
         });
-      } else if (!dec(ex.initialQuantity.toString()).equals(qty)) {
-        await tx.sessionItem.update({ where: { id: ex.id }, data: { initialQuantity: qty } });
+      } else if (!dec(ex.initialQuantity.toString()).equals(qty) || ex.unlimited !== unlimited) {
+        await tx.sessionItem.update({
+          where: { id: ex.id },
+          data: { initialQuantity: qty, unlimited },
+        });
       }
     }
   });
@@ -214,6 +248,8 @@ export async function updateOpenSession(
  * Per dish, carry + write-off may not exceed the leftover; whatever is not assigned is carried
  * (legacy carried everything when nothing was given, but lost an unassigned remainder).
  * Refused while the shift has unpaid orders: they would be stranded on a closed shift.
+ * Unlimited (∞) dishes have no leftover. The drawer (feature F6): the counted cash and the cash
+ * expected at this moment are stored on the shift, so its count never changes afterwards.
  */
 export async function closeSession(
   db: Db,
@@ -257,9 +293,11 @@ export async function closeSession(
     };
 
     for (const item of session.items) {
-      const remaining = atLeastZero(
-        dec(item.initialQuantity.toString()).minus(dec(item.soldQuantity.toString())),
-      );
+      const remaining = item.unlimited
+        ? dec(0)
+        : atLeastZero(
+            dec(item.initialQuantity.toString()).minus(dec(item.soldQuantity.toString())),
+          );
       const action = actions.get(item.menuItemId);
       const writeOff = dec(action?.writeOffQuantity ?? 0);
       const carryAsked = dec(action?.carryQuantity ?? 0);
@@ -327,10 +365,19 @@ export async function closeSession(
       }
     }
 
+    const closedAt = new Date();
+    const { expected } = await cashFigures(tx, session, closedAt);
+
     // openGuard is released by trigger (migration 0002).
     const closed = await tx.session.update({
       where: { id: session.id },
-      data: { status: 'closed', closedAt: new Date(), closedById: actor.id },
+      data: {
+        status: 'closed',
+        closedAt,
+        closedById: actor.id,
+        countedCash: toMoneyString(input.countedCash),
+        expectedCash: toMoneyString(expected),
+      },
     });
     result.closedAt = iso(closed.closedAt!);
     return result;
@@ -342,7 +389,15 @@ export async function deleteSession(db: Db, id: number): Promise<void> {
   const session = await db.session.findUnique({
     where: { id },
     include: {
-      _count: { select: { orders: true, residuals: true, appliedResiduals: true, expenses: true } },
+      _count: {
+        select: {
+          orders: true,
+          residuals: true,
+          appliedResiduals: true,
+          expenses: true,
+          cashMovements: true,
+        },
+      },
     },
   });
   if (!session) throw notFound('Smena');

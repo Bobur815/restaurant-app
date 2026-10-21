@@ -19,6 +19,7 @@ export const READ_ONLY_CHANNELS = [
   'printing:printers',
   'printing:printReceipt',
   'printing:test',
+  'printing:shiftReport',
   'printing:preview',
   'updater:status',
   'license:status',
@@ -34,6 +35,8 @@ export const READ_ONLY_CHANNELS = [
   'sessions:get',
   'sessions:list',
   'sessions:pendingCarry',
+  'sessions:lastUnlimited',
+  'sessions:cashSummary',
   'orders:busyTables',
   'orders:getTable',
   'orders:getByNumber',
@@ -101,19 +104,26 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'sessions:update': () => [SESSION],
   'sessions:close': () => [SESSION],
   'sessions:delete': () => [SESSION],
+  'sessions:addCashMovement': () => [SESSION],
   // Orders move shift stock, so the shift view refreshes too.
   'orders:save': (_input, order) => [orders(order), SESSION],
   'orders:cancel': (_input, order) => [orders(order), SESSION],
+  // Both tables change: the new one in the order itself, the old one by number.
+  'orders:moveTable': (input, order) => [
+    orders(order),
+    { type: 'orders-changed', orderId: order.id, tableNumber: input.fromTable },
+  ],
   'orders:saveOpen': (_input, order) => [orders(order), SESSION],
   'orders:cancelOpen': (_input, order) => [orders(order), SESSION],
   'orders:setDeliveryStatus': (_input, order) => [orders(order)],
-  // A payment may add debt; a check edit or delete may change it.
-  'payments:pay': (_input, order) => [orders(order), DEBTS],
-  'checks:update': (_input, order) => [orders(order), DEBTS],
+  // A payment may add debt; a check edit or delete may change it. Both move the shift's drawer.
+  'payments:pay': (_input, order) => [orders(order), DEBTS, SESSION],
+  'checks:update': (_input, order) => [orders(order), DEBTS, SESSION],
   'checks:delete': (_input, order) => [orders(order), SESSION, DEBTS],
-  'debts:repay': () => [DEBTS, orders()],
+  // A cash repayment (or voiding one) moves the shift's drawer.
+  'debts:repay': () => [DEBTS, orders(), SESSION],
   'debts:writeOff': () => [DEBTS, orders()],
-  'debts:void': () => [DEBTS, orders()],
+  'debts:void': () => [DEBTS, orders(), SESSION],
   'debts:assign': () => [DEBTS, orders()],
   'customers:update': () => [DEBTS],
   'residuals:apply': () => [SESSION],

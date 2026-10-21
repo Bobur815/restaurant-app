@@ -3,10 +3,12 @@ import {
   editCheckInput,
   listChecksInput,
   menuItemInput,
+  moveTableInput,
   saveTableOrderInput,
 } from '@shared/schemas';
 import type { Actor } from '../domain/db';
 import { dayKey } from '../domain/db';
+import { isUniqueViolation } from '../domain/errors';
 import { createMenuItem, updateMenuItem } from '../menu/menu-items';
 import { cancelPaidOrder, editCheck, listChecks, payOrder } from '../payments/payments';
 import {
@@ -18,7 +20,13 @@ import {
   updateOpenSession,
 } from '../sessions/sessions';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
-import { cancelTableOrder, getTableOrder, listBusyTables, saveTableOrder } from './orders';
+import {
+  cancelTableOrder,
+  getTableOrder,
+  listBusyTables,
+  moveTableOrder,
+  saveTableOrder,
+} from './orders';
 
 jest.setTimeout(60_000);
 
@@ -261,7 +269,7 @@ describe('a trading day', () => {
     const s = (await getOpenSession(t.db))!;
     const pending = await save(3, [{ menuItemId: unused, quantity: 1 }]);
     await expect(
-      closeSession(t.db, cashier, closeSessionInput.parse({ sessionId: s.id })),
+      closeSession(t.db, cashier, closeSessionInput.parse({ sessionId: s.id, countedCash: '0' })),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
@@ -274,6 +282,7 @@ describe('a trading day', () => {
         cashier,
         closeSessionInput.parse({
           sessionId: s.id,
+          countedCash: '0',
           actions: [{ menuItemId: non, carryQuantity: '30', writeOffQuantity: '10' }],
         }),
       ),
@@ -289,6 +298,7 @@ describe('a trading day', () => {
       cashier,
       closeSessionInput.parse({
         sessionId: s.id,
+        countedCash: '0',
         actions: [
           { menuItemId: non, carryQuantity: '20', writeOffQuantity: '7', note: 'qotib qoldi' },
           { menuItemId: osh, writeOffQuantity: '20' },
@@ -351,5 +361,101 @@ describe('two devices, same table', () => {
     expect(results.find((r) => r.status === 'rejected')).toMatchObject({
       reason: { code: 'CONFLICT' },
     });
+  });
+});
+
+describe('moving an order to another table', () => {
+  const move = (fromTable: number, toTable: number, expectedVersion: number) =>
+    moveTableOrder(t.db, moveTableInput.parse({ fromTable, toTable, expectedVersion }));
+
+  it('moves to a free table: same order, lines and stock; the old table is free', async () => {
+    const order = await save(2, [{ menuItemId: non, quantity: 2 }]);
+    const before = await sold();
+    const moved = await move(2, 3, order.version);
+    expect(moved).toMatchObject({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      tableNumber: 3,
+      totalAmount: order.totalAmount,
+      version: order.version + 1,
+    });
+    expect(moved.lines).toHaveLength(1);
+    expect(await getTableOrder(t.db, 2)).toBeNull();
+    expect((await getTableOrder(t.db, 3))?.id).toBe(order.id);
+    expect(await sold()).toEqual(before);
+    // The old table takes a new order again.
+    await expect(save(2, [{ menuItemId: non, quantity: 1 }])).resolves.toBeTruthy();
+  });
+
+  it('refuses a busy, hidden or unknown table, an old version and the same table', async () => {
+    const order = (await getTableOrder(t.db, 3))!;
+    await expect(move(3, 2, order.version)).rejects.toMatchObject({
+      code: 'CONFLICT',
+      details: { reason: 'TABLE_BUSY' },
+    });
+    await t.db.diningTable.updateMany({ where: { number: 8 }, data: { isActive: false } });
+    await expect(move(3, 8, order.version)).rejects.toMatchObject({
+      details: { reason: 'TABLE_UNAVAILABLE' },
+    });
+    await t.db.diningTable.updateMany({ where: { number: 8 }, data: { isActive: true } });
+    await expect(move(3, 999, order.version)).rejects.toMatchObject({
+      details: { reason: 'TABLE_UNAVAILABLE' },
+    });
+    await expect(move(3, 4, order.version - 1)).rejects.toMatchObject({
+      details: { reason: 'STALE' },
+    });
+    await expect(move(5, 4, 0)).rejects.toMatchObject({ details: { reason: 'STALE' } });
+    expect(() => moveTableInput.parse({ fromTable: 3, toTable: 3, expectedVersion: 0 })).toThrow();
+    expect((await getTableOrder(t.db, 3))?.version).toBe(order.version);
+  });
+
+  it('two moves to the same free table at once: only one wins', async () => {
+    const a = (await getTableOrder(t.db, 2))!;
+    const b = (await getTableOrder(t.db, 3))!;
+    const results = await Promise.allSettled([move(2, 6, a.version), move(3, 6, b.version)]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((r) => r.status === 'rejected')).toMatchObject({
+      reason: { code: 'CONFLICT', details: { reason: 'TABLE_BUSY' } },
+    });
+  });
+
+  it('the database itself refuses a move onto a busy table (what the race catch relies on)', async () => {
+    const moved = (await getTableOrder(t.db, 6))!;
+    const other = await save(7, [{ menuItemId: non, quantity: 1 }]);
+    let error: unknown;
+    try {
+      await t.db.order.updateMany({ where: { id: other.id }, data: { tableNumber: 6 } });
+    } catch (e) {
+      error = e;
+    }
+    expect(isUniqueViolation(error)).toBe(true);
+    expect((await getTableOrder(t.db, 6))?.id).toBe(moved.id);
+    expect((await getTableOrder(t.db, 7))?.id).toBe(other.id);
+  });
+
+  it('after a move, old views are stale: save, pay and cancel with the old state change nothing', async () => {
+    const order = await save(4, [{ menuItemId: non, quantity: 1 }]);
+    await move(4, 5, order.version);
+    // A device still showing table 5 as free saves a new order on it.
+    await expect(save(5, [{ menuItemId: non, quantity: 5 }])).rejects.toMatchObject({
+      details: { reason: 'STALE' },
+    });
+    await expect(
+      payOrder(t.db, cashier, {
+        orderId: order.id,
+        method: 'cash',
+        expectedVersion: order.version,
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'STALE' } });
+    await expect(
+      cancelTableOrder(t.db, { tableNumber: 4, expectedVersion: order.version }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    const after = (await getTableOrder(t.db, 5))!;
+    expect(after).toMatchObject({
+      id: order.id,
+      totalAmount: order.totalAmount,
+      status: 'pending',
+    });
+    expect(after.lines).toHaveLength(1);
   });
 });

@@ -64,14 +64,15 @@ export function licenseBannerText(
   if (s.reason === 'warning' || s.reason === 'grace' || s.reason === 'unlinked-allowance') {
     return { text: t(`license.banner.${s.reason}`, { n }), readonly: false };
   }
-  if (s.reason === 'trial' && n <= 3) return { text: t('license.banner.trial', { n }), readonly: false };
+  if (s.reason === 'trial' && n <= 3)
+    return { text: t('license.banner.trial', { n }), readonly: false };
   if (s.checkinBy) {
     const days = Math.ceil((Date.parse(s.checkinBy) - now) / DAY_MS);
-    if (days <= 3) return { text: t('license.banner.checkin-soon', { n: Math.max(0, days) }), readonly: false };
+    if (days <= 3)
+      return { text: t('license.banner.checkin-soon', { n: Math.max(0, days) }), readonly: false };
   }
   return null;
 }
-
 
 function label(text: string): HTMLSpanElement {
   const span = document.createElement('span');
@@ -82,7 +83,7 @@ function label(text: string): HTMLSpanElement {
 
 /**
  * App frame. The top bar spans the window: brand, clock, status and the account controls (user,
- * lock, logout). Below it, the sidebar is a 72 px icon rail that opens as a drawer over the page
+ * logout). Below it, the sidebar is a 72 px icon rail that opens as a drawer over the page
  * (never over the top bar): on hover, on keyboard focus, or pinned with the hamburger button.
  * Each link keeps its name as aria-label, since the label text is hidden while the rail is closed.
  */
@@ -110,7 +111,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
   const section = (title: string, links: HTMLAnchorElement[]) =>
     links.length
       ? html`<div class="nav-section">
-          <span class="nav-section-title">${title}</span>
+          <span class="nav-section-title"><span>${title}</span></span>
           ${links}
         </div>`
       : '';
@@ -131,7 +132,6 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
   hamburger.setAttribute('aria-controls', 'app-sidebar-panel');
   hamburger.append(icon('hamburger'), label(t('nav.menuToggle')));
 
-  const lock = iconButton('lock', t('nav.lock'));
   const logout = iconButton('logout', t('nav.logout'));
   const themeButton = document.createElement('button');
   themeButton.type = 'button';
@@ -166,7 +166,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
               <span class="user-role" data-ref="userRole"></span>
             </span>
           </a>
-          ${lock}${logout}
+          ${logout}
         </div>
       </header>
       <nav class="sidebar" aria-label="SavdoChef">
@@ -270,7 +270,9 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
             href: '#/settings/subscription',
             textContent: t('license.banner.open'),
           })
-        : Object.assign(document.createElement('span'), { textContent: t('license.banner.askAdmin') });
+        : Object.assign(document.createElement('span'), {
+            textContent: t('license.banner.askAdmin'),
+          });
       r.licenseBanner.replaceChildren(
         Object.assign(document.createElement('span'), { textContent: banner.text }),
         more,
@@ -305,13 +307,6 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     await api.auth.logout().catch(() => undefined);
     appStore.set({ user: null, openSession: undefined });
     navigate('/login');
-  });
-  // Lock = a real logout of this window, then the PIN screen: going back by URL finds no session.
-  lock.addEventListener('click', async () => {
-    playClick();
-    await api.auth.logout().catch(() => undefined);
-    appStore.set({ user: null, openSession: undefined });
-    navigate('/lock');
   });
 
   return {

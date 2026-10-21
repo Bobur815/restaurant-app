@@ -15,10 +15,16 @@ describe('change events', () => {
       { type: 'orders-changed', orderId: 7, tableNumber: 4 },
       { type: 'session-changed' },
     ]);
-    // A payment may add debt, so the debtors list refreshes too.
+    // A payment may add debt, so the debtors list refreshes too, and the shift's cash card.
     expect(eventsFor('payments:pay', {}, order)).toEqual([
       { type: 'orders-changed', orderId: 7, tableNumber: 4 },
       { type: 'debts-changed' },
+      { type: 'session-changed' },
+    ]);
+    // A move refreshes both tables.
+    expect(eventsFor('orders:moveTable', { fromTable: 2 }, order)).toEqual([
+      { type: 'orders-changed', orderId: 7, tableNumber: 4 },
+      { type: 'orders-changed', orderId: 7, tableNumber: 2 },
     ]);
     expect(eventsFor('checks:delete', {}, order)).toContainEqual({ type: 'session-changed' });
     expect(eventsFor('debts:repay', {}, {})).toContainEqual({ type: 'debts-changed' });

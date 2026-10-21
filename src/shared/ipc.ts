@@ -53,6 +53,7 @@ export interface IpcChannels {
   'printing:printers': Channel<undefined, T.PrinterInfo[]>;
   'printing:printReceipt': Channel<In<typeof S.printReceiptInput>, { printer: string }>;
   'printing:test': Channel<In<typeof S.testPrintInput>, { printer: string }>;
+  'printing:shiftReport': Channel<In<typeof S.shiftReportInput>, { printer: string }>;
   /** PNG data URL of the sample receipt. */
   'printing:preview': Channel<In<typeof S.previewReceiptInput>, string>;
 
@@ -108,6 +109,9 @@ export interface IpcChannels {
   'sessions:get': Channel<In<typeof S.idInput>, T.SessionDto>;
   'sessions:list': Channel<In<typeof S.listSessionsInput>, T.SessionDto[]>;
   'sessions:pendingCarry': Channel<undefined, T.PendingCarryDto[]>;
+  'sessions:lastUnlimited': Channel<undefined, number[]>;
+  'sessions:cashSummary': Channel<In<typeof S.idInput>, T.ShiftCashSummaryDto>;
+  'sessions:addCashMovement': Channel<In<typeof S.addCashMovementInput>, T.CashMovementDto>;
   'sessions:open': Channel<In<typeof S.openSessionInput>, T.SessionDto>;
   'sessions:update': Channel<In<typeof S.updateSessionInput>, T.SessionDto>;
   'sessions:close': Channel<In<typeof S.closeSessionInput>, T.SessionCloseResult>;
@@ -119,6 +123,7 @@ export interface IpcChannels {
   'orders:getByNumber': Channel<In<typeof S.orderNumberInput>, T.OrderDto>;
   'orders:save': Channel<In<typeof S.saveTableOrderInput>, T.OrderDto>;
   'orders:cancel': Channel<In<typeof S.cancelTableOrderInput>, T.OrderDto>;
+  'orders:moveTable': Channel<In<typeof S.moveTableInput>, T.OrderDto>;
   'orders:get': Channel<In<typeof S.idInput>, T.OrderDto>;
   /** Unpaid takeaway and delivery orders. */
   'orders:openList': Channel<undefined, T.OpenOrderSummaryDto[]>;
@@ -183,6 +188,7 @@ export const IPC_CHANNELS = [
   'printing:printers',
   'printing:printReceipt',
   'printing:test',
+  'printing:shiftReport',
   'printing:preview',
   'updater:status',
   'updater:check',
@@ -218,6 +224,9 @@ export const IPC_CHANNELS = [
   'sessions:get',
   'sessions:list',
   'sessions:pendingCarry',
+  'sessions:lastUnlimited',
+  'sessions:cashSummary',
+  'sessions:addCashMovement',
   'sessions:open',
   'sessions:update',
   'sessions:close',
@@ -227,6 +236,7 @@ export const IPC_CHANNELS = [
   'orders:getByNumber',
   'orders:save',
   'orders:cancel',
+  'orders:moveTable',
   'orders:get',
   'orders:openList',
   'orders:saveOpen',

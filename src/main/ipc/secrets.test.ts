@@ -112,6 +112,10 @@ beforeAll(async () => {
   await t.db.payment.create({
     data: { orderId: 1, amount: '3000', method: 'debt', status: 'pending' },
   });
+  // A drawer movement by staff (feature F6): the cash summary names who made it.
+  await t.db.cashMovement.create({
+    data: { sessionId: session.id, type: 'PAY_IN', amount: '10000', createdById: staff.id },
+  });
 });
 afterAll(() => t.close());
 
@@ -126,6 +130,8 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'expenses:list': {},
   'menu:get': { id: 1 },
   'sessions:get': { id: 1 },
+  'sessions:cashSummary': { id: 1 },
+  'printing:shiftReport': { sessionId: 1, kind: 'X' },
   'orders:getTable': { tableNumber: 1 },
   'orders:getByNumber': { orderNumber: '2026-00001' },
   'checks:list': { startDate: today, endDate: today },
@@ -181,6 +187,7 @@ describe('no secrets over IPC', () => {
       ['debts:void', { repaymentId: 1, reason: 'Tekshiruv' }],
       ['debts:list', { includeSettled: true }],
       ['debts:get', { customerId: null }],
+      ['sessions:addCashMovement', { type: 'PAY_IN', amount: '1000', note: 'x' }],
     ];
     for (const [channel, input] of calls) {
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx(admin), input);

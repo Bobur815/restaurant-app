@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  ArrowLeftRight,
   Banknote,
   ChartColumn,
   Check,
@@ -47,6 +48,7 @@ import {
 /** The icon set the app uses (lucide, built as real SVG nodes: no innerHTML, CSP-safe). */
 const ICONS = {
   back: ArrowLeft,
+  move: ArrowLeftRight,
   cash: Banknote,
   reports: ChartColumn,
   check: Check,

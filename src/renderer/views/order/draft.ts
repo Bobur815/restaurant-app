@@ -114,6 +114,9 @@ export const draftUsage = (lines: DraftLine[]) =>
     lines.map((l) => ({ menuItemId: l.menuItemId, stock: priced(l).stockQuantity.toFixed() })),
   );
 
+/** A dish not counted in this shift (feature F6): never sold out. */
+export const UNLIMITED = 'unlimited';
+
 export const savedUsage = (order: OrderDto | null) =>
   stockUsage(
     (order?.lines ?? []).map((l) => ({ menuItemId: l.menuItemId, stock: l.stockQuantity })),
@@ -129,9 +132,10 @@ export function available(
   session: SessionDto | null,
   saved: Map<number, DecimalString>,
   draft: Map<number, DecimalString>,
-): DecimalString | null {
+): DecimalString | typeof UNLIMITED | null {
   const item = session?.items.find((i) => i.menuItemId === menuItemId);
   if (!item) return null;
+  if (item.unlimited) return UNLIMITED;
   return toQtyString(
     dec(item.remainingQuantity)
       .plus(saved.get(menuItemId) ?? '0')

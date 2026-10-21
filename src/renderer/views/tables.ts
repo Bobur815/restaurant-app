@@ -3,11 +3,12 @@ import { formatPhone } from '@shared/utils/phone';
 import { api } from '../api';
 import { toastError } from '../components/toast';
 import { t } from '../i18n';
-import { appStore, licensed } from '../store/app';
+import { appStore, can, licensed } from '../store/app';
 import { html } from '../ui/html';
 import { icon } from '../ui/icons';
 import { playClick } from '../ui/sound';
 import { formatMoney, formatTime } from '../utils/format';
+import { moveTableModal } from './order/move-table-modal';
 import type { View } from './types';
 
 const ALL = 'all';
@@ -93,7 +94,22 @@ export const tablesView: View = ({ navigate }) => {
       playClick();
       navigate(`/tables/${n}`);
     });
-    return b;
+    // A busy table gets a move button beside the card (a button cannot hold another button).
+    if (!order || !can('orders')) return b;
+    const cell = document.createElement('div');
+    cell.className = 'table-cell';
+    const move = document.createElement('button');
+    move.type = 'button';
+    move.className = 'icon-button table-move';
+    move.title = t('moveTable.button');
+    move.setAttribute('aria-label', `${t('moveTable.button')}: ${t('tables.table', { n })}`);
+    move.append(icon('move', 18));
+    move.addEventListener('click', () => {
+      playClick();
+      void moveTableModal(n, order.version);
+    });
+    cell.append(b, move);
+    return cell;
   };
 
   const grid = (tables: DiningTableDto[], byTable: Map<number, TableSummaryDto>) => {
@@ -173,14 +189,15 @@ export const tablesView: View = ({ navigate }) => {
             ${o.orderType === 'DELIVERY' && o.deliveryAddress
               ? html`<span class="open-order-address">${o.deliveryAddress}</span>`
               : ''}
+            ${o.deliveryStatus
+              ? html`<span class="open-order-status"
+                  ><span class="badge badge-${o.deliveryStatus === 'ON_THE_WAY' ? 'info' : 'muted'}"
+                    >${t(`delivery.${o.deliveryStatus}`)}</span
+                  ></span
+                >`
+              : ''}
             <span class="open-order-foot">
               <strong>${formatMoney(o.totalAmount, language)}</strong>
-              ${o.deliveryStatus
-                ? html`<span
-                    class="badge badge-${o.deliveryStatus === 'ON_THE_WAY' ? 'info' : 'muted'}"
-                    >${t(`delivery.${o.deliveryStatus}`)}</span
-                  >`
-                : ''}
               <span class="muted">№ ${o.orderNumber}</span>
             </span>`,
         );

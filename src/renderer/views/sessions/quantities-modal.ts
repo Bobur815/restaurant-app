@@ -1,7 +1,7 @@
 import type { MenuItemDto, PendingCarryDto, SessionDto } from '@shared/types';
 import { dec, isDecimalString, toQtyString, type DecimalString } from '@shared/utils/decimal';
 import { api } from '../../api';
-import { formError } from '../../components/forms';
+import { field, formError } from '../../components/forms';
 import { openModal } from '../../components/modal';
 import { errorMessage, toast } from '../../components/toast';
 import { t } from '../../i18n';
@@ -9,6 +9,7 @@ import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { formatQty, localName, toInputDecimal } from '../../utils/format';
+import { moneyIn } from './cash-panel';
 
 const parseQty = (raw: string): DecimalString | null | 'invalid' => {
   const v = raw.trim().replace(',', '.');
@@ -19,15 +20,19 @@ const parseQty = (raw: string): DecimalString | null | 'invalid' => {
 /**
  * Open a shift (pre-filled with carried leftovers, exact quantities) or edit the open one
  * (quantities can grow, dishes can be added; nothing below what is sold, nothing removed).
+ * Feature F6: each dish can be ∞ (not counted; pre-ticked from the last shift when opening), and
+ * opening asks for the cash counted into the drawer.
  * Resolves the saved shift, or null when cancelled.
  */
 export async function shiftQuantitiesModal(session: SessionDto | null): Promise<SessionDto | null> {
   const lang = appStore.get().language;
   const editing = session !== null;
-  const [menu, carry] = await Promise.all([
+  const [menu, carry, lastUnlimited] = await Promise.all([
     api.menu.list({}),
     editing ? Promise.resolve<PendingCarryDto[]>([]) : api.sessions.pendingCarry(),
+    editing ? Promise.resolve<number[]>([]) : api.sessions.lastUnlimited(),
   ]);
+  const wasUnlimited = new Set(lastUnlimited);
 
   const existing = new Map((session?.items ?? []).map((i) => [i.menuItemId, i]));
   const carried = new Map<number, string>();
@@ -46,6 +51,7 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
   );
 
   const inputs = new Map<number, HTMLInputElement>();
+  const unlimitedBoxes = new Map<number, HTMLInputElement>();
   const rows = dishes.map((dish) => {
     const input = document.createElement('input');
     input.type = 'text';
@@ -56,6 +62,25 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
     input.value = toInputDecimal(ex ? ex.initialQuantity : carried.get(dish.id));
     input.required = !!ex; // a dish in the open shift cannot be removed
     inputs.set(dish.id, input);
+
+    // ∞: not counted in this shift; the quantity field is off while it is on.
+    const unlimited = document.createElement('input');
+    unlimited.type = 'checkbox';
+    unlimited.checked = ex ? ex.unlimited : wasUnlimited.has(dish.id);
+    unlimited.setAttribute('aria-label', `${t('sessions.unlimited')}: ${localName(dish, lang)}`);
+    unlimited.title = t('sessions.unlimitedHint');
+    unlimitedBoxes.set(dish.id, unlimited);
+    const syncUnlimited = () => {
+      input.disabled = unlimited.checked;
+      input.placeholder = unlimited.checked ? '∞' : '';
+      if (unlimited.checked) input.value = '';
+      else if (ex?.unlimited && !input.value) input.value = toInputDecimal(ex.soldQuantity);
+    };
+    unlimited.addEventListener('change', syncUnlimited);
+    syncUnlimited();
+    const unlimitedLabel = document.createElement('label');
+    unlimitedLabel.className = 'unlimited-toggle';
+    unlimitedLabel.append(unlimited, document.createTextNode('∞'));
 
     const tr = document.createElement('tr');
     tr.dataset['search'] = `${dish.nameUz} ${dish.nameRu ?? ''}`.toLocaleLowerCase();
@@ -70,9 +95,8 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
           <div class="muted small">${hint}</div>
         </td>
         <td class="muted">${dish.categoryNameUz}</td>
-        <td class="num">
-          ${input}${dish.soldByWeight ? html`<span class="unit">kg</span>` : ''}
-        </td>`,
+        <td class="num">${input}${dish.soldByWeight ? html`<span class="unit">kg</span>` : ''}</td>
+        <td class="center">${unlimitedLabel}</td>`,
     );
     return tr;
   });
@@ -87,7 +111,16 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
   });
 
   const error = formError();
-  const body = html`<p class="muted">${t('sessions.qtyHint')}</p>
+  const cashField = editing
+    ? ''
+    : field({
+        name: 'openingCash',
+        label: t('cash.openingField'),
+        inputmode: 'decimal',
+        value: '0',
+      });
+  const body = html`${cashField}
+    <p class="muted">${t('sessions.qtyHint')}</p>
     ${carry.length
       ? html`<p class="notice notice-info">
           ${icon('check')}<span>${t('sessions.carryHint', { count: carried.size })}</span>
@@ -101,6 +134,7 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
             <th>${t('sessions.dish')}</th>
             <th>${t('sessions.category')}</th>
             <th class="num">${t('sessions.quantity')}</th>
+            <th class="center" title="${t('sessions.unlimitedHint')}">${t('sessions.unlimited')}</th>
           </tr>
         </thead>
         <tbody>
@@ -124,8 +158,16 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
         onClick: async () => {
           error.textContent = '';
           for (const input of inputs.values()) input.removeAttribute('aria-invalid');
-          const items: Array<{ menuItemId: number; initialQuantity: string }> = [];
+          const items: Array<{
+            menuItemId: number;
+            initialQuantity?: string;
+            unlimited?: boolean;
+          }> = [];
           for (const [menuItemId, input] of inputs) {
+            if (unlimitedBoxes.get(menuItemId)!.checked) {
+              items.push({ menuItemId, unlimited: true });
+              continue;
+            }
             const qty = parseQty(input.value);
             const ex = existing.get(menuItemId);
             const invalid =
@@ -148,7 +190,11 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
           try {
             saved = editing
               ? await api.sessions.update({ sessionId: session.id, items })
-              : await api.sessions.open({ items });
+              : await api.sessions.open({
+                  items,
+                  openingCash:
+                    moneyIn(cashField ? cashField.querySelector('input')!.value : '') || '0',
+                });
             toast(editing ? t('sessions.updated') : t('sessions.opened_toast'), 'success');
           } catch (e) {
             error.textContent = errorMessage(e);

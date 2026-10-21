@@ -173,9 +173,11 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  /* Closing is quicker than opening; both decelerate so the edge settles instead of stopping. */
   transition:
-    width 0.18s ease,
-    box-shadow 0.18s ease;
+    width 0.2s var(--ease-drawer),
+    box-shadow 0.2s ease;
+  will-change: width;
 }
 
 /* Open: hover (.is-open after an intent pause), pinned by the hamburger, or keyboard focus. */
@@ -184,19 +186,43 @@
 .sidebar:has(:focus-visible) .sidebar-panel {
   width: var(--sidebar-drawer-width);
   box-shadow: var(--shadow-lg);
+  transition:
+    width 0.28s var(--ease-drawer),
+    box-shadow 0.28s ease;
 }
 
-.sidebar-label {
+/* Labels slide in with the edge and fade out first when it closes. */
+.sidebar-label,
+.nav-section-title > span {
   white-space: nowrap;
   opacity: 0;
-  transition: opacity 0.12s ease;
+  transform: translateX(-6px);
+  transition:
+    opacity 0.1s ease,
+    transform 0.1s ease;
 }
 
-.sidebar.is-open .sidebar-label,
-.sidebar.is-pinned .sidebar-label,
-.sidebar:has(:focus-visible) .sidebar-label {
+.sidebar.is-open :is(.sidebar-label, .nav-section-title > span),
+.sidebar.is-pinned :is(.sidebar-label, .nav-section-title > span),
+.sidebar:has(:focus-visible) :is(.sidebar-label, .nav-section-title > span) {
   opacity: 1;
-  transition-delay: 0.06s;
+  transform: none;
+  transition:
+    opacity 0.2s ease 0.08s,
+    transform 0.24s var(--ease-drawer) 0.08s;
+}
+
+/* Windows with "Animation effects" off reports reduced motion, which switches every transition
+   off (base.css). The drawer still slides, briefly and plainly: snapping 176 px wide over the
+   page is more jarring than a short slide. The labels only fade. */
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-panel {
+    transition: width 0.16s ease-out !important;
+  }
+
+  .sidebar :is(.sidebar-label, .nav-section-title > span) {
+    transform: none !important;
+  }
 }
 
 .sidebar-hamburger {
@@ -226,22 +252,35 @@
 }
 
 .nav-section-title {
-  /* Centred over the icons in the rail, aligned with the labels in the drawer. */
-  padding: 0 0 var(--space-1);
+  /* The rail is too narrow for the words: a short rule over the icons there, the title in the
+     drawer (aligned with the labels, so nothing jumps sideways as it opens). */
+  position: relative;
+  min-height: 16px;
+  padding: 0 0 var(--space-1) 14px;
   color: var(--color-text-muted);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
-  text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
 }
 
-.sidebar.is-open .nav-section-title,
-.sidebar.is-pinned .nav-section-title,
-.sidebar:has(:focus-visible) .nav-section-title {
-  padding-left: 14px;
-  text-align: left;
+.nav-section-title::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 14px;
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--color-border);
+  transition: opacity 0.12s ease;
+}
+
+.sidebar.is-open .nav-section-title::before,
+.sidebar.is-pinned .nav-section-title::before,
+.sidebar:has(:focus-visible) .nav-section-title::before {
+  opacity: 0;
 }
 
 .nav-link {

@@ -5,10 +5,12 @@ import { button, pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
 import { appStore, can } from '../../store/app';
+import { dec } from '@shared/utils/decimal';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
-import { formatDateTime, formatQty, localName } from '../../utils/format';
+import { formatDateTime, formatMoney, formatQty, localName } from '../../utils/format';
 import type { View } from '../types';
+import { cashPanel, cashSummaryBlock, differenceText, printShiftReport } from './cash-panel';
 import { closeShiftModal } from './close-modal';
 import { shiftQuantitiesModal } from './quantities-modal';
 
@@ -31,9 +33,15 @@ function itemsTable(session: SessionDto): HTMLElement {
           (i) =>
             html`<tr>
               <td class="line-name">${localName(i, lang)}</td>
-              <td class="num">${formatQty(i.initialQuantity, lang, i.soldByWeight)}</td>
+              <td class="num">
+                ${i.unlimited
+                  ? html`<span class="unlimited-mark" title="${t('sessions.unlimitedHint')}">∞</span>`
+                  : formatQty(i.initialQuantity, lang, i.soldByWeight)}
+              </td>
               <td class="num">${formatQty(i.soldQuantity, lang, i.soldByWeight)}</td>
-              <td class="num strong">${formatQty(i.remainingQuantity, lang, i.soldByWeight)}</td>
+              <td class="num strong">
+                ${i.unlimited ? '∞' : formatQty(i.remainingQuantity, lang, i.soldByWeight)}
+              </td>
             </tr>`,
         )}
       </tbody>
@@ -47,11 +55,12 @@ export const sessionsView: View = () => {
   const el = document.createElement('section');
   el.className = 'page';
   const current = document.createElement('div');
+  const cash = document.createElement('div');
   const history = document.createElement('div');
   // Anyone sees the shift; opening, editing and closing it need the shifts permission.
   const shifts = can('shifts');
   const openButton = button(t('sessions.open'), 'primary', () => void openShift());
-  el.append(pageHeader(t('sessions.title'), openButton), current, history);
+  el.append(pageHeader(t('sessions.title'), openButton), current, cash, history);
 
   let sessions: SessionDto[] = [];
 
@@ -64,6 +73,7 @@ export const sessionsView: View = () => {
     const open = sessions.find((s) => s.status === 'open') ?? null;
     openButton.hidden = !!open || !shifts;
     current.replaceChildren();
+    cash.replaceChildren();
     if (!open) {
       current.className = 'notice notice-warning';
       current.append(html`${icon('warning')}<span>${t('sessions.none')}</span>`);
@@ -93,15 +103,39 @@ export const sessionsView: View = () => {
       </div>`,
       itemsTable(open),
     );
+    // The drawer (feature F6) is for whoever runs the shift.
+    cash.replaceChildren(shifts ? cashPanel(open.id) : '');
+  };
+
+  /** A closed shift: its stock, and for shift users its cash count, movements and Z-report. */
+  const showDetails = async (s: SessionDto) => {
+    const body = document.createElement('div');
+    if (shifts) {
+      try {
+        const summary = await api.sessions.cashSummary({ id: s.id });
+        body.append(
+          html`<h3 class="section-title">${t('cash.title')}</h3>`,
+          cashSummaryBlock(summary),
+          button(t('cash.zReport'), 'secondary', () => void printShiftReport(s.id, 'Z')),
+        );
+      } catch (e) {
+        toastError(e);
+      }
+    }
+    body.append(html`<h3 class="section-title">${t('sessions.items')}</h3>`, itemsTable(s));
+    openModal({ title: t('sessions.details', { id: s.id }), body, size: 'lg' });
   };
 
   const renderHistory = () => {
     const closed = sessions.filter((s) => s.status === 'closed');
     const admin = can('corrections');
     const rows = closed.map((s) => {
-      const view = button(t('sessions.view'), 'ghost', () =>
-        openModal({ title: t('sessions.details', { id: s.id }), body: itemsTable(s), size: 'lg' }),
-      );
+      const view = button(t('sessions.view'), 'ghost', () => void showDetails(s));
+      const lang = appStore.get().language;
+      const diff =
+        s.countedCash !== null && s.expectedCash !== null
+          ? differenceText(dec(s.countedCash).minus(s.expectedCash).toFixed())
+          : null;
       const del = admin
         ? button(t('sessions.delete'), 'danger-ghost', async () => {
             const ok = await confirmDialog({
@@ -130,6 +164,9 @@ export const sessionsView: View = () => {
           <div class="muted small">${s.closedBy ?? ''}</div>
         </td>
         <td class="num">${s.items.length}</td>
+        <td class="num">${s.expectedCash !== null ? formatMoney(s.expectedCash, lang) : '—'}</td>
+        <td class="num">${s.countedCash !== null ? formatMoney(s.countedCash, lang) : '—'}</td>
+        <td class="num strong ${diff?.cls ?? ''}">${diff ? diff.text : '—'}</td>
         <td class="row-actions">${view}${del}</td>
       </tr>`;
     });
@@ -145,6 +182,9 @@ export const sessionsView: View = () => {
                   <th>${t('sessions.opened')}</th>
                   <th>${t('sessions.closed')}</th>
                   <th class="num">${t('sessions.items')}</th>
+                  <th class="num">${t('cash.expected')}</th>
+                  <th class="num">${t('cash.counted')}</th>
+                  <th class="num">${t('cash.difference')}</th>
                   <th></th>
                 </tr>
               </thead>

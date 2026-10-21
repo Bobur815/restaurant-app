@@ -20,6 +20,7 @@ import type { View } from '../types';
 import {
   addDish,
   available,
+  UNLIMITED,
   draftTotal,
   draftUsage,
   fromOrder,
@@ -35,6 +36,7 @@ import {
 } from './draft';
 import { createCustomerPanel, type OpenType } from './customer-panel';
 import { payOrderModal } from './payment-modal';
+import { moveTableModal } from './move-table-modal';
 import { printReceipt } from './print-receipt';
 import { askWeight } from './weight-modal';
 
@@ -106,7 +108,7 @@ export const orderView: View = ({ params, navigate }) => {
   el.className = 'page order-page';
   el.append(
     html`<div class="order-panel">
-        <header class="order-header">
+        <header class="order-header" data-ref="header">
           <a class="btn btn-ghost" href="#/tables"
             >${icon('back', 18)}<span>${t('app.back')}</span></a
           >
@@ -140,6 +142,7 @@ export const orderView: View = ({ params, navigate }) => {
   );
   const r = refs<{
     title: HTMLElement;
+    header: HTMLElement;
     customer: HTMLElement;
     number: HTMLElement;
     notice: HTMLElement;
@@ -156,6 +159,12 @@ export const orderView: View = ({ params, navigate }) => {
   const cancelButton = button(t('order.cancelOrder'), 'danger-ghost');
   // Closing an order (payment) is its own permission: a waiter saves, the cashier takes the money.
   r.actions.append(cancelButton, ...(can('payments') ? [payButton] : []), saveButton);
+  // Guests changed seats: a saved table order moves to a free table.
+  const moveButton = document.createElement('button');
+  moveButton.type = 'button';
+  moveButton.className = 'btn btn-secondary order-move';
+  moveButton.append(html`${icon('move', 18)}<span>${t('moveTable.button')}</span>`);
+  if (target.kind === 'table') r.header.append(moveButton);
 
   function button(label: string, kind: string): HTMLButtonElement {
     const b = document.createElement('button');
@@ -246,6 +255,8 @@ export const orderView: View = ({ params, navigate }) => {
     payButton.disabled = saving || !order || unsaved || stale;
     cancelButton.disabled = saving || !order || stale;
     payButton.title = order && unsaved ? t('order.unsaved') : '';
+    moveButton.disabled = saving || !order || unsaved || stale;
+    moveButton.title = order && unsaved ? t('order.unsaved') : '';
     renderDishes();
   }
 
@@ -383,7 +394,7 @@ export const orderView: View = ({ params, navigate }) => {
     r.dishes.replaceChildren(
       ...dishes.map((dish) => {
         const left = availabilityOf(dish);
-        const out = left === null || dec(left).lte(0);
+        const out = left === null || (left !== UNLIMITED && dec(left).lte(0));
         const b = document.createElement('button');
         b.type = 'button';
         b.className = `dish-card${out ? ' is-out' : ''}`;
@@ -391,9 +402,11 @@ export const orderView: View = ({ params, navigate }) => {
         const badge =
           left === null
             ? t('order.notInSession')
-            : dec(left).lte(0)
-              ? t('order.outOfStock')
-              : t('order.left', { qty: formatQty(left, l, dish.soldByWeight) });
+            : left === UNLIMITED
+              ? t('order.unlimited')
+              : dec(left).lte(0)
+                ? t('order.outOfStock')
+                : t('order.left', { qty: formatQty(left, l, dish.soldByWeight) });
         b.append(
           html`${thumb(dish.imageFile, 'dish-image')}
             <span class="dish-name">${localName(dish, l)}</span>
@@ -444,7 +457,6 @@ export const orderView: View = ({ params, navigate }) => {
     renderLines();
     panel?.clearErrors();
     try {
-      const wasNew = order === null;
       if (target.kind === 'table') {
         order = await api.orders.save(toSaveInput(tableNumber, lines, order?.version));
       } else {
@@ -459,8 +471,11 @@ export const orderView: View = ({ params, navigate }) => {
       lines = fromOrder(order, menu);
       panel?.setOrder(order);
       toast(t('order.saved'), 'success');
-      // A new takeaway/delivery order now has an address of its own (no history entry).
-      if (target.kind === 'open' && wasNew) location.replace(`#/orders/${order.id}`);
+      // The courier leaves with the receipt: a delivery order prints on every save, in the
+      // background like after payment.
+      if (order.orderType === 'DELIVERY') printReceipt(order.id);
+      // Saved means done here: back to the tables (open orders are listed there too).
+      navigate('/tables');
       return true;
     } catch (error) {
       const details = isApiError(error)
@@ -498,15 +513,23 @@ export const orderView: View = ({ params, navigate }) => {
   payButton.addEventListener('click', async () => {
     playClick();
     if (!order) return;
-    const paid = await payOrderModal(order);
-    if (paid) {
-      // Legacy printed after every payment; in the background, so a printer problem never
-      // holds up the next customer.
-      if (appStore.get().settings?.printAfterPayment !== false) printReceipt(paid.id);
+    const result = await payOrderModal(order);
+    if (result) {
+      const { order: paid, print } = result;
+      // The cashier ticks it in the payment window; in the background, so a printer problem
+      // never holds up the next customer.
+      if (print) printReceipt(paid.id);
       order = null;
       lines = [];
       navigate('/tables');
     }
+  });
+
+  moveButton.addEventListener('click', async () => {
+    playClick();
+    if (!order || dirty()) return;
+    const moved = await moveTableModal(tableNumber, order.version);
+    if (moved) navigate('/tables');
   });
 
   cancelButton.addEventListener('click', async () => {
@@ -566,7 +589,7 @@ export const orderView: View = ({ params, navigate }) => {
     e.preventDefault();
     const first = visibleDishes().find((d) => {
       const left = availabilityOf(d);
-      return left !== null && dec(left).gt(0);
+      return left === UNLIMITED || (left !== null && dec(left).gt(0));
     });
     if (first) void addToOrder(first);
   });

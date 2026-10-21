@@ -11,6 +11,7 @@ import {
   refreshActor,
 } from '../auth/auth';
 import { hasPermission, type Permission } from '@shared/permissions';
+import type { SessionDto } from '@shared/types';
 import {
   createHall,
   createTable,
@@ -39,6 +40,7 @@ import {
   getTableOrder,
   listBusyTables,
   listOpenOrders,
+  moveTableOrder,
   saveOpenOrder,
   saveTableOrder,
   setDeliveryStatus,
@@ -55,12 +57,15 @@ import {
 } from '../debts/debts';
 import { getReceiptLayouts, updateReceiptLayout } from '../printing/layouts';
 import { previewReceipt, printOrderReceipt, printTestReceipt } from '../printing/printing';
+import { printShiftReport } from '../printing/shift-report';
+import { addCashMovement, getCashSummary } from '../sessions/cash';
 import { salesReport } from '../reports/reports';
 import { applyResiduals, listExpenses, listResiduals } from '../residuals/residuals';
 import {
   closeSession,
   deleteSession,
   getOpenSession,
+  getLastUnlimited,
   getPendingCarry,
   getSession,
   listSessions,
@@ -99,6 +104,15 @@ const need = <C extends IpcChannel, Sc extends z.ZodType>(
  * extra channel a compile error. Handlers stay thin: parse (done by invokeHandler), call the
  * domain module, return its DTO.
  */
+/**
+ * A shift's drawer figures (feature F6) go only to users who run shifts, like
+ * `sessions:cashSummary`; anyone else gets the shift without them.
+ */
+function drawerFor<T extends SessionDto | null>(ctx: HandlerContext, s: T): T {
+  if (!s || (ctx.actor && hasPermission(ctx.actor, 'shifts'))) return s;
+  return { ...s, openingCash: null, countedCash: null, expectedCash: null };
+}
+
 /** The logged-in user if they hold the settings permission (re-read), else null. */
 async function settingsActor(ctx: HandlerContext) {
   const actor = ctx.actor ? await refreshActor(ctx.db, ctx.actor) : null;
@@ -234,6 +248,10 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'printing:preview': need('settings', S.previewReceiptInput, (ctx, input) =>
     previewReceipt(ctx.db, ctx.services.printer, input, ctx.services.receiptImage),
   ),
+  // X/Z shift report (feature F6): the same people who open and close shifts.
+  'printing:shiftReport': need('shifts', S.shiftReportInput, (ctx, input) =>
+    printShiftReport(ctx.db, ctx.services.printer, input),
+  ),
 
   // ── halls & tables ───────────────────────────────────────────────────────────────────────
   // Hidden halls and tables are for the settings page (admins); everyone else sees active ones.
@@ -281,10 +299,20 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'menu:pickImage': need('menu', S.empty, (ctx) => ctx.services.pickImage()),
 
   // ── sessions (shifts): any logged-in user runs the day; deleting one is admin-only ─────────
-  'sessions:getOpen': user(S.empty, (ctx) => getOpenSession(ctx.db)),
-  'sessions:get': user(S.idInput, (ctx, { id }) => getSession(ctx.db, id)),
-  'sessions:list': user(S.listSessionsInput, (ctx, input) => listSessions(ctx.db, input)),
+  'sessions:getOpen': user(S.empty, async (ctx) => drawerFor(ctx, await getOpenSession(ctx.db))),
+  'sessions:get': user(S.idInput, async (ctx, { id }) =>
+    drawerFor(ctx, await getSession(ctx.db, id)),
+  ),
+  'sessions:list': user(S.listSessionsInput, async (ctx, input) =>
+    (await listSessions(ctx.db, input)).map((s) => drawerFor(ctx, s)),
+  ),
   'sessions:pendingCarry': user(S.empty, (ctx) => getPendingCarry(ctx.db)),
+  'sessions:lastUnlimited': user(S.empty, (ctx) => getLastUnlimited(ctx.db)),
+  // The drawer (feature F6): its figures and cash in/out belong to whoever runs the shift.
+  'sessions:cashSummary': need('shifts', S.idInput, (ctx, { id }) => getCashSummary(ctx.db, id)),
+  'sessions:addCashMovement': need('shifts', S.addCashMovementInput, (ctx, input) =>
+    addCashMovement(ctx.db, ctx.actor, input),
+  ),
   'sessions:open': need('shifts', S.openSessionInput, (ctx, input) =>
     openSession(ctx.db, ctx.actor, input),
   ),
@@ -312,6 +340,9 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   ),
   'orders:cancel': need('orders', S.cancelTableOrderInput, (ctx, input) =>
     cancelTableOrder(ctx.db, input),
+  ),
+  'orders:moveTable': need('orders', S.moveTableInput, (ctx, input) =>
+    moveTableOrder(ctx.db, input),
   ),
   'orders:get': need('orders', S.idInput, (ctx, { id }) => getOrder(ctx.db, id)),
   'orders:openList': need('orders', S.empty, (ctx) => listOpenOrders(ctx.db)),

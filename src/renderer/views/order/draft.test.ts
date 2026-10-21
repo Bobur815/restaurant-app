@@ -2,6 +2,7 @@ import type { MenuItemDto, OrderDto, SessionDto } from '@shared/types';
 import {
   addDish,
   available,
+  UNLIMITED,
   draftTotal,
   draftUsage,
   fromOrder,
@@ -70,6 +71,15 @@ describe('order draft', () => {
     lines = setQuantity(lines, lines[0]!.key, 4); // 4 full portions
     expect(available(2, session, savedUsage(order), draftUsage(lines))).toBe('0.5');
     expect(available(1, session, savedUsage(order), draftUsage(lines))).toBeNull();
+  });
+
+  it('an unlimited (∞) dish is always available, whatever the draft holds', () => {
+    const session = {
+      items: [{ menuItemId: 2, remainingQuantity: '0', unlimited: true }],
+    } as unknown as SessionDto;
+    let lines = addDish([], osh);
+    lines = setQuantity(lines, lines[0]!.key, 500);
+    expect(available(2, session, savedUsage(null), draftUsage(lines))).toBe(UNLIMITED);
   });
 
   it('round-trips a saved order and detects unsaved changes', () => {

@@ -114,6 +114,9 @@ describe('licence', () => {
       'orders:cancel',
       'reports:sales',
       'license:checkNow',
+      // A till blocked mid-shift still takes cash in/out and counts out (feature F6).
+      'sessions:addCashMovement',
+      'printing:shiftReport',
     ] as const) {
       expect(await refusal(ch, { start: 'a', end: 'a' }, readonly, halls)).toBeNull();
     }

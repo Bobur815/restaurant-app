@@ -1,6 +1,7 @@
 import type { OrderDto } from '@shared/types';
 import { dec } from '@shared/utils/decimal';
 import { api } from '../../api';
+import { checkboxField } from '../../components/forms';
 import { openModal } from '../../components/modal';
 import { toast } from '../../components/toast';
 import { t } from '../../i18n';
@@ -8,14 +9,28 @@ import { appStore } from '../../store/app';
 import { formatMoney } from '../../utils/format';
 import { createTenderEditor } from './tender-editor';
 
+export interface PaidResult {
+  order: OrderDto;
+  print: boolean;
+}
+
 /**
  * Pays the order (legacy payment window as a modal): one method, or split over several, part of
- * it on debt (nasiya). Resolves the paid order, or null if closed.
+ * it on debt (nasiya). Resolves the paid order and whether to print its receipt, or null if closed.
+ *
+ * Printing is the cashier's choice here. It starts from the "print after payment" setting, except
+ * for delivery: its receipt already printed when the order was saved, so it starts unticked.
  */
-export function payOrderModal(order: OrderDto): Promise<OrderDto | null> {
+export function payOrderModal(order: OrderDto): Promise<PaidResult | null> {
   return new Promise((resolve) => {
     const lang = appStore.get().language;
     let paid: OrderDto | null = null;
+    const printBox = checkboxField({
+      name: 'printReceipt',
+      label: t('payment.printReceipt'),
+      checked:
+        order.orderType !== 'DELIVERY' && appStore.get().settings?.printAfterPayment !== false,
+    });
     let confirm: HTMLButtonElement | null = null;
 
     const editor = createTenderEditor({
@@ -36,7 +51,12 @@ export function payOrderModal(order: OrderDto): Promise<OrderDto | null> {
               type: t(`orderType.${order.orderType}`),
               number: order.orderNumber,
             }),
-      body: editor.el,
+      body: (() => {
+        const body = document.createElement('div');
+        printBox.classList.add('payment-print');
+        body.append(editor.el, printBox);
+        return body;
+      })(),
       size: 'md',
       initialFocus: () => editor.el.querySelector<HTMLInputElement>('[name="received"]'),
       actions: [
@@ -74,6 +94,8 @@ export function payOrderModal(order: OrderDto): Promise<OrderDto | null> {
     });
     confirm = modal.dialog.querySelector<HTMLButtonElement>('button[type="submit"]');
     if (confirm) confirm.disabled = !editor.canSubmit();
-    void modal.closed.then(() => resolve(paid));
+    void modal.closed.then(() =>
+      resolve(paid ? { order: paid, print: printBox.querySelector('input')!.checked } : null),
+    );
   });
 }

@@ -8,8 +8,8 @@ import { conflict } from '../domain/errors';
  * the caller's transaction (order save, cancel), so the order and its stock change together or
  * not at all (legacy updated stock outside the transaction, one dish at a time: quirk 2).
  *
- * All-or-nothing: if any dish would go below zero sold or above its initial quantity, nothing is
- * written and a CONFLICT lists every shortage.
+ * All-or-nothing: if any dish would go below zero sold or above its initial quantity (unless it is
+ * unlimited in this shift), nothing is written and a CONFLICT lists every shortage.
  */
 export async function applyStockDeltas(
   tx: Tx,
@@ -52,7 +52,8 @@ export async function applyStockDeltas(
     const initial = dec(item.initialQuantity.toString());
     const sold = dec(item.soldQuantity.toString());
     const next = sold.plus(delta);
-    if (next.gt(initial)) {
+    // An unlimited (∞) dish has no upper limit; what is sold is still counted (feature F6).
+    if (!item.unlimited && next.gt(initial)) {
       shortages.push({
         menuItemId,
         nameUz: item.menuItem.nameUz,
