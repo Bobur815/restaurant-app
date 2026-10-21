@@ -1,6 +1,6 @@
 {
   "name": "savdochef",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "SavdoChef - offline restaurant POS",
   "main": "dist-electron/main/index.js",
   "author": "Boburmirzo Ergashev",
