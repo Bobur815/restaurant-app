@@ -272,8 +272,17 @@
   color: var(--color-primary);
 }
 
-.outlet {
+.shell-main {
   grid-area: main;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.outlet {
+  flex: 1;
+  min-height: 0;
   border-radius: var(--radius-lg);
   overflow: auto;
   outline: none;

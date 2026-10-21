@@ -5,7 +5,7 @@ import { field, selectField, value } from '../../components/forms';
 import { button, pageHeader } from '../../components/page';
 import { toastError } from '../../components/toast';
 import { t } from '../../i18n';
-import { appStore } from '../../store/app';
+import { appStore, licensed } from '../../store/app';
 import { html } from '../../ui/html';
 import { daysBetween, presetRange, type RangePreset } from '../../utils/dates';
 import { formatDate, formatDateTime, formatMoney, formatQty } from '../../utils/format';
@@ -18,7 +18,9 @@ type Tab = 'sales' | 'residuals' | 'expenses';
 export const reportsView: View = () => {
   const lang = () => appStore.get().language;
   let tab: Tab = 'sales';
-  let range = presetRange('week');
+  // Sales over more than one day are a plan feature (F5); without it the page works per day.
+  const longRanges = licensed('reports');
+  let range = presetRange(longRanges ? 'week' : 'today');
   let chart: { destroy(): void } | null = null;
   let residualPage = 1;
   let expensePage = 1;
@@ -29,7 +31,10 @@ export const reportsView: View = () => {
   // ── range controls (shared by the tabs) ───────────────────────────────────────────────────
   const rangeForm = document.createElement('form');
   rangeForm.className = 'filters';
-  const presets = (['today', 'yesterday', 'week', 'month', 'lastMonth'] as RangePreset[]).map((p) =>
+  const presetIds: RangePreset[] = longRanges
+    ? ['today', 'yesterday', 'week', 'month', 'lastMonth']
+    : ['today', 'yesterday'];
+  const presets = presetIds.map((p) =>
     button(t(`reports.${p}`), 'secondary', () => {
       range = presetRange(p);
       syncInputs();
@@ -41,6 +46,12 @@ export const reportsView: View = () => {
       ${field({ name: 'end', label: t('reports.to'), type: 'date', value: range.end })}
       <div class="preset-row">${presets}</div>`,
   );
+  if (!longRanges) {
+    rangeForm.querySelector('[name="end"]')!.closest('.field')!.toggleAttribute('hidden', true);
+    const startField = rangeForm.querySelector('[name="start"]')!.closest('.field')!;
+    startField.querySelector('label')!.textContent = t('reports.day');
+    rangeForm.append(html`<p class="muted">${t('reports.oneDayOnly')}</p>`);
+  }
   const syncInputs = () => {
     rangeForm.querySelector<HTMLInputElement>('[name="start"]')!.value = range.start;
     rangeForm.querySelector<HTMLInputElement>('[name="end"]')!.value = range.end;
@@ -48,7 +59,7 @@ export const reportsView: View = () => {
   rangeForm.addEventListener('change', (e) => {
     if (!(e.target instanceof HTMLInputElement)) return;
     const start = value(rangeForm, 'start');
-    const end = value(rangeForm, 'end');
+    const end = longRanges ? value(rangeForm, 'end') : start;
     if (start && end && start <= end) {
       range = { start, end };
       void load();

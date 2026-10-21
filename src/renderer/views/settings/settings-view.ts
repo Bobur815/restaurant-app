@@ -11,6 +11,7 @@ import { paymentsSection } from './payments-section';
 import { printerSection } from './printer-section';
 import { receiptSection } from './receipt-section';
 import { systemSection } from './system-section';
+import { subscriptionSection } from './subscription-section';
 import { updateSection } from './update-section';
 
 interface Section {
@@ -24,14 +25,63 @@ interface Section {
 
 /** Settings sections, in menu order. Each is a View that renders its own page header. */
 export const SETTINGS_SECTIONS: readonly Section[] = [
-  { id: 'system', label: 'settings.sectionSystem', icon: 'sliders', view: systemSection, needs: 'settings' },
-  { id: 'halls', label: 'settings.sectionHalls', icon: 'halls', view: hallsSection, needs: 'settings' },
-  { id: 'orders', label: 'settings.sectionOrders', icon: 'delivery', view: ordersSection, needs: 'settings' },
-  { id: 'payments', label: 'settings.sectionPayments', icon: 'cash', view: paymentsSection, needs: 'settings' },
-  { id: 'receipt', label: 'settings.sectionReceipt', icon: 'receipt', view: receiptSection, needs: 'settings' },
-  { id: 'printer', label: 'settings.sectionPrinter', icon: 'printer', view: printerSection, needs: 'settings' },
+  {
+    id: 'system',
+    label: 'settings.sectionSystem',
+    icon: 'sliders',
+    view: systemSection,
+    needs: 'settings',
+  },
+  {
+    id: 'halls',
+    label: 'settings.sectionHalls',
+    icon: 'halls',
+    view: hallsSection,
+    needs: 'settings',
+  },
+  {
+    id: 'orders',
+    label: 'settings.sectionOrders',
+    icon: 'delivery',
+    view: ordersSection,
+    needs: 'settings',
+  },
+  {
+    id: 'payments',
+    label: 'settings.sectionPayments',
+    icon: 'cash',
+    view: paymentsSection,
+    needs: 'settings',
+  },
+  {
+    id: 'receipt',
+    label: 'settings.sectionReceipt',
+    icon: 'receipt',
+    view: receiptSection,
+    needs: 'settings',
+  },
+  {
+    id: 'printer',
+    label: 'settings.sectionPrinter',
+    icon: 'printer',
+    view: printerSection,
+    needs: 'settings',
+  },
   { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView, needs: 'users' },
-  { id: 'update', label: 'settings.sectionUpdate', icon: 'update', view: updateSection, needs: 'settings' },
+  {
+    id: 'subscription',
+    label: 'settings.sectionSubscription',
+    icon: 'card',
+    view: subscriptionSection,
+    needs: 'settings',
+  },
+  {
+    id: 'update',
+    label: 'settings.sectionUpdate',
+    icon: 'update',
+    view: updateSection,
+    needs: 'settings',
+  },
 ];
 
 /**

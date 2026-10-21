@@ -13,6 +13,7 @@ import { confirmDialog, openModal } from '../../components/modal';
 import { button, pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
+import { licensed } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import type { View } from '../types';
@@ -243,13 +244,21 @@ export const hallsSection: View = () => {
 
   let halls: HallDto[] = [];
 
+  /** A second active hall is a plan feature (F5); the first one never is. */
+  const mayAddHall = () => licensed('multiHall') || !halls.some((h) => h.isActive);
+  const addHallButton = button(
+    t('halls.addHall'),
+    'primary',
+    () => void hallModal(null).then(load),
+  );
+  const planNote = document.createElement('p');
+  planNote.className = 'muted small';
+  planNote.textContent = t('halls.oneHallOnly');
+
   el.append(
-    pageHeader(
-      t('settings.sectionHalls'),
-      showHidden,
-      button(t('halls.addHall'), 'primary', () => void hallModal(null).then(load)),
-    ),
+    pageHeader(t('settings.sectionHalls'), showHidden, addHallButton),
     html`<p class="muted small">${t('halls.hint')}</p>`,
+    planNote,
     list,
   );
 
@@ -298,6 +307,8 @@ export const hallsSection: View = () => {
   };
 
   const render = () => {
+    addHallButton.hidden = !mayAddHall();
+    planNote.hidden = licensed('multiHall');
     const visible = showHiddenBox.checked ? halls : halls.filter((h) => h.isActive);
     if (visible.length === 0) {
       list.replaceChildren(html`<p class="empty-state">${t('halls.noHalls')}</p>`);
@@ -316,10 +327,15 @@ export const hallsSection: View = () => {
           iconButton(t('halls.moveUp'), icon('up'), () => void move(index, -1)),
           iconButton(t('halls.moveDown'), icon('down'), () => void move(index, 1)),
           iconButton(t('halls.editHall'), icon('edit'), () => void hallModal(hall).then(load)),
-          hall.isActive
-            ? iconButton(t('halls.hide'), icon('hide'), () => void setHallActive(hall, false))
-            : iconButton(t('halls.show'), icon('show'), () => void setHallActive(hall, true)),
         );
+        if (hall.isActive)
+          actions.append(
+            iconButton(t('halls.hide'), icon('hide'), () => void setHallActive(hall, false)),
+          );
+        else if (mayAddHall())
+          actions.append(
+            iconButton(t('halls.show'), icon('show'), () => void setHallActive(hall, true)),
+          );
         if (hall.tables.length === 0)
           actions.append(iconButton(t('halls.delete'), icon('trash'), () => void removeHall(hall)));
         (actions.children[0] as HTMLButtonElement).disabled = index === 0;

@@ -14,6 +14,7 @@ import {
 import { button, pageHeader } from '../../components/page';
 import { errorMessage, toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
+import { licensed } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import type { View } from '../types';
@@ -241,6 +242,7 @@ export const receiptSection: View = () => {
         b.setAttribute('aria-checked', String(type === current));
       const saved = byType.get(current)!;
       const v = drafts.get(current) ?? saved;
+      const pictures = licensed('receiptLogos');
       const top = imagePicker(
         t('receiptLayout.topImage'),
         { file: v.topImage, width: v.topImageWidth },
@@ -283,7 +285,9 @@ export const receiptSection: View = () => {
             ${current === 'DINE_IN' ? '' : box('showCustomer', t('receiptLayout.showCustomer'))}
           </div>
           ${field({ name: 'footerNote', label: t('settings.footerNote'), value: v.footerNote })}
-          <div class="receipt-images">${top.el}${bottom.el}</div>
+          ${pictures
+            ? html`<div class="receipt-images">${top.el}${bottom.el}</div>`
+            : html`<p class="muted small">${t('receiptLayout.noPicturesInPlan')}</p>`}
           ${formError()}
           <div class="bulk-actions">${submitButton()}${testButton}</div>`,
       );
@@ -295,9 +299,10 @@ export const receiptSection: View = () => {
         // General has no customer block: keep what is stored.
         showCustomer: current === 'DINE_IN' ? v.showCustomer : checked(layoutForm, 'showCustomer'),
         footerNote: value(layoutForm, 'footerNote'),
-        topImage: top.value().file,
+        // Without the plan feature (F5) pictures neither print nor save: main refuses them.
+        topImage: pictures ? top.value().file : null,
         topImageWidth: top.value().width,
-        bottomImage: bottom.value().file,
+        bottomImage: pictures ? bottom.value().file : null,
         bottomImageWidth: bottom.value().width,
       });
       schedulePreview(0);

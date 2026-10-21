@@ -5,6 +5,7 @@ import { imageDataUrl, importImage } from '../images/image-store';
 import { logger } from '../logger';
 import { createPrinterService } from '../printing/printer';
 import type { UpdaterService } from '../updater/updater';
+import type { LicenseService } from '../license/license-service';
 import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-safe';
@@ -35,6 +36,7 @@ function servicesFor(
   sender: WebContents,
   imageDir: string,
   updater: UpdaterService,
+  license: LicenseService,
 ): HandlerServices {
   return {
     appInfo: () => ({ name: app.getName(), version: app.getVersion(), isPackaged: app.isPackaged }),
@@ -52,8 +54,11 @@ function servicesFor(
       const picked = result.canceled ? undefined : result.filePaths[0];
       return picked ? importImage(picked, imageDir) : null;
     },
-    receiptImage: (fileName) => imageDataUrl(imageDir, fileName),
+    // Pictures on receipts are a plan feature: without it they are left off the paper.
+    receiptImage: (fileName) =>
+      license.hasFeature('receiptLogos') ? imageDataUrl(imageDir, fileName) : null,
     updater,
+    license,
   };
 }
 
@@ -71,6 +76,7 @@ export function registerIpcHandlers(
   getDb: () => Db,
   imageDir: string,
   updater: UpdaterService,
+  license: LicenseService,
 ): void {
   for (const channel of IPC_CHANNELS) {
     ipcMain.handle(channel, async (event, rawInput: unknown) => {
@@ -78,7 +84,7 @@ export function registerIpcHandlers(
       const ctx: HandlerContext = {
         db: getDb(),
         ...store,
-        services: servicesFor(event.sender, imageDir, updater),
+        services: servicesFor(event.sender, imageDir, updater, license),
         log: (message, error) => logger.error(message, error),
       };
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx, rawInput);

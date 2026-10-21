@@ -621,6 +621,26 @@ export const listExpensesInput = z.object({
   ...page,
 });
 
+// ── Licence (feature F5): linking this till to its restaurant on the posgro server ─────────
+const verificationId = z.string().trim().min(1).max(64);
+export const licenseSignupStartInput = z.object({ phone: requiredPhone });
+export const licenseSignupStatusInput = z.object({ verificationId });
+export const licenseSignupCompleteInput = z.object({
+  verificationId,
+  code: z.string().trim().regex(/^\d{6}$/, { message: "Kod 6 ta raqamdan iborat" }),
+  restaurantName: z.string().trim().min(1, { message: 'Restoran nomini kiriting' }).max(120),
+  ownerName: z.string().trim().min(1, { message: 'Egasining ismini kiriting' }).max(120),
+  address: z.string().trim().max(300).optional(),
+});
+export const licenseActivateInput = z.object({
+  phone: requiredPhone,
+  activationCode: z
+    .string()
+    .trim()
+    .min(8, { message: "Faollashtirish kodini kiriting" })
+    .max(16),
+});
+
 export const salesReportInput = z.object({
   start: isoDate,
   end: isoDate,

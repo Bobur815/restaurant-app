@@ -283,6 +283,11 @@ legend {
   color: var(--color-warning);
 }
 
+.notice-success {
+  background: var(--color-success-soft);
+  color: var(--color-text);
+}
+
 .notice-info {
   background: var(--color-info-soft);
 }

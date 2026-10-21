@@ -9,13 +9,58 @@ import { t } from '../i18n';
 import { homeFor } from '../router/routes';
 import { appStore } from '../store/app';
 import { html } from '../ui/html';
+import { linkRestaurant } from '../components/link-restaurant';
 import type { View } from './types';
 
 /**
- * First run: the first administrator (name, phone, login PIN) and the restaurant's receipt
- * details, in one step. Ends by showing the owner's recovery code once.
+ * First run, in two steps:
+ * 1. link the till to its restaurant on the posgro server (feature F5; needs internet once): a new
+ *    restaurant signs up and starts its trial, an existing one uses an activation code;
+ * 2. the first administrator (name, phone, login PIN) and the receipt details. Ends by showing
+ *    the owner's recovery code once.
+ * Main refuses step 2 until step 1 is done (license-core.ts), whatever this page shows.
  */
-export const setupView: View = ({ navigate }) => {
+export const setupView: View = (ctx) => {
+  const page = document.createElement('div');
+  page.className = 'auth-page';
+  let link: { destroy(): void } | null = null;
+
+  const showDetails = () => {
+    link?.destroy();
+    page.replaceChildren(setupDetails(ctx).el);
+  };
+
+  const license = appStore.get().license;
+  if (license && !license.linked && license.mode === 'setup') {
+    const card = document.createElement('div');
+    card.className = 'auth-card auth-card-wide';
+    const linker = linkRestaurant({
+      onLinked: (status) => {
+        appStore.set({ license: status });
+        toast(t('license.linked', { name: status.storeName ?? '' }), 'success');
+        showDetails();
+      },
+    });
+    link = linker;
+    card.append(
+      html`<div class="auth-brand">
+        ${SavdoChefSquare({ size: 72 })}
+        <div>
+          <h1>${t('license.linkTitle')}</h1>
+          <p class="muted">${t('license.linkSubtitle')}</p>
+        </div>
+      </div>`,
+      linker.el,
+    );
+    page.append(card);
+  } else {
+    showDetails();
+  }
+  return { el: page, destroy: () => link?.destroy() };
+};
+
+/** Step 2: the first administrator and the receipt details. */
+const setupDetails: View = ({ navigate }) => {
   const adminPhone = phoneField({ name: 'admin.phone', label: t('setup.adminPhone') });
   const form = document.createElement('form');
   form.className = 'auth-card auth-card-wide';
@@ -53,6 +98,7 @@ export const setupView: View = ({ navigate }) => {
             name: 'receipt.restaurantName',
             label: t('setup.restaurantName'),
             required: true,
+            value: appStore.get().license?.storeName ?? '',
           })}
           ${field({ name: 'receipt.phone', label: t('setup.phone'), type: 'tel' })}
           ${field({ name: 'receipt.address', label: t('setup.address') })}
@@ -108,8 +154,5 @@ export const setupView: View = ({ navigate }) => {
     }
   });
 
-  const page = document.createElement('div');
-  page.className = 'auth-page';
-  page.append(form);
-  return { el: page };
+  return { el: form };
 };

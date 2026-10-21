@@ -3,7 +3,7 @@ import { formatPhone } from '@shared/utils/phone';
 import { api } from '../api';
 import { toastError } from '../components/toast';
 import { t } from '../i18n';
-import { appStore } from '../store/app';
+import { appStore, licensed } from '../store/app';
 import { html } from '../ui/html';
 import { icon } from '../ui/icons';
 import { playClick } from '../ui/sound';
@@ -131,7 +131,8 @@ export const tablesView: View = ({ navigate }) => {
   const renderActions = () => {
     const { openSession, settings } = appStore.get();
     const start = (type: 'takeaway' | 'delivery', enabled: boolean | undefined) => {
-      if (enabled === false) return [];
+      // Off in settings, or not in the restaurant's plan (F5).
+      if (enabled === false || !licensed(type)) return [];
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'btn btn-primary btn-lg';

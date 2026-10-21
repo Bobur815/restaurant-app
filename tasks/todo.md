@@ -334,6 +334,88 @@ Like posgro: `npm run deploy:pos` builds the installer and uploads it over sftp 
 - [x] Panel `App.tsx`: a second card "SavdoChef — restoran va kafe uchun" with version, size, download button, hidden when there is no feed. uz/ru strings.
 - [x] posgro has an unrelated uncommitted `prisma/seed.ts` change on `dev`: I'll work in a separate worktree so it is not touched. Merge/deploy through your normal posgro pipeline when you choose.
 
+## Feature F5: restaurants as tenants of the posgro server: trial, plans, 14-day check-in (approved 2026-10-20; committed 2026-10-21)
+
+The till stays offline-first with no data sync and no owner web dashboard. posgro's server is the licence authority
+and the super admin's control panel. **Server side: `C:\Users\user\posgro\tasks\todo.md`, top section** (branch
+`feat/savdochef-tenants`); this list is the till side and follows it.
+
+**Decisions (user, 2026-10-20):**
+- A restaurant is a posgro `Store` with `product = SAVDOCHEF`.
+- Onboarding: self-signup in the setup wizard (phone confirmed by a one-time code) starts a **14-day trial**; an
+  existing restaurant links with phone + activation code from the super admin.
+- Plans: **Start / Pro / VIP** = number of tills + feature flags, set in the dashboard.
+- When blocked or overdue: **read-only** (warning, grace, then no new orders or shifts; open orders can be finished,
+  the shift closed, reports read).
+- Check-in at least every **14 days**.
+
+**Server contract (built in posgro):**
+- `GET /savdochef/plans`
+- `POST /savdochef/signup/start`, `POST /savdochef/signup/complete`
+- `POST /savdochef/activate`
+- `POST /savdochef/licenses/renew`
+- Base URL `https://api.posgro.uz/api` (fixed in main, like the update feed).
+- Licence = Ed25519 `<payload>.<sig>` signed with a **SavdoChef-only key**: `storeId`, `storeName`, `plan`,
+  `expiresAt`, `warnFrom`, `blockAt`, `issuedAt`, `checkinBy`, `terminals`, `seats`, `features`, `trialEndsAt`,
+  `product: 'SAVDOCHEF'`.
+
+### Till side
+- [x] **Schema (additive, migration 0011):** `license` singleton: `storeId`, `token`, `terminalId`, `lastCheckinAt`,
+      `lastError`, `clockMark`. Terminal id = random UUID made once, stored there and in userData.
+- [x] **`main/license/`:**
+  - port posgro's `license.ts` verification and the **trusted clock** (`trusted-clock.ts`: mark in SQLite + a
+    safeStorage file; max of the two; monotonic while running);
+  - embedded public key;
+  - `licenseState(now)` → `active | warning | grace | blocked | checkin-required | unlicensed`;
+  - `features()`, `holdsSeat()`;
+  - background renew: on start, then every 6 h while online, silent when offline, plus a "Check now" call.
+  - Tests with fake clocks: winding the clock back gains nothing; 14 days without a check-in → `checkin-required`.
+- [x] **Read-only enforcement in main (not the UI):**
+  - one guard in `invokeHandler` by channel class: new order, `sessions:open`, menu and price edits refused with an
+    Uzbek message;
+  - still allowed: paying and closing **existing** orders, `sessions:close`, reports, checks, settings → Obuna,
+    login, printing;
+  - write down the list next to the channel map, and add a test that every mutating channel is classified.
+- [x] **Feature flags in main + UI:** takeaway/delivery, debt, reports detail, receipt logos, extra halls; a
+      channel whose feature is off is refused in main; the UI hides it and shows "Pro tarifida".
+- [x] **Setup wizard** (online once), new first steps:
+  - **Yangi restoran:** plans from `/savdochef/plans` (Start / Pro / VIP, prices, what each includes, "14 kun
+    bepul"), then name, owner and phone.
+  - **Phone check through Telegram:** the wizard shows the bot link + QR ("Telegramda oching va raqamingizni
+    yuboring"). The bot sends a 6-digit code; it is typed into the wizard. Then the licence comes back.
+  - **Mavjud restoran:** phone + activation code → licence + store name.
+  - Then today's steps (admin PIN, receipt, tables). Offline at setup: show "Internetga ulaning" and retry; no
+    offline way past it.
+- [x] **Existing installs (0.5.0, no licence):** on upgrade, a "Restoraningizni ulang" screen for the admin.
+      14 days of unlicensed allowance from first run with F5 (trusted clock), then read-only until linked.
+- [x] **Settings → Obuna section:**
+  - plan, status badge, days left, trial end, last check-in, next required check-in;
+  - payment details from the server; "Hozir tekshirish";
+  - the till's id and its slot.
+  - Banner in the shell during warning, grace and read-only (admins see payment info; cashiers see "Administratorga
+    murojaat qiling").
+- [x] **Seats:** a till without a slot (more tills than the plan) is read-only with "Tarifdagi kassalar soni
+      tugagan".
+- [x] **Privacy:** only the store id, terminal id, app version and machine name go to the server; no orders,
+      customers or money figures. Say so in the wizard.
+- [x] **Tests and verification:** done 2026-10-20: `npm run check` 457 tests (licence state matrix, refusals, trusted clock, service with a fake server, licence channel access). Real app against a stand-in server signing with the real key pair: setup link card + plans, setup refused before linking, Telegram step with QR, wrong code, linked -> details prefilled, Obuna section; Start plan refuses delivery/takeaway/debt/long report, allows a table order; blocked: new order and shift refused, paying an open order works, red banner. Copy of the real data: v10 -> v11 with backup, 14-day unlinked allowance, activation before login. Still to do: against posgro staging once it is deployed.
+  - licence state matrix, guard classification, feature gating, wizard flows against a local fake server;
+  - harness against **posgro staging** (self-signup, activation code, block/unblock from the dashboard, 14-day
+    check-in with a shifted clock);
+  - `electron-security-reviewer` + `prisma-reviewer`.
+- [x] Controls outside the plan are hidden (2026-10-21, `licensed()` in `store/app.ts`): takeaway/delivery start buttons and type switch, debt as a payment method, report ranges longer than a day (per-day picker + note), a second hall (add / show hidden), receipt pictures (note; saved without them). Main still refuses each one.
+- [ ] **Release:** posgro server deployed first (its todo, steps 8-11), then a SavdoChef minor release (`npm run release -- minor`, `npm run deploy:pos`). Tills on 0.5.0 update in-app and get the 14-day unlinked allowance.
+      (`npm run release -- minor`, `npm run deploy:pos`).
+
+**Answered (2026-10-20):**
+- code through the existing posgro Telegram bot (no SMS for now);
+- VIP like posgro (bought once, never expires);
+- prices and features as suggested in the posgro section (editable in the dashboard);
+- one trial per phone.
+
+QR: `qrcode-generator` 2.0.4 (exact, 2025-08), drawn as SVG nodes (`renderer/ui/qr.ts`).
+Not built (deliberately small): hiding feature-gated buttons in the UI. Main refuses them with a clear message ("... Pro tarifida bor"); greying the buttons out is a later polish.
+
 ## Phase 8.5: LAN access for waiter phones (first release, decided 2026-10-18)
 
 - [ ] HTTP adapter in main (posgro `local-server` pattern: plain `node:http` + its small `router.ts`, `pairing.ts`, `auth.ts`, `serve-policy.ts`; copy those and their tests, **no** Express/Fastify) over the **same** domain modules; binds to the LAN only when enabled in settings; device pairing (QR/code) → per-device token; every request resolves a user + role exactly like the IPC path.

@@ -113,9 +113,17 @@ async function boot(): Promise<void> {
     if (s.user !== prev.user) void refreshUpdate();
   });
 
+  // The licence (feature F5). Its days left move with time, so it is re-read now and then too.
+  const refreshLicense = async () => {
+    appStore.set({ license: await api.license.status().catch(() => appStore.get().license) });
+  };
+  await refreshLicense();
+  window.setInterval(() => void refreshLicense(), 10 * 60_000);
+
   // Keep shared state fresh when anything changes (in this window or another).
   api.events.subscribe(async (e) => {
     if (e.type === 'update-changed') void refreshUpdate();
+    if (e.type === 'license-changed') void refreshLicense();
     const { user: me } = appStore.get();
     if (e.type === 'settings-changed') {
       const [s, r] = await Promise.all([api.settings.get(), api.receipt.get()]);

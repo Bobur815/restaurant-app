@@ -8,6 +8,7 @@ import { sql as orderTypesCustomers } from './0007_order_types_customers';
 import { sql as splitPaymentDebt } from './0008_split_payment_debt';
 import { sql as pinLoginPermissions } from './0009_pin_login_permissions';
 import { sql as receiptLayouts } from './0010_receipt_layouts';
+import { sql as licenseState } from './0011_license_state';
 
 export interface Migration {
   /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
@@ -33,4 +34,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 8, name: 'split_payment_debt', sql: splitPaymentDebt },
   { version: 9, name: 'pin_login_permissions', sql: pinLoginPermissions },
   { version: 10, name: 'receipt_layouts', sql: receiptLayouts },
+  { version: 11, name: 'license_state', sql: licenseState },
 ];

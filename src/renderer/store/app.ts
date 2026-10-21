@@ -8,6 +8,7 @@ import type {
   SetupStatus,
   UpdateStatusDto,
 } from '@shared/types';
+import type { LicenseFeature, LicenseStatusDto } from '@shared/license';
 import { createStore } from './store';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -24,6 +25,8 @@ export interface AppState {
   theme: ThemeChoice;
   /** The software updater's state, for users with the settings permission; else null. */
   update: UpdateStatusDto | null;
+  /** The licence (feature F5): mode, plan, days left. Public, so known before login too. */
+  license: LicenseStatusDto | null;
 }
 
 export const appStore = createStore<AppState>({
@@ -35,6 +38,7 @@ export const appStore = createStore<AppState>({
   language: 'uz',
   theme: 'system',
   update: null,
+  license: null,
 });
 
 /** A newer version is known (found, downloading or ready to install): Settings shows a dot. */
@@ -50,6 +54,15 @@ export function updatePending(): boolean {
 export function can(permission: Permission): boolean {
   const user = appStore.get().user;
   return !!user && hasPermission(user, permission);
+}
+
+/**
+ * Whether the restaurant's plan includes a feature (F5), for hiding what it does not. True while
+ * the licence is not loaded yet: main refuses anything outside the plan anyway (license-core.ts).
+ */
+export function licensed(feature: LicenseFeature): boolean {
+  const license = appStore.get().license;
+  return !license || license.features.includes(feature);
 }
 
 // ── Per-machine UI preferences ──────────────────────────────────────────────────────────────

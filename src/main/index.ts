@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog } from 'electron';
 import { autoUpdater } from 'electron-updater';
+import os from 'node:os';
 import path from 'path';
 import {
   closeDatabase,
@@ -15,12 +16,30 @@ import { broadcast, registerIpcHandlers } from './ipc/register';
 import { initLogger, logger } from './logger';
 import { installSecurityHandlers } from './security';
 import { createUpdater, UPDATE_FEED_URL, type UpdaterEngine } from './updater/updater';
+import { publicKeyFrom } from './license/license-core';
+import { LICENSE_PUBLIC_KEY } from './license/license-public-key';
+import { DEFAULT_API_URL, httpClient, LicenseService } from './license/license-service';
+import { dbMarkStore, fileMarkStore } from './license/mark-stores';
+import { TrustedClock } from './license/trusted-clock';
 import { createWindow, DEV_SERVER_URL, INDEX_HTML_PATH } from './window';
 
 /** The quiet update check waits for start-up to settle (database, first window, printers). */
 const STARTUP_UPDATE_CHECK_MS = 15_000;
 
 let mainWindow: BrowserWindow | null = null;
+let license: LicenseService | null = null;
+
+/**
+ * The posgro API the licence comes from. Only a development run may point elsewhere
+ * (SAVDOCHEF_API_URL, https or this machine), so an installed till cannot be aimed at a local
+ * server that plays an old licence back.
+ */
+function licenseApiUrl(): string {
+  const override = process.env['SAVDOCHEF_API_URL']?.trim();
+  if (!override || app.isPackaged) return DEFAULT_API_URL;
+  const ok = /^https:\/\//.test(override) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(override);
+  return ok ? override : DEFAULT_API_URL;
+}
 
 /** Housekeeping, never blocks or breaks startup. */
 async function removeOrphanImages(imageDir: string): Promise<void> {
@@ -97,10 +116,26 @@ if (!app.requestSingleInstanceLock()) {
       onChange: () => broadcast([{ type: 'update-changed' }]),
       // Only the database: quitAndInstall then quits the app itself. Destroying the windows here
       // fired window-all-closed -> app.quit() before quitAndInstall ran, so nothing installed.
-      beforeInstall: () => closeDatabase(),
+      beforeInstall: async () => {
+        await license?.stop();
+        await closeDatabase();
+      },
       log: logger,
     });
-    registerIpcHandlers(getPrisma, imageDir, updater);
+    // Feature F5: the licence from the posgro server, checked on every IPC call.
+    license = new LicenseService({
+      db: getPrisma(),
+      publicKey: publicKeyFrom(LICENSE_PUBLIC_KEY),
+      clock: new TrustedClock([dbMarkStore(getPrisma), fileMarkStore(app.getPath('userData'))]),
+      http: httpClient(licenseApiUrl()),
+      appVersion: app.getVersion(),
+      machineName: os.hostname(),
+      onChange: () => broadcast([{ type: 'license-changed' }]),
+      log: logger,
+    });
+    await license.init();
+    license.start();
+    registerIpcHandlers(getPrisma, imageDir, updater, license);
     setTimeout(() => void updater.check({ quiet: true }), STARTUP_UPDATE_CHECK_MS).unref();
 
     mainWindow = createWindow();
@@ -118,6 +153,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('will-quit', () => {
-    void closeDatabase();
+    // The clock mark first (it writes to the database), then the database.
+    void (license?.stop() ?? Promise.resolve()).finally(() => closeDatabase());
   });
 }

@@ -2,6 +2,7 @@ import type { z } from 'zod';
 import type { IpcResult } from './errors';
 import type * as S from './schemas';
 import type * as T from './types';
+import type * as L from './license';
 
 /**
  * Every IPC channel: what the renderer sends (`input`, before schema defaults) and what it gets
@@ -61,6 +62,19 @@ export interface IpcChannels {
   'updater:download': Channel<undefined, T.UpdateStatusDto>;
   /** Quits the app, installs silently and starts the new version. */
   'updater:install': Channel<undefined, null>;
+
+  // licence (feature F5): the posgro server licenses this till; main enforces it on every call
+  'license:status': Channel<undefined, L.LicenseStatusDto>;
+  'license:plans': Channel<undefined, L.LicensePlansDto>;
+  /** Sends the phone; the answer has the Telegram link that proves it. */
+  'license:signupStart': Channel<In<typeof S.licenseSignupStartInput>, L.SignupStartDto>;
+  'license:signupStatus': Channel<
+    In<typeof S.licenseSignupStatusInput>,
+    { contactConfirmed: boolean; expired: boolean }
+  >;
+  'license:signupComplete': Channel<In<typeof S.licenseSignupCompleteInput>, L.LicenseStatusDto>;
+  'license:activate': Channel<In<typeof S.licenseActivateInput>, L.LicenseStatusDto>;
+  'license:checkNow': Channel<undefined, L.LicenseStatusDto>;
 
   // halls & tables
   'halls:list': Channel<In<typeof S.listHallsInput>, T.HallDto[]>;
@@ -174,6 +188,13 @@ export const IPC_CHANNELS = [
   'updater:check',
   'updater:download',
   'updater:install',
+  'license:status',
+  'license:plans',
+  'license:signupStart',
+  'license:signupStatus',
+  'license:signupComplete',
+  'license:activate',
+  'license:checkNow',
   'halls:list',
   'halls:create',
   'halls:update',
@@ -275,7 +296,9 @@ export type AppEvent =
   | { type: 'halls-changed' }
   | { type: 'debts-changed' }
   /** The software updater's state moved (re-read updater:status). */
-  | { type: 'update-changed' };
+  | { type: 'update-changed' }
+  /** The licence or the till's mode changed (re-read license:status). */
+  | { type: 'license-changed' };
 
 export const APP_EVENT_TYPES = [
   'orders-changed',
@@ -286,6 +309,7 @@ export const APP_EVENT_TYPES = [
   'halls-changed',
   'debts-changed',
   'update-changed',
+  'license-changed',
 ] as const satisfies ReadonlyArray<AppEvent['type']>;
 
 /** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */

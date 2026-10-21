@@ -3,7 +3,8 @@ import { SavdoChefIcon } from '../branding';
 import { t } from '../i18n';
 import type { ShellInstance } from '../router/router';
 import { canAccess, homeFor, type Access } from '../router/routes';
-import { appStore, savePrefs, updatePending, type ThemeChoice } from '../store/app';
+import { appStore, can, savePrefs, updatePending, type ThemeChoice } from '../store/app';
+import type { LicenseStatusDto } from '@shared/license';
 import { html, refs } from '../ui/html';
 import { icon, type IconName } from '../ui/icons';
 import { playClick } from '../ui/sound';
@@ -50,6 +51,27 @@ export function initials(name: string): string {
 }
 
 const HOVER_INTENT_MS = 120;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** The licence banner over every page (feature F5), or null when there is nothing to say. */
+export function licenseBannerText(
+  s: LicenseStatusDto | null,
+  now = Date.now(),
+): { text: string; readonly: boolean } | null {
+  if (!s || s.mode === 'setup') return null;
+  const n = s.daysLeft ?? 0;
+  if (s.mode === 'readonly') return { text: t(`license.banner.${s.reason}`), readonly: true };
+  if (s.reason === 'warning' || s.reason === 'grace' || s.reason === 'unlinked-allowance') {
+    return { text: t(`license.banner.${s.reason}`, { n }), readonly: false };
+  }
+  if (s.reason === 'trial' && n <= 3) return { text: t('license.banner.trial', { n }), readonly: false };
+  if (s.checkinBy) {
+    const days = Math.ceil((Date.parse(s.checkinBy) - now) / DAY_MS);
+    if (days <= 3) return { text: t('license.banner.checkin-soon', { n: Math.max(0, days) }), readonly: false };
+  }
+  return null;
+}
+
 
 function label(text: string): HTMLSpanElement {
   const span = document.createElement('span');
@@ -156,7 +178,10 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
           </div>
         </div>
       </nav>
-      <main class="outlet" data-ref="outlet" tabindex="-1"></main>`,
+      <div class="shell-main">
+        <div class="license-banner" data-ref="licenseBanner" role="status" hidden></div>
+        <main class="outlet" data-ref="outlet" tabindex="-1"></main>
+      </div>`,
   );
 
   // The drawer opens three ways: hover (after a short intent pause, so a pointer passing over the
@@ -204,6 +229,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
 
   const r = refs<{
     outlet: HTMLElement;
+    licenseBanner: HTMLElement;
     clock: HTMLElement;
     date: HTMLElement;
     shift: HTMLElement;
@@ -235,6 +261,21 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     const open = !!s.openSession;
     r.shift.textContent = t(open ? 'nav.shiftOpen' : 'nav.shiftClosed');
     r.shift.className = `badge ${open ? 'badge-success' : 'badge-muted'}`;
+    const banner = licenseBannerText(s.license);
+    r.licenseBanner.hidden = !banner;
+    if (banner) {
+      r.licenseBanner.classList.toggle('is-readonly', banner.readonly);
+      const more = can('settings')
+        ? Object.assign(document.createElement('a'), {
+            href: '#/settings/subscription',
+            textContent: t('license.banner.open'),
+          })
+        : Object.assign(document.createElement('span'), { textContent: t('license.banner.askAdmin') });
+      r.licenseBanner.replaceChildren(
+        Object.assign(document.createElement('span'), { textContent: banner.text }),
+        more,
+      );
+    }
     langButton.textContent = s.language === 'uz' ? 'UZ' : 'RU';
     langButton.setAttribute('aria-label', `${t('nav.language')}: ${langButton.textContent}`);
     themeButton.replaceChildren(icon(THEME_ICON[s.theme]));

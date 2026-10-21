@@ -528,3 +528,24 @@ model Payment {
   @@index([customerId, settledAt])
   @@map("payments")
 }
+
+/// Feature F5: this till's licence from the posgro server (main/license). One row, id 1.
+model LicenseState {
+  id            Int       @id
+  /// Random, made once on this machine; the server counts tills by it.
+  terminalId    String
+  storeId       String?
+  storeName     String?
+  /// The signed licence as received (`<payload>.<sig>`); verified on every read.
+  token         String?
+  lastCheckinAt DateTime?
+  /// Why the last check-in failed (Uzbek), cleared by a successful one.
+  lastError     String?
+  /// When this till first ran with licensing: a till set up before F5 works unlinked for 14 days.
+  firstRunAt    DateTime  @default(now())
+  /// The latest moment this till knows has passed (trusted clock, main/license/trusted-clock.ts).
+  clockMark     DateTime?
+  updatedAt     DateTime  @updatedAt
+
+  @@map("license_state")
+}

@@ -4,10 +4,11 @@ import type { IpcChannel, IpcOutput } from '@shared/ipc';
 import { hasPermission, type Permission } from '@shared/permissions';
 import { refreshActor } from '../auth/auth';
 import type { Actor, Db } from '../domain/db';
-import { AppError, forbidden, notAuthenticated, prismaCode } from '../domain/errors';
+import { AppError, conflict, forbidden, notAuthenticated, prismaCode } from '../domain/errors';
 import { ImageImportError } from '../images/image-store';
 import type { PrinterService } from '../printing/printer';
 import type { UpdaterService } from '../updater/updater';
+import { ServerError, type LicenseService } from '../license/license-service';
 
 /**
  * Who may call a handler: `public` (setup, login, settings for the login screen), `user` (any
@@ -25,6 +26,20 @@ export interface HandlerServices {
   /** A stored picture as a `data:` URL for the receipt, or null when it cannot be read. */
   receiptImage(fileName: string): string | null;
   updater: UpdaterService;
+  /** Feature F5: the licence; `refusal` is asked on every call (invokeHandler). */
+  license: Pick<
+    LicenseService,
+    | 'refusal'
+    | 'isLinked'
+    | 'isSetupMode'
+    | 'status'
+    | 'plans'
+    | 'signupStart'
+    | 'signupStatus'
+    | 'signupComplete'
+    | 'activate'
+    | 'checkNow'
+  >;
 }
 
 export interface HandlerContext {
@@ -65,6 +80,15 @@ export function toIpcError(error: unknown, log: HandlerContext['log'], channel: 
     };
   }
   if (error instanceof ImageImportError) return { code: 'VALIDATION', message: error.message };
+  // The posgro server's or the network's answer, already in Uzbek.
+  if (error instanceof ServerError) {
+    // `reason` stays the app's own; the server's code is passed on beside it.
+    return {
+      code: 'CONFLICT',
+      message: error.message,
+      details: { reason: 'SERVER', serverCode: error.serverCode },
+    };
+  }
 
   switch (prismaCode(error)) {
     case 'P2002':
@@ -119,6 +143,10 @@ export async function invokeHandler<C extends IpcChannel>(
 
     const parsed = def.input.safeParse(rawInput);
     if (!parsed.success) throw parsed.error;
+
+    // Feature F5: what the licence allows (read-only, plan features), whatever the UI shows.
+    const refused = await ctx.services.license.refusal(channel, parsed.data);
+    if (refused) throw conflict(refused, { reason: 'LICENSE' });
 
     const data = await (def.run as (c: HandlerContext, i: unknown) => Promise<IpcOutput<C>>)(
       { ...ctx, actor },

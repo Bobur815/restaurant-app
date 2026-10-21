@@ -5,7 +5,7 @@ import { api } from '../../api';
 import { clearErrors, field, formError, showFormError, value } from '../../components/forms';
 import { phoneField } from '../../components/phone-field';
 import { t } from '../../i18n';
-import { appStore } from '../../store/app';
+import { appStore, licensed } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { formatMoney, toInputDecimal } from '../../utils/format';
@@ -112,8 +112,13 @@ export function createCustomerPanel(options: {
   const renderType = () => {
     const { settings } = appStore.get();
     const offered: OpenType[] = [];
-    if (settings?.takeawayEnabled !== false || type === 'TAKEAWAY') offered.push('TAKEAWAY');
-    if (settings?.deliveryEnabled !== false || type === 'DELIVERY') offered.push('DELIVERY');
+    // The order's own type always shows; the other only when on in settings and in the plan (F5).
+    const offers = (enabled: boolean | undefined, feature: 'takeaway' | 'delivery') =>
+      enabled !== false && licensed(feature);
+    if (offers(settings?.takeawayEnabled, 'takeaway') || type === 'TAKEAWAY')
+      offered.push('TAKEAWAY');
+    if (offers(settings?.deliveryEnabled, 'delivery') || type === 'DELIVERY')
+      offered.push('DELIVERY');
     typeSwitch.replaceChildren(
       ...offered.map((ot) => {
         const b = document.createElement('button');

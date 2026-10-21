@@ -103,6 +103,7 @@
     "electron-updater": "6.8.10",
     "i18next": "26.4.2",
     "lucide": "1.51.0",
+    "qrcode-generator": "2.0.4",
     "zod": "4.6.5"
   },
   "prisma": {

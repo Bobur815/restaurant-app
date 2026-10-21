@@ -21,6 +21,11 @@ export const READ_ONLY_CHANNELS = [
   'printing:test',
   'printing:preview',
   'updater:status',
+  'license:status',
+  'license:plans',
+  // Sign-up steps change nothing here until signupComplete (which the service announces).
+  'license:signupStart',
+  'license:signupStatus',
   'halls:list',
   'categories:list',
   'menu:list',
@@ -56,6 +61,7 @@ const SETTINGS: AppEvent = { type: 'settings-changed' };
 const USERS: AppEvent = { type: 'users-changed' };
 const HALLS: AppEvent = { type: 'halls-changed' };
 const DEBTS: AppEvent = { type: 'debts-changed' };
+const LICENSE: AppEvent = { type: 'license-changed' };
 
 /**
  * What each successful change announces to every window (replaces legacy's `session-updated` /
@@ -71,7 +77,8 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'users:create': () => [USERS],
   'users:update': () => [USERS],
   'users:updateProfile': () => [USERS],
-  'setup:complete': () => [SETTINGS, USERS],
+  // Setup done: the till leaves `setup` mode (license-core.ts tillState).
+  'setup:complete': () => [SETTINGS, USERS, LICENSE],
   'settings:update': () => [SETTINGS],
   'receipt:update': () => [SETTINGS],
   'receipt:updateLayout': () => [SETTINGS],
@@ -114,6 +121,10 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'updater:check': () => [],
   'updater:download': () => [],
   'updater:install': () => [],
+  // The licence service broadcasts license-changed itself when a licence arrives.
+  'license:signupComplete': () => [],
+  'license:activate': () => [],
+  'license:checkNow': () => [],
 };
 
 export function eventsFor<C extends IpcChannel>(

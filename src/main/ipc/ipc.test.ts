@@ -3,6 +3,7 @@ import type { Actor } from '../domain/db';
 import { toCurrentUser } from '../auth/auth';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
 import { unsupportedUpdater } from '../test-utils/updater';
+import { allowAllLicense } from '../test-utils/license';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
 
@@ -42,6 +43,7 @@ function caller(initial: Actor | null = null) {
       pickImage: async () => null,
       receiptImage: () => null,
       updater: unsupportedUpdater(),
+      license: allowAllLicense(),
     },
     log: (message, error) => logged.push([message, error]),
   });
@@ -72,6 +74,13 @@ describe('access levels', () => {
         'setup:complete',
         'settings:get',
         'receipt:get',
+        'license:status',
+        'license:checkNow',
+        'license:plans',
+        'license:signupStart',
+        'license:signupStatus',
+        'license:signupComplete',
+        'license:activate',
       ],
       user: [
         'users:updateProfile',
@@ -240,6 +249,7 @@ describe('invokeHandler', () => {
           pickImage: async () => null,
           receiptImage: () => null,
           updater: unsupportedUpdater(),
+          license: allowAllLicense(),
         },
         log: (m, e) => logged.push([m, e]),
       },
@@ -282,6 +292,7 @@ describe('invokeHandler', () => {
           pickImage: async () => null,
           receiptImage: () => null,
           updater: unsupportedUpdater(),
+          license: allowAllLicense(),
         },
         log: (m, e) => logged.push([m, e]),
       },
@@ -315,6 +326,7 @@ describe('invokeHandler', () => {
                 pickImage: async () => null,
                 receiptImage: () => null,
                 updater: unsupportedUpdater(),
+                license: allowAllLicense(),
               },
               log: () => undefined,
             },

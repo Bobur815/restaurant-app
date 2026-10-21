@@ -8,6 +8,7 @@ import {
   newRecoveryCode,
   pinLogin,
   recoverWithCode,
+  refreshActor,
 } from '../auth/auth';
 import { hasPermission, type Permission } from '@shared/permissions';
 import {
@@ -75,7 +76,7 @@ import {
 import { completeSetup, getSetupStatus } from '../settings/setup';
 import { createUser, listUsers, updateProfile, updateUser } from '../users/users';
 import { forbidden } from '../domain/errors';
-import type { AnyHandlerDef, HandlerDef, PublicHandlerDef } from './ipc-safe';
+import type { AnyHandlerDef, HandlerContext, HandlerDef, PublicHandlerDef } from './ipc-safe';
 
 // Typed builders: each infers the handler's input type from its schema.
 const pub = <C extends IpcChannel, Sc extends z.ZodType>(
@@ -98,6 +99,22 @@ const need = <C extends IpcChannel, Sc extends z.ZodType>(
  * extra channel a compile error. Handlers stay thin: parse (done by invokeHandler), call the
  * domain module, return its DTO.
  */
+/** The logged-in user if they hold the settings permission (re-read), else null. */
+async function settingsActor(ctx: HandlerContext) {
+  const actor = ctx.actor ? await refreshActor(ctx.db, ctx.actor) : null;
+  return actor && hasPermission(actor, 'settings') ? actor : null;
+}
+
+/**
+ * Linking this till to a restaurant (feature F5). Public only during first setup (no user exists
+ * yet). A till that is set up, linked or not, needs a logged-in user with the settings
+ * permission: otherwise anyone at the lock screen could bind it to their own account.
+ */
+async function mayLink(ctx: HandlerContext): Promise<void> {
+  if (await ctx.services.license.isSetupMode()) return;
+  if (!(await settingsActor(ctx))) throw forbidden();
+}
+
 export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'app:info': pub(S.empty, async (ctx) => ctx.services.appInfo()),
 
@@ -171,6 +188,39 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'updater:install': need('settings', S.empty, async (ctx) => {
     await ctx.services.updater.install();
     return null;
+  }),
+
+  // ── licence (feature F5) ──────────────────────────────────────────────────────────────────
+  // Status and check-in are public: the login screen shows why a till is read-only, and anyone
+  // may ask the server again (only this till's own licence is sent).
+  'license:status': pub(S.empty, async (ctx) => {
+    const status = await ctx.services.license.status();
+    if (status.mode === 'setup' || (await settingsActor(ctx))) return status;
+    // The lock screen and cashiers need where the till stands, not its ids or payment details.
+    return { ...status, terminalId: '', storeId: null, payment: null, lastError: null };
+  }),
+  'license:checkNow': pub(S.empty, async (ctx) =>
+    ctx.services.license.checkNow({ force: (await settingsActor(ctx)) !== null }),
+  ),
+  'license:plans': pub(S.empty, async (ctx) => {
+    await mayLink(ctx);
+    return ctx.services.license.plans();
+  }),
+  'license:signupStart': pub(S.licenseSignupStartInput, async (ctx, { phone }) => {
+    await mayLink(ctx);
+    return ctx.services.license.signupStart(phone);
+  }),
+  'license:signupStatus': pub(S.licenseSignupStatusInput, async (ctx, { verificationId }) => {
+    await mayLink(ctx);
+    return ctx.services.license.signupStatus(verificationId);
+  }),
+  'license:signupComplete': pub(S.licenseSignupCompleteInput, async (ctx, input) => {
+    await mayLink(ctx);
+    return ctx.services.license.signupComplete(input);
+  }),
+  'license:activate': pub(S.licenseActivateInput, async (ctx, input) => {
+    await mayLink(ctx);
+    return ctx.services.license.activate(input);
   }),
 
   // ── printing ─────────────────────────────────────────────────────────────────────────────
@@ -284,9 +334,12 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     return payOrder(ctx.db, ctx.actor, input);
   }),
   'checks:list': need('checks', S.listChecksInput, (ctx, input) => listChecks(ctx.db, input)),
-  'checks:update': need('corrections', S.editCheckInput, (ctx, input) =>
-    editCheck(ctx.db, ctx.actor, input),
-  ),
+  'checks:update': need('corrections', S.editCheckInput, (ctx, input) => {
+    // Turning a paid check into debt is selling on debt: the same permission as at payment.
+    const debt = input.tenders.some((t) => t.method === 'debt');
+    if (debt && !hasPermission(ctx.actor, 'debt')) throw forbidden("Nasiyaga sotishga ruxsat yo'q");
+    return editCheck(ctx.db, ctx.actor, input);
+  }),
   'checks:delete': need('corrections', S.orderNumberInput, (ctx, { orderNumber }) =>
     cancelPaidOrder(ctx.db, orderNumber),
   ),

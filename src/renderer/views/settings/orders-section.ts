@@ -11,6 +11,7 @@ import {
 import { pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
+import { licensed } from '../../store/app';
 import { html } from '../../ui/html';
 import { toInputDecimal } from '../../utils/format';
 import type { View } from '../types';
@@ -31,6 +32,9 @@ export const ordersSection: View = () => {
       form.noValidate = true;
       form.append(
         html`<p class="muted small">${t('settings.ordersHint')}</p>
+          ${licensed('takeaway') && licensed('delivery')
+            ? ''
+            : html`<p class="notice notice-info">${t('settings.ordersNotInPlan')}</p>`}
           ${checkboxField({
             name: 'takeawayEnabled',
             label: t('settings.takeawayEnabled'),

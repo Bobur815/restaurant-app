@@ -5,6 +5,7 @@ import type { Actor } from '../domain/db';
 import { RECEIPT_SETTINGS_ID } from '../settings/settings';
 import { createTestDb, createUser, type TestDb } from '../test-utils/db';
 import { unsupportedUpdater } from '../test-utils/updater';
+import { allowAllLicense } from '../test-utils/license';
 import { READ_ONLY_CHANNELS } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
@@ -129,6 +130,8 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'orders:getByNumber': { orderNumber: '2026-00001' },
   'checks:list': { startDate: today, endDate: today },
   'reports:sales': { start: today, end: today },
+  'license:signupStart': { phone: '+998 90 123 45 67' },
+  'license:signupStatus': { verificationId: 'v1' },
 };
 
 function ctx(actor: Actor | null): HandlerContext {
@@ -146,6 +149,7 @@ function ctx(actor: Actor | null): HandlerContext {
       pickImage: async () => null,
       receiptImage: () => null,
       updater: unsupportedUpdater(),
+      license: allowAllLicense(),
     },
     log: () => undefined,
   };
