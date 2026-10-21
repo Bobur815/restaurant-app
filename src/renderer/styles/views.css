@@ -217,6 +217,7 @@
   background: var(--color-surface);
   text-align: center;
   font-weight: 700;
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 
