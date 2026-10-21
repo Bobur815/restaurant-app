@@ -89,6 +89,33 @@
     "openOrders": "Olib ketish va yetkazib berish",
     "noCustomer": "Mijoz ko'rsatilmagan"
   },
+  "bill": {
+    "title": "Hisob va to'lov",
+    "pay": "To'lash",
+    "balance": "Balans",
+    "owed": "To'lanishi kerak",
+    "monthlyFee": "Oylik to'lov",
+    "nextChargeAt": "Keyingi yechish",
+    "asOf": "Holat: {{time}} (oxirgi tekshiruv)",
+    "date": "Sana",
+    "what": "Nima",
+    "amount": "Summa",
+    "balanceAfter": "Balans keyin",
+    "type": {
+      "TOPUP": "To'lov qabul qilindi",
+      "SUBSCRIPTION": "Oylik obuna",
+      "ADJUSTMENT": "Tuzatish"
+    },
+    "noMovements": "Hali to'lovlar yo'q.",
+    "notYet": "Balans keyingi tekshiruvda ko'rinadi. «Hozir tekshirish» ni bosing.",
+    "qrLabel": "To'lov uchun QR kod",
+    "scanBank": "Bank ilovasi bilan skanerlang",
+    "scanLink": "Telefon kamerasi bilan skanerlang va to'lang",
+    "writeId": "To'lov izohiga restoran raqamini yozing:",
+    "noDetails": "To'lov ma'lumotlari hali kiritilmagan. Qo'llab-quvvatlash xizmatiga murojaat qiling.",
+    "nextCharge": "Keyingi oylik to'lov {{date}} kuni balansdan yechiladi.",
+    "afterPaying": "To'lov qo'lda tasdiqlanadi. Tasdiqlangach «Hozir tekshirish» ni bosing: balans va obuna yangilanadi."
+  },
   "moveTable": {
     "button": "Stolni almashtirish",
     "title": "Stol {{n}} buyurtmasini ko'chirish",

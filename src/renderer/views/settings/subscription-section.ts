@@ -2,13 +2,16 @@ import { LICENSE_FEATURES, type LicenseStatusDto } from '@shared/license';
 import { formatDate, formatDateTime } from '@shared/utils/format';
 import { formatPhone } from '@shared/utils/phone';
 import { api } from '../../api';
+import { dec } from '@shared/utils/decimal';
 import { linkRestaurant } from '../../components/link-restaurant';
+import { payBillModal, upcomingCharge } from '../../components/pay-bill';
 import { button, pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
+import { formatMoney } from '../../utils/format';
 import type { View } from '../types';
 
 /**
@@ -81,17 +84,78 @@ export const subscriptionSection: View = () => {
     </div>`;
   };
 
-  const paymentCard = (s: LicenseStatusDto) => {
-    if (!s.payment || (!s.payment.supportPhone && !s.payment.paymentUrl)) return '';
+  /** Balance, bill and the latest top-ups and charges (feature F7), as of the last check-in. */
+  const accountCard = (s: LicenseStatusDto) => {
+    const lang = appStore.get().language;
+    const m = (v: string) => formatMoney(v, lang);
+    const a = s.account;
+    const pay = button(t('bill.pay'), 'primary', () => payBillModal(s));
+    const negative = a !== null && dec(a.balance).lt(0);
+    const next = upcomingCharge(s);
     return html`<div class="card form-card">
-      <h3>${t('license.payTitle')}</h3>
-      <p class="muted small">${t('license.payHint')}</p>
-      ${s.payment.supportPhone
+      <h3>${t('bill.title')}</h3>
+      ${a
+        ? html`<div class="stat-row bill-tiles">
+              <div class="stat-tile is-strong ${negative ? 'is-negative' : ''}">
+                <span class="stat-label">${t('bill.balance')}</span>
+                <strong class="stat-value">${m(a.balance)}</strong>
+              </div>
+              ${dec(a.owed).gt(0)
+                ? html`<div class="stat-tile is-strong is-negative">
+                    <span class="stat-label">${t('bill.owed')}</span>
+                    <strong class="stat-value">${m(a.owed)}</strong>
+                  </div>`
+                : ''}
+              ${a.monthlyFee !== null
+                ? html`<div class="stat-tile">
+                    <span class="stat-label">${t('bill.monthlyFee')}</span>
+                    <strong class="stat-value">${m(a.monthlyFee)}</strong>
+                  </div>`
+                : ''}
+              ${next
+                ? html`<div class="stat-tile">
+                    <span class="stat-label">${t('bill.nextChargeAt')}</span>
+                    <strong class="stat-value">${formatDate(next)}</strong>
+                  </div>`
+                : ''}
+            </div>
+            <p class="muted small">${t('bill.asOf', { time: formatDateTime(a.asOf) })}</p>
+            ${a.movements.length
+              ? html`<div class="table-wrap">
+                  <table class="lines-table bill-movements">
+                    <thead>
+                      <tr>
+                        <th>${t('bill.date')}</th>
+                        <th>${t('bill.what')}</th>
+                        <th class="num">${t('bill.amount')}</th>
+                        <th class="num">${t('bill.balanceAfter')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${a.movements.map(
+                        (mv) =>
+                          html`<tr>
+                            <td>${formatDateTime(mv.at)}</td>
+                            <td>${t(`bill.type.${mv.type}`)}</td>
+                            <td
+                              class="num strong ${dec(mv.amount).lt(0)
+                                ? 'is-negative'
+                                : 'is-positive'}"
+                            >
+                              ${dec(mv.amount).gt(0) ? '+' : ''}${m(mv.amount)}
+                            </td>
+                            <td class="num">${m(mv.balanceAfter)}</td>
+                          </tr>`,
+                      )}
+                    </tbody>
+                  </table>
+                </div>`
+              : html`<p class="muted small">${t('bill.noMovements')}</p>`}`
+        : html`<p class="muted small">${t('bill.notYet')}</p>`}
+      ${s.payment?.supportPhone
         ? row(t('license.support'), formatPhone(s.payment.supportPhone))
         : ''}
-      ${s.payment.paymentUrl
-        ? row(t('license.payUrl'), html`<code class="telegram-link">${s.payment.paymentUrl}</code>`)
-        : ''}
+      <div class="form-actions">${pay}</div>
     </div>`;
   };
 
@@ -144,7 +208,7 @@ export const subscriptionSection: View = () => {
       );
       return;
     }
-    body.replaceChildren(statusCard(s), paymentCard(s), linkCard(s));
+    body.replaceChildren(statusCard(s), accountCard(s), linkCard(s));
   };
 
   render();

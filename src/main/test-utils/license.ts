@@ -17,7 +17,19 @@ export function allowAllLicense(): HandlerServices['license'] {
     checkinBy: null,
     terminalId: 'test-till',
     lastError: null,
-    payment: null,
+    payment: {
+      supportPhone: '998712000000',
+      paymentUrl: 'https://pay.example/1000',
+      qrPayload: 'QR',
+    },
+    account: {
+      balance: '-75000',
+      monthlyFee: '75000',
+      nextChargeAt: null,
+      owed: '75000',
+      asOf: new Date(0).toISOString(),
+      movements: [],
+    },
   });
   const offline = async (): Promise<never> => {
     throw new Error('no server in tests');
@@ -35,7 +47,11 @@ export function allowAllLicense(): HandlerServices['license'] {
       extraTerminalPrice: 0,
       supportPhone: '',
     }),
-    signupStart: async () => ({ verificationId: 'v1', botLink: null, expiresAt: new Date(0).toISOString() }),
+    signupStart: async () => ({
+      verificationId: 'v1',
+      botLink: null,
+      expiresAt: new Date(0).toISOString(),
+    }),
     signupStatus: async () => ({ contactConfirmed: false, expired: false }),
     signupComplete: offline,
     activate: offline,

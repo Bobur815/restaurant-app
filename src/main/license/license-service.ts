@@ -5,9 +5,12 @@ import {
   LICENSE_FEATURES,
   type LicenseFeature,
   type LicensePlansDto,
+  type LicenseAccountDto,
+  type LicensePaymentDto,
   type LicenseStatusDto,
   type SignupStartDto,
 } from '@shared/license';
+import { toMoneyString } from '@shared/utils/decimal';
 import type { Db } from '../domain/db';
 import { conflict } from '../domain/errors';
 import { getSetupStatus } from '../settings/setup';
@@ -85,18 +88,91 @@ const signupStartAnswer = z.object({
 
 const signupStatusAnswer = z.object({ contactConfirmed: z.boolean(), expired: z.boolean() });
 
+const uzs = z.number().finite().min(-1e12).max(1e12);
+/**
+ * How to pay (feature F7). These come beside the signed licence, not inside it, so they are held
+ * to what they can be: an https link, a phone number, and a bank string without control or
+ * direction characters (which could make the text shown differ from what the QR holds). A bad
+ * field is dropped on its own; the others stay.
+ */
+const NO_HIDDEN_CHARS = /^[^\p{Cc}\p{Cf}]*$/u;
+const paymentField = (schema: z.ZodType<string>) => schema.default('').catch('');
+const paymentAnswer = z.object({
+  paymentUrl: paymentField(
+    z.union([
+      z.literal(''),
+      z
+        .string()
+        .max(300)
+        .regex(NO_HIDDEN_CHARS)
+        .regex(/^https:\/\/[^\s/?#]+\.[^\s]*$/i),
+    ]),
+  ),
+  supportPhone: paymentField(
+    z
+      .string()
+      .max(32)
+      .regex(/^[+\d ()-]*$/),
+  ),
+  qrPayload: paymentField(z.string().max(512).regex(NO_HIDDEN_CHARS)),
+});
+/** Feature F7. Stored as received and read back with the same schema. */
+const accountAnswer = z.object({
+  balanceUzs: uzs,
+  monthlyFeeUzs: uzs.nullable(),
+  nextChargeAt: z.iso.datetime().nullable(),
+  owedUzs: uzs.min(0),
+  asOf: z.iso.datetime(),
+  movements: z
+    .array(
+      z.object({
+        type: z.enum(['TOPUP', 'SUBSCRIPTION', 'ADJUSTMENT']),
+        amountUzs: uzs,
+        balanceAfterUzs: uzs,
+        at: z.iso.datetime(),
+      }),
+    )
+    .max(20),
+});
+type Account = z.infer<typeof accountAnswer>;
+
 const grantAnswer = z.object({
   storeId: z.string().min(1).max(64),
   storeName: shortText(200),
   license: z.string().min(1).max(8192),
-  payment: z
-    .object({
-      paymentUrl: z.string().max(300).default(''),
-      supportPhone: z.string().max(32).default(''),
-    })
-    .partial()
-    .optional(),
+  // A bad or missing extra never costs the till its licence: it is just not shown.
+  payment: paymentAnswer.optional().catch(undefined),
+  account: accountAnswer.optional().catch(undefined),
 });
+
+/** A stored JSON column read back, or null if it is missing or no longer valid. */
+function stored<T>(schema: z.ZodType<T>, json: string | null): T | null {
+  if (!json) return null;
+  try {
+    const parsed = schema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function accountDto(a: Account | null): LicenseAccountDto | null {
+  if (!a) return null;
+  const money = (n: number) => toMoneyString(String(n));
+  return {
+    balance: money(a.balanceUzs),
+    monthlyFee: a.monthlyFeeUzs === null ? null : money(a.monthlyFeeUzs),
+    nextChargeAt: a.nextChargeAt,
+    owed: money(a.owedUzs),
+    asOf: a.asOf,
+    movements: a.movements.map((m) => ({
+      type: m.type,
+      amount: money(m.amountUzs),
+      balanceAfter: money(m.balanceAfterUzs),
+      at: m.at,
+    })),
+  };
+}
 type Grant = z.infer<typeof grantAnswer>;
 
 function parseAnswer<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -189,6 +265,8 @@ interface Row {
   lastCheckinAt: Date | null;
   lastError: string | null;
   firstRunAt: Date;
+  account: string | null;
+  payment: string | null;
 }
 
 export class LicenseService {
@@ -197,7 +275,6 @@ export class LicenseService {
   private payload: LicensePayload | null = null;
   /** Setup only ever goes from not done to done. */
   private setupDone = false;
-  private payment: LicenseStatusDto['payment'] = null;
   private last: TillState | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private checking: Promise<LicenseStatusDto> | null = null;
@@ -265,7 +342,8 @@ export class LicenseService {
       checkinBy: l?.checkinBy ?? null,
       terminalId: row.terminalId,
       lastError: row.lastError,
-      payment: this.payment,
+      payment: stored(paymentAnswer, row.payment),
+      account: accountDto(stored(accountAnswer, row.account)),
     };
   }
 
@@ -392,7 +470,12 @@ export class LicenseService {
       if (issued < heldIssued) {
         throw conflict('Serverdan eski litsenziya keldi', { reason: 'LICENSE_STALE' });
       }
-      if (issued === heldIssued) return this.status(); // the same licence again: nothing new
+      if (issued === heldIssued) {
+        // The same licence again: only the bill and pay details may be newer.
+        await this.saveExtras(grant);
+        this.o.onChange();
+        return this.status();
+      }
     }
     if (held && !sameStore) {
       this.o.log.info(`[license] till moved from restaurant ${held.storeId} to ${payload.storeId}`);
@@ -405,15 +488,21 @@ export class LicenseService {
       lastCheckinAt: new Date(this.o.clock.now()),
       lastError: null,
     });
-    this.payment = {
-      supportPhone: grant.payment?.supportPhone ?? '',
-      paymentUrl: grant.payment?.paymentUrl ?? '',
-    };
+    await this.saveExtras(grant);
     this.o.log.info(
       `[license] licence for restaurant ${payload.storeId}, plan ${payload.plan ?? '-'}`,
     );
     this.o.onChange();
     return this.status();
+  }
+
+  /** What came with a licence (feature F7); kept until the next one, or dropped if not sent. */
+  private async saveExtras(grant: Grant): Promise<void> {
+    const payment: LicensePaymentDto | null = grant.payment ?? null;
+    await this.save({
+      payment: payment ? JSON.stringify(payment) : null,
+      account: grant.account ? JSON.stringify(grant.account) : null,
+    });
   }
 
   private async save(data: Partial<Omit<Row, 'terminalId' | 'firstRunAt'>>): Promise<void> {

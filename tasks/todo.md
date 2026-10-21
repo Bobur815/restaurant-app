@@ -481,3 +481,28 @@ Steps:
 - [x] Open-order cards: status on its own line, total + number on the bottom row (the number was clipped next to "Tayyorlanmoqda").
 - [x] Move a table's unpaid order to a free table (`orders:moveTable`): ⇄ button on busy grid cards and "Stolni almashtirish" on the order page; only free, shown tables; version-checked; the pendingTable trigger moves the one-order-per-table lock. No migration. prisma-reviewer: no bugs; its test and stale-dialog suggestions applied.
 - Verified on a data copy (harnesses smoke-save, smoke-cards, smoke-move); `npm run check` 486 tests.
+
+## Feature F7: restaurant balance and paying the monthly bill on the till (approved and built 2026-10-21, not committed; posgro on branch `feat/savdochef-billing`)
+
+**Answered:** top-up stays manual like posgro (the restaurant pays by QR/link with its store ID in the note; the super admin records the top-up in the dashboard, which already renews the month at once); SavdoChef gets its own payment details (fallback: posgro's); the till shows balance + next charge, a pay window with QR, and the last balance movements.
+
+**Already there (posgro):** `Store.balance` + `BalanceTransaction` ledger, `BillingService` charging STARTER/PRO SavdoChef restaurants from the balance at expiry (negative → grace → block; a top-up renews), dashboard SavdoChef store page with balance, ledger and top-up. The grant already carries `payment {qrPayload, paymentUrl, supportPhone}`, but from posgro's settings, and production's are empty. The till keeps only paymentUrl/supportPhone, in memory.
+
+### posgro (branch `feat/savdochef-billing` off `dev`; additive, behind `SAVDOCHEF_ENABLED` like all SavdoChef routes)
+- [x] `savdochef_config.payment {qrPayload, paymentUrl, supportPhone}` (defaults empty, normalized, lengths capped); SavdoChef settings page in the dashboard edits them. Grant and `/savdochef/plans` use them, each field falling back to posgro's; `{storeId}` substituted in the link.
+- [x] Grant adds `account`: `balanceUzs`, `monthlyFeeUzs`, `nextChargeAt`, `owedUzs` (from `BillingService.nextCharge`; null fields for TRIAL/VIP), `asOf`, and the last 10 movements `{type: TOPUP|SUBSCRIPTION|ADJUSTMENT, amountUzs, balanceAfterUzs, at}` (no admin notes, no AI scans). Only to the restaurant's own licensed till (activate/complete/renew).
+- [x] Tests (config normalize + fallback, account in grant, no admin notes, wizard support phone); posgro full suite 1603 passed, server + web typecheck clean.
+- [ ] Staging deploy and a till against staging before main.
+
+### SavdoChef (0.7.0: has a migration)
+- [x] Migration 0013 (additive): `license_state.account` and `license_state.payment` (nullable JSON text), so the last known balance and pay details survive restarts and offline days.
+- [x] `license-service`: grant schema accepts `payment.qrPayload` (≤ 512) and `account` (all optional, an older server still works); stored on accept; `LicenseStatusDto.account` + `payment.qrPayload`.
+- [x] Settings → Obuna: balance card (balance, monthly fee, next charge date/amount, owed in red, "holat: <time>" since it may be offline) and the movements table; "To'lash" button.
+- [x] Pay window: QR of `qrPayload` (else of the pay link), the link as text, the amount to pay (owed, else the monthly fee), "To'lov izohiga yozing: <storeId>", support phone, and "after paying press Tekshirish" (top-ups are recorded by hand; the till checks every 6 h, at start and on Tekshirish).
+- [x] Banner (warning/grace/read-only) gets a "To'lash" link for users with `settings`; others keep "Administratorga murojaat qiling".
+- [x] Main never opens the link (no shell.openExternal): shown and as QR only. Strings escaped, QR drawn by our code. Reviews: migration-reviewer, electron-security-reviewer.
+- [x] Tests (account + QR persisted across restart, same licence with a newer bill, broken account ignored without losing the licence); `npm run check` 487. Harness `smoke-bill.cjs` on a copy of the café data (v12 -> v13) against a stand-in server signing with the real key: grace + 75 000 owed -> banner "To'lash", pay window (amount, QR drawn, ID 1001, link, phone), Obuna card; after a top-up -> renewed 30 days, balance 25 000, movements; uz and ru. Fixed: a past charge date was shown as "next charge" while owed.
+- [x] Reviews: migration-reviewer SAFE TO APPLY. electron-security-reviewer, all fixed: `license:status` and `license:checkNow` now hide ids, bill and pay details from the lock screen and staff alike (one `statusFor` in handlers.ts; the fixture carries real values so the test can fail); pay fields held to shape on the till and in posgro's config (https link, phone characters, no control/bidi characters; a bad field dropped alone); the bank QR's text shown under it; QR text encoded as UTF-8 (Cyrillic payee). `npm run check` 489, posgro 1603.
+- [ ] Against staging.
+
+**Before it is useful in production:** you fill in SavdoChef's payment details (QR string / pay link / support phone) in the dashboard. Order: posgro to staging → test → main; then SavdoChef 0.7.0 release + deploy.

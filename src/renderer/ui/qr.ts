@@ -1,5 +1,23 @@
 import qrcode from 'qrcode-generator';
 
+/** UTF-8 bytes of `s` (plain code: no TextEncoder needed where this is tested). */
+export function utf8Bytes(s: string): number[] {
+  const out: number[] = [];
+  for (const ch of s) {
+    const c = ch.codePointAt(0)!;
+    if (c < 0x80) out.push(c);
+    else if (c < 0x800) out.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else
+      out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  return out;
+}
+
+// The default keeps one byte per character, which garbles Cyrillic (a payee in a bank string);
+// UTF-8 instead (the bundled ES build has no UTF-8 table of its own).
+qrcode.stringToBytes = utf8Bytes;
+
 const SVG = 'http://www.w3.org/2000/svg';
 
 /**

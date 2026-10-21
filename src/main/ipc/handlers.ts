@@ -11,6 +11,7 @@ import {
   refreshActor,
 } from '../auth/auth';
 import { hasPermission, type Permission } from '@shared/permissions';
+import type { LicenseStatusDto } from '@shared/license';
 import type { SessionDto } from '@shared/types';
 import {
   createHall,
@@ -113,6 +114,22 @@ function drawerFor<T extends SessionDto | null>(ctx: HandlerContext, s: T): T {
   return { ...s, openingCash: null, countedCash: null, expectedCash: null };
 }
 
+/**
+ * The licence status as a caller may see it: the lock screen and cashiers learn where the till
+ * stands, not its ids, the restaurant's bill (feature F7) or how to pay it.
+ */
+async function statusFor(ctx: HandlerContext, status: LicenseStatusDto): Promise<LicenseStatusDto> {
+  if (status.mode === 'setup' || (await settingsActor(ctx))) return status;
+  return {
+    ...status,
+    terminalId: '',
+    storeId: null,
+    payment: null,
+    account: null,
+    lastError: null,
+  };
+}
+
 /** The logged-in user if they hold the settings permission (re-read), else null. */
 async function settingsActor(ctx: HandlerContext) {
   const actor = ctx.actor ? await refreshActor(ctx.db, ctx.actor) : null;
@@ -207,14 +224,14 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   // ── licence (feature F5) ──────────────────────────────────────────────────────────────────
   // Status and check-in are public: the login screen shows why a till is read-only, and anyone
   // may ask the server again (only this till's own licence is sent).
-  'license:status': pub(S.empty, async (ctx) => {
-    const status = await ctx.services.license.status();
-    if (status.mode === 'setup' || (await settingsActor(ctx))) return status;
-    // The lock screen and cashiers need where the till stands, not its ids or payment details.
-    return { ...status, terminalId: '', storeId: null, payment: null, lastError: null };
-  }),
+  'license:status': pub(S.empty, async (ctx) =>
+    statusFor(ctx, await ctx.services.license.status()),
+  ),
   'license:checkNow': pub(S.empty, async (ctx) =>
-    ctx.services.license.checkNow({ force: (await settingsActor(ctx)) !== null }),
+    statusFor(
+      ctx,
+      await ctx.services.license.checkNow({ force: (await settingsActor(ctx)) !== null }),
+    ),
   ),
   'license:plans': pub(S.empty, async (ctx) => {
     await mayLink(ctx);

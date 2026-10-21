@@ -136,14 +136,25 @@ describe('licence', () => {
     );
     // An order that already exists can be finished.
     // Editing can change the type, so it is checked too.
-    expect(await refusal('orders:saveOpen', { orderId: 5, orderType: 'DELIVERY' }, start, halls)).toMatch(/Yetkazib/);
+    expect(
+      await refusal('orders:saveOpen', { orderId: 5, orderType: 'DELIVERY' }, start, halls),
+    ).toMatch(/Yetkazib/);
     // Turning a paid check into debt is selling on debt.
     expect(
-      await refusal('checks:update', { orderNumber: '2026-00001', tenders: [{ method: 'debt', amount: '5000' }] }, start, halls),
+      await refusal(
+        'checks:update',
+        { orderNumber: '2026-00001', tenders: [{ method: 'debt', amount: '5000' }] },
+        start,
+        halls,
+      ),
     ).toMatch(/Nasiya/);
     // A hidden hall switched back on is a second hall; the only hall switched on is not.
-    expect(await refusal('halls:update', { id: 2, isActive: true }, start, async () => 1)).toMatch(/zal/);
-    expect(await refusal('halls:update', { id: 2, isActive: true }, start, async () => 0)).toBeNull();
+    expect(await refusal('halls:update', { id: 2, isActive: true }, start, async () => 1)).toMatch(
+      /zal/,
+    );
+    expect(
+      await refusal('halls:update', { id: 2, isActive: true }, start, async () => 0),
+    ).toBeNull();
     expect(await refusal('halls:update', { id: 2, name: 'Zal' }, start, async () => 5)).toBeNull();
     expect(
       await refusal(
@@ -250,7 +261,11 @@ describe('LicenseService', () => {
     storeId: '1000',
     storeName: 'Shoxona',
     license: signed({ seats: [terminalId], ...over }),
-    payment: { qrPayload: '', paymentUrl: 'https://pay/1000', supportPhone: '998901112233' },
+    payment: {
+      qrPayload: '',
+      paymentUrl: 'https://pay.example/1000',
+      supportPhone: '998901112233',
+    },
   });
 
   it('links on sign-up, checks in, and keeps working offline when a check-in fails', async () => {
@@ -300,7 +315,9 @@ describe('LicenseService', () => {
       expect.objectContaining({ license: expect.any(String) }),
     );
 
-    post.mockResolvedValueOnce(grant(terminalId, { plan: 'PRO', issuedAt: new Date(NOW + 60_000).toISOString() }));
+    post.mockResolvedValueOnce(
+      grant(terminalId, { plan: 'PRO', issuedAt: new Date(NOW + 60_000).toISOString() }),
+    );
     expect(await s.checkNow()).toMatchObject({ plan: 'PRO', lastError: null });
   });
 
@@ -313,7 +330,7 @@ describe('LicenseService', () => {
     post.mockResolvedValueOnce(grant(terminalId));
     await s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' });
     // The token stays in main: nothing the renderer can ask for carries it.
-    const token = (post.mock.results[0]!.value as Promise<{ license: string }>);
+    const token = post.mock.results[0]!.value as Promise<{ license: string }>;
     expect(JSON.stringify(await s.status())).not.toContain((await token).license.split('.')[1]);
 
     post.mockResolvedValueOnce(old);
@@ -333,6 +350,106 @@ describe('LicenseService', () => {
       s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' }),
     ).rejects.toThrow(/yaroqsiz/);
     expect((await s.status()).linked).toBe(false);
+  });
+
+  it('keeps the bill and pay details across restarts; a bad or missing account costs nothing', async () => {
+    const post = jest.fn();
+    const { s } = service(post);
+    await s.init();
+    const { terminalId } = await s.status();
+    const account = {
+      balanceUzs: -75000,
+      monthlyFeeUzs: 75000,
+      nextChargeAt: '2026-10-22T18:59:59.000Z',
+      owedUzs: 75000,
+      asOf: new Date(NOW).toISOString(),
+      movements: [
+        {
+          type: 'SUBSCRIPTION',
+          amountUzs: -75000,
+          balanceAfterUzs: -75000,
+          at: '2026-10-22T19:00:00.000Z',
+        },
+        {
+          type: 'TOPUP',
+          amountUzs: 150000.5,
+          balanceAfterUzs: 150000.5,
+          at: '2026-09-20T10:00:00.000Z',
+        },
+      ],
+    };
+    post.mockResolvedValueOnce({
+      ...grant(terminalId),
+      payment: {
+        qrPayload: 'ST00012|Bank|2020...',
+        paymentUrl: 'https://pay.example/1000',
+        supportPhone: '998901112233',
+      },
+      account,
+    });
+    await s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' });
+
+    // A restart: everything read back from the database, as strings for the renderer.
+    const again = service(jest.fn()).s;
+    await again.init();
+    expect(await again.status()).toMatchObject({
+      payment: { qrPayload: 'ST00012|Bank|2020...', paymentUrl: 'https://pay.example/1000' },
+      account: {
+        balance: '-75000',
+        monthlyFee: '75000',
+        owed: '75000',
+        nextChargeAt: '2026-10-22T18:59:59.000Z',
+        movements: [
+          { type: 'SUBSCRIPTION', amount: '-75000', balanceAfter: '-75000' },
+          { type: 'TOPUP', amount: '150000.5', balanceAfter: '150000.5' },
+        ],
+      },
+    });
+
+    // The same licence again with a newer bill: the bill updates.
+    const same = (await post.mock.results[0]!.value) as { license: string };
+    post.mockResolvedValueOnce({
+      ...grant(terminalId),
+      license: same.license,
+      account: { ...account, balanceUzs: 0, owedUzs: 0 },
+    });
+    expect((await s.checkNow()).account).toMatchObject({ balance: '0', owed: '0' });
+
+    // A newer licence with a broken account: the licence is taken, the account just not shown.
+    post.mockResolvedValueOnce({
+      ...grant(terminalId, { issuedAt: new Date(NOW + 60_000).toISOString() }),
+      account: { balanceUzs: 'lots' },
+    });
+    const broken = await s.checkNow();
+    expect(broken).toMatchObject({ lastError: null, account: null });
+
+    // Pay details beside the signature are held to their shape; a bad one is dropped alone.
+    post.mockResolvedValueOnce({
+      ...grant(terminalId, { issuedAt: new Date(NOW + 120_000).toISOString() }),
+      payment: {
+        paymentUrl: 'javascript:alert(1)',
+        supportPhone: '998712000000‮',
+        qrPayload: 'ST00012|Bank‮|evil',
+      },
+    });
+    expect((await s.checkNow()).payment).toEqual({
+      paymentUrl: '',
+      supportPhone: '',
+      qrPayload: '',
+    });
+    post.mockResolvedValueOnce({
+      ...grant(terminalId, { issuedAt: new Date(NOW + 180_000).toISOString() }),
+      payment: {
+        paymentUrl: 'http://pay.example/1000',
+        supportPhone: '+998 71 200-00-00',
+        qrPayload: 'Тошкент',
+      },
+    });
+    expect((await s.checkNow()).payment).toEqual({
+      paymentUrl: '',
+      supportPhone: '+998 71 200-00-00',
+      qrPayload: 'Тошкент',
+    });
   });
 
   it('keeps the same till id across restarts', async () => {

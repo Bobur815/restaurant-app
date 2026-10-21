@@ -59,7 +59,35 @@ export interface LicenseStatusDto {
   terminalId: string;
   /** Uzbek, from the last failed check-in. */
   lastError: string | null;
-  payment: { supportPhone: string; paymentUrl: string } | null;
+  /** How to pay, from the last check-in (feature F7); null before the first one. */
+  payment: LicensePaymentDto | null;
+  /** The restaurant's balance and bill as of `account.asOf`; null until the server sends one. */
+  account: LicenseAccountDto | null;
+}
+
+export interface LicensePaymentDto {
+  supportPhone: string;
+  /** Self-service pay link (Click/Payme), already holding the store id. */
+  paymentUrl: string;
+  /** Raw bank-transfer string, drawn as a QR on the till. */
+  qrPayload: string;
+}
+
+export type LicenseMovementType = 'TOPUP' | 'SUBSCRIPTION' | 'ADJUSTMENT';
+
+/** Money as decimal strings (UZS), like everything else across IPC. */
+export interface LicenseAccountDto {
+  balance: string;
+  /** The plan's monthly fee; null when not billed (trial, VIP). */
+  monthlyFee: string | null;
+  /** When the next fee is taken (the paid-until date). */
+  nextChargeAt: string | null;
+  /** Charged and not covered: what to pay before the month renews. */
+  owed: string;
+  /** When the server said so: the till may have been offline since. */
+  asOf: string;
+  /** Latest first. */
+  movements: { type: LicenseMovementType; amount: string; balanceAfter: string; at: string }[];
 }
 
 export interface LicensePlanDto {

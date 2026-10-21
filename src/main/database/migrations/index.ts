@@ -10,6 +10,7 @@ import { sql as pinLoginPermissions } from './0009_pin_login_permissions';
 import { sql as receiptLayouts } from './0010_receipt_layouts';
 import { sql as licenseState } from './0011_license_state';
 import { sql as shiftCashUnlimited } from './0012_shift_cash_unlimited';
+import { sql as licenseAccount } from './0013_license_account';
 
 export interface Migration {
   /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
@@ -37,4 +38,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 10, name: 'receipt_layouts', sql: receiptLayouts },
   { version: 11, name: 'license_state', sql: licenseState },
   { version: 12, name: 'shift_cash_unlimited', sql: shiftCashUnlimited },
+  { version: 13, name: 'license_account', sql: licenseAccount },
 ];

@@ -580,6 +580,11 @@ model LicenseState {
   firstRunAt    DateTime  @default(now())
   /// The latest moment this till knows has passed (trusted clock, main/license/trusted-clock.ts).
   clockMark     DateTime?
+  /// The restaurant's balance and bill as of the last check-in (feature F7), JSON; null until the
+  /// server sends one. Kept so the subscription screen still shows it after a restart or offline.
+  account       String?
+  /// How to pay (QR text, pay link, support phone) from the last check-in, JSON.
+  payment       String?
   updatedAt     DateTime  @updatedAt
 
   @@map("license_state")

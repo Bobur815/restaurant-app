@@ -1576,3 +1576,106 @@
 .move-table-option .table-number {
   font-size: var(--font-size-xl);
 }
+
+/* ── Restaurant bill and paying it (feature F7) ──────────────────────────────────────────── */
+.bill-tiles {
+  margin-bottom: var(--space-2);
+}
+
+.bill-movements {
+  margin-top: var(--space-3);
+}
+
+.pay-bill {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.pay-bill-amount {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+}
+
+.pay-bill-amount strong {
+  font-size: var(--font-size-xl);
+}
+
+.pay-bill-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.pay-bill-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+/* The QR keeps its white quiet zone in dark mode too: scanners need the contrast. */
+.pay-bill-qr svg {
+  border-radius: var(--radius-md);
+}
+
+.pay-bill-steps {
+  display: flex;
+  flex: 1 1 220px;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pay-bill-steps p {
+  margin: 0;
+}
+
+.pay-bill-id {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-2xl);
+  letter-spacing: 0.06em;
+}
+
+.license-banner-pay {
+  margin-left: auto;
+  padding: var(--space-1) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.license-banner-pay:hover {
+  filter: brightness(1.08);
+}
+
+/* With a pay button, the "Obuna" link sits right after it instead of pushing to the edge. */
+.license-banner-pay + a {
+  margin-left: 0;
+}
+
+.pay-bill-qr figcaption {
+  max-width: 240px;
+  text-align: center;
+}
+
+/* What the bank QR holds, so the cashier can see it matches. */
+.pay-bill-qr-text {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  overflow-wrap: anywhere;
+}

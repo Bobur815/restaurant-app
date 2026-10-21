@@ -1,5 +1,6 @@
 import { api } from '../api';
 import { SavdoChefIcon } from '../branding';
+import { canPayBill, payBillModal } from '../components/pay-bill';
 import { t } from '../i18n';
 import type { ShellInstance } from '../router/router';
 import { canAccess, homeFor, type Access } from '../router/routes';
@@ -273,8 +274,23 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
         : Object.assign(document.createElement('span'), {
             textContent: t('license.banner.askAdmin'),
           });
+      // Paying is what ends a warning, grace or unpaid block: offer it right here (feature F7).
+      const lic = s.license;
+      const payable =
+        can('settings') &&
+        canPayBill(lic) &&
+        (lic?.reason === 'warning' || lic?.reason === 'grace' || lic?.reason === 'blocked');
+      const pay = payable
+        ? Object.assign(document.createElement('button'), {
+            type: 'button',
+            className: 'license-banner-pay',
+            textContent: t('bill.pay'),
+            onclick: () => lic && payBillModal(lic),
+          })
+        : null;
       r.licenseBanner.replaceChildren(
         Object.assign(document.createElement('span'), { textContent: banner.text }),
+        ...(pay ? [pay] : []),
         more,
       );
     }

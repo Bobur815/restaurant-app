@@ -13,7 +13,11 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
-function ctx(actor: Actor | null, setupMode: boolean, refusal: string | null = null): HandlerContext {
+function ctx(
+  actor: Actor | null,
+  setupMode: boolean,
+  refusal: string | null = null,
+): HandlerContext {
   const license = {
     ...allowAllLicense(),
     isLinked: () => !setupMode,
@@ -26,7 +30,11 @@ function ctx(actor: Actor | null, setupMode: boolean, refusal: string | null = n
     setActor: () => undefined,
     services: {
       appInfo: () => ({ name: 'x', version: '0', isPackaged: false }),
-      printer: { list: async () => [], print: async () => ({ printer: 'x' }), preview: async () => '' },
+      printer: {
+        list: async () => [],
+        print: async () => ({ printer: 'x' }),
+        preview: async () => '',
+      },
       pickImage: async () => null,
       receiptImage: () => null,
       updater: unsupportedUpdater(),
@@ -36,7 +44,8 @@ function ctx(actor: Actor | null, setupMode: boolean, refusal: string | null = n
   };
 }
 
-const plans = (c: HandlerContext) => invokeHandler('license:plans', HANDLERS['license:plans'], c, undefined);
+const plans = (c: HandlerContext) =>
+  invokeHandler('license:plans', HANDLERS['license:plans'], c, undefined);
 
 describe('licence channels', () => {
   it('let anyone link during first setup (no user exists yet)', async () => {
@@ -46,15 +55,39 @@ describe('licence channels', () => {
   it('need a user with the settings permission once the till is set up, linked or not', async () => {
     const staff = await createUser(t.db, { username: 'k', role: 'STAFF', pin: '2468' });
     const admin = await createUser(t.db, { username: 'a', role: 'ADMIN', pin: '1357' });
-    expect(await plans(ctx(null, false))).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
-    expect(await plans(ctx(staff, false))).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+    expect(await plans(ctx(null, false))).toMatchObject({
+      ok: false,
+      error: { code: 'FORBIDDEN' },
+    });
+    expect(await plans(ctx(staff, false))).toMatchObject({
+      ok: false,
+      error: { code: 'FORBIDDEN' },
+    });
     expect(await plans(ctx(admin, false))).toMatchObject({ ok: true });
 
-    // The lock screen learns where the till stands, not its ids or payment details.
-    const status = (a: Actor | null) =>
-      invokeHandler('license:status', HANDLERS['license:status'], ctx(a, false), undefined);
-    expect(await status(null)).toMatchObject({ ok: true, data: { terminalId: '', storeId: null, payment: null } });
-    expect(await status(admin)).toMatchObject({ ok: true, data: { terminalId: 'test-till', storeId: '1000' } });
+    // The lock screen and cashiers learn where the till stands, not its ids, bill or pay details,
+    // whether they ask for the status or for a check-in.
+    for (const ch of ['license:status', 'license:checkNow'] as const) {
+      const call = (a: Actor | null) => invokeHandler(ch, HANDLERS[ch], ctx(a, false), undefined);
+      const hidden = {
+        terminalId: '',
+        storeId: null,
+        payment: null,
+        account: null,
+        lastError: null,
+      };
+      expect(await call(null)).toMatchObject({ ok: true, data: { mode: 'full', ...hidden } });
+      expect(await call(staff)).toMatchObject({ ok: true, data: hidden });
+      expect(await call(admin)).toMatchObject({
+        ok: true,
+        data: {
+          terminalId: 'test-till',
+          storeId: '1000',
+          account: { owed: '75000' },
+          payment: { qrPayload: 'QR' },
+        },
+      });
+    }
   });
 
   it('refuse a call the licence does not allow, with its Uzbek reason, before the handler runs', async () => {
@@ -65,6 +98,9 @@ describe('licence channels', () => {
       ctx(admin, false, 'Obuna muddati tugagan'),
       { items: [{ menuItemId: 1, initialQuantity: '1' }] },
     );
-    expect(result).toMatchObject({ ok: false, error: { code: 'CONFLICT', message: 'Obuna muddati tugagan', details: { reason: 'LICENSE' } } });
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'CONFLICT', message: 'Obuna muddati tugagan', details: { reason: 'LICENSE' } },
+    });
   });
 });
