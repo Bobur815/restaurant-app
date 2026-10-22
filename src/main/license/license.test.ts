@@ -1,10 +1,19 @@
 import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { LICENSE_FEATURES } from '@shared/license';
 import { receiptSettingsInput } from '@shared/schemas';
 import { completeSetup } from '../settings/setup';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import { DAY_MS, readLicense, refusal, tillState, type LicensePayload } from './license-core';
-import { LicenseService, ServerError } from './license-service';
+import {
+  CARD_IMAGE_MAX_BYTES,
+  httpClient,
+  licenseImageNames,
+  LicenseService,
+  ServerError,
+} from './license-service';
 import { TrustedClock, type MarkStore } from './trusted-clock';
 
 jest.setTimeout(60_000);
@@ -436,6 +445,7 @@ describe('LicenseService', () => {
       paymentUrl: '',
       supportPhone: '',
       qrPayload: '',
+      card: null,
     });
     post.mockResolvedValueOnce({
       ...grant(terminalId, { issuedAt: new Date(NOW + 180_000).toISOString() }),
@@ -449,6 +459,192 @@ describe('LicenseService', () => {
       paymentUrl: '',
       supportPhone: '+998 71 200-00-00',
       qrPayload: 'Тошкент',
+      card: null,
+    });
+  });
+
+  describe('the payment card (feature F8)', () => {
+    const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+    const CARD = {
+      qrPayload: '',
+      paymentUrl: 'https://pay.example/1000',
+      supportPhone: '998901112233',
+      cardNumber: '9860123412341234',
+      cardHolder: 'BOBUR ERGASHEV',
+      cardImage: '/uploads/card-17.jpg',
+    };
+    let imageDir: string;
+    beforeEach(() => {
+      imageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'savdochef-card-'));
+    });
+    afterEach(() => fs.rmSync(imageDir, { recursive: true, force: true }));
+
+    function withCard(post: jest.Mock, download: jest.Mock) {
+      return new LicenseService({
+        db: t.db,
+        publicKey: SERVER.publicKey,
+        clock: new TrustedClock([], { now: () => NOW, monotonic: () => 0 }),
+        http: { get: jest.fn(), post, download },
+        imageDir,
+        appVersion: '0.7.0',
+        machineName: 'KASSA-1',
+        onChange: () => undefined,
+        log: { info: () => undefined, warn: () => undefined },
+        minCheckIntervalMs: 0,
+      });
+    }
+    const later = (terminalId: string, minutes: number, payment: object) => ({
+      ...grant(terminalId, { issuedAt: new Date(NOW + minutes * 60_000).toISOString() }),
+      payment,
+    });
+
+    it('downloads the picture once, keeps it across restarts and fetches a new one on change', async () => {
+      const post = jest.fn();
+      const download = jest.fn(async () => JPEG);
+      const s = withCard(post, download);
+      await s.init();
+      const { terminalId } = await s.status();
+      post.mockResolvedValueOnce({ ...grant(terminalId), payment: CARD });
+      const linked = await s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' });
+
+      expect(download).toHaveBeenCalledWith('/uploads/card-17.jpg', CARD_IMAGE_MAX_BYTES);
+      const card = linked.payment?.card;
+      expect(card).toMatchObject({ number: '9860123412341234', holder: 'BOBUR ERGASHEV' });
+      expect(card?.image).toMatch(/^[a-f0-9]{32}\.jpg$/);
+      expect(fs.readFileSync(path.join(imageDir, card!.image!))).toEqual(JPEG);
+      expect(await licenseImageNames(t.db)).toEqual([card!.image]);
+
+      // Same picture named again, after a restart: no second download.
+      const again = withCard(post, download);
+      await again.init();
+      post.mockResolvedValueOnce(later(terminalId, 1, CARD));
+      expect((await again.checkNow()).payment?.card?.image).toBe(card!.image);
+      expect(download).toHaveBeenCalledTimes(1);
+
+      // A new picture: downloaded under a new name.
+      post.mockResolvedValueOnce(
+        later(terminalId, 2, { ...CARD, cardImage: '/uploads/card-18.jpg' }),
+      );
+      const changed = (await again.checkNow()).payment?.card;
+      expect(download).toHaveBeenLastCalledWith('/uploads/card-18.jpg', CARD_IMAGE_MAX_BYTES);
+      expect(changed?.image).not.toBe(card!.image);
+
+      // The card removed on the server: gone from the till too.
+      post.mockResolvedValueOnce(later(terminalId, 3, { ...CARD, cardNumber: '', cardImage: '' }));
+      expect((await again.checkNow()).payment?.card).toBeNull();
+      expect(await licenseImageNames(t.db)).toEqual([]);
+    });
+
+    it('keeps the card as text when the picture is refused, and never fails the check-in', async () => {
+      const post = jest.fn();
+      const download = jest.fn(async () => Buffer.from('<html>not a picture</html>'));
+      const s = withCard(post, download);
+      await s.init();
+      const { terminalId } = await s.status();
+      post.mockResolvedValueOnce({ ...grant(terminalId), payment: CARD });
+      const linked = await s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' });
+      expect(linked).toMatchObject({
+        linked: true,
+        payment: { card: { number: '9860123412341234', image: null } },
+      });
+
+      download.mockRejectedValueOnce(new Error('offline'));
+      post.mockResolvedValueOnce(later(terminalId, 1, CARD));
+      expect(await s.checkNow()).toMatchObject({
+        lastError: null,
+        payment: { card: { image: null } },
+      });
+      expect(fs.readdirSync(imageDir)).toEqual([]);
+    });
+
+    it('asks for nothing but a baked card path, and drops a malformed card', async () => {
+      const post = jest.fn();
+      const download = jest.fn(async () => JPEG);
+      const s = withCard(post, download);
+      await s.init();
+      const { terminalId } = await s.status();
+      post.mockResolvedValueOnce({ ...grant(terminalId), payment: CARD });
+      await s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' });
+      download.mockClear();
+
+      let minutes = 0;
+      for (const cardImage of [
+        'https://evil.example/card-1.jpg',
+        '//evil.example/card-1.jpg',
+        '/uploads/../card-1.jpg',
+        '/uploads/banner-1.jpg',
+      ]) {
+        post.mockResolvedValueOnce(later(terminalId, ++minutes, { ...CARD, cardImage }));
+        expect((await s.checkNow()).payment?.card).toMatchObject({ image: null });
+      }
+      expect(download).not.toHaveBeenCalled();
+
+      post.mockResolvedValueOnce(
+        later(terminalId, ++minutes, { ...CARD, cardNumber: '9860 1234' }),
+      );
+      expect((await s.checkNow()).payment).toMatchObject({
+        supportPhone: '998901112233',
+        card: null,
+      });
+      post.mockResolvedValueOnce(later(terminalId, ++minutes, { ...CARD, cardHolder: 'EVIL‮' }));
+      expect((await s.checkNow()).payment?.card).toMatchObject({ holder: '' });
+    });
+
+    it('downloads again when the number changes under the same picture, and deletes the old one', async () => {
+      const post = jest.fn();
+      const download = jest.fn(async () => JPEG);
+      const s = withCard(post, download);
+      await s.init();
+      const { terminalId } = await s.status();
+      post.mockResolvedValueOnce({ ...grant(terminalId), payment: CARD });
+      const first = (await s.activate({ phone: '998901234567', activationCode: 'ABCD-EF23' }))
+        .payment?.card;
+
+      post.mockResolvedValueOnce(later(terminalId, 1, { ...CARD, cardNumber: '5614000011112222' }));
+      const second = (await s.checkNow()).payment?.card;
+      expect(download).toHaveBeenCalledTimes(2);
+      expect(second?.image).not.toBe(first?.image);
+      expect(fs.readdirSync(imageDir)).toEqual([second!.image]);
+    });
+
+    describe('httpClient download', () => {
+      const stream = (chunks: number, size: number) =>
+        new ReadableStream<Uint8Array>({
+          start(c) {
+            for (let i = 0; i < chunks; i++) c.enqueue(new Uint8Array(size));
+            c.close();
+          },
+        });
+
+      it('asks the API host for the path, uncompressed and without redirects', async () => {
+        const fetchImpl = jest.fn(async () => new Response(stream(2, 10)));
+        const bytes = await httpClient('https://api.example/api', fetchImpl).download(
+          '/uploads/card-1.jpg',
+          100,
+        );
+        expect(bytes.length).toBe(20);
+        expect(fetchImpl).toHaveBeenCalledWith(
+          'https://api.example/uploads/card-1.jpg',
+          expect.objectContaining({
+            redirect: 'error',
+            headers: { 'Accept-Encoding': 'identity' },
+          }),
+        );
+      });
+
+      it('stops reading a body past the cap, with or without a length', async () => {
+        const client = (res: Response) => httpClient('https://api.example/api', async () => res);
+        await expect(client(new Response(stream(50, 64))).download('/x', 1000)).rejects.toThrow(
+          'too big',
+        );
+        const declared = new Response(stream(1, 10), { headers: { 'content-length': '5000' } });
+        await expect(client(declared).download('/x', 1000)).rejects.toThrow('too big');
+        const nonsense = new Response(stream(1, 10), { headers: { 'content-length': 'lots' } });
+        await expect(client(nonsense).download('/x', 1000)).rejects.toThrow('too big');
+        await expect(
+          client(new Response('nope', { status: 404 })).download('/x', 1000),
+        ).rejects.toThrow('HTTP 404');
+      });
     });
   });
 

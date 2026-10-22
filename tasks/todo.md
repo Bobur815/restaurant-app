@@ -482,7 +482,7 @@ Steps:
 - [x] Move a table's unpaid order to a free table (`orders:moveTable`): ⇄ button on busy grid cards and "Stolni almashtirish" on the order page; only free, shown tables; version-checked; the pendingTable trigger moves the one-order-per-table lock. No migration. prisma-reviewer: no bugs; its test and stale-dialog suggestions applied.
 - Verified on a data copy (harnesses smoke-save, smoke-cards, smoke-move); `npm run check` 486 tests.
 
-## Feature F7: restaurant balance and paying the monthly bill on the till (approved and built 2026-10-21, not committed; posgro on branch `feat/savdochef-billing`)
+## Feature F7: restaurant balance and paying the monthly bill on the till (built 2026-10-21; committed: SavdoChef `3830df9`, posgro `cbdaa7f` merged into dev `aa29ea8`, staging deployed)
 
 **Answered:** top-up stays manual like posgro (the restaurant pays by QR/link with its store ID in the note; the super admin records the top-up in the dashboard, which already renews the month at once); SavdoChef gets its own payment details (fallback: posgro's); the till shows balance + next charge, a pay window with QR, and the last balance movements.
 
@@ -492,7 +492,7 @@ Steps:
 - [x] `savdochef_config.payment {qrPayload, paymentUrl, supportPhone}` (defaults empty, normalized, lengths capped); SavdoChef settings page in the dashboard edits them. Grant and `/savdochef/plans` use them, each field falling back to posgro's; `{storeId}` substituted in the link.
 - [x] Grant adds `account`: `balanceUzs`, `monthlyFeeUzs`, `nextChargeAt`, `owedUzs` (from `BillingService.nextCharge`; null fields for TRIAL/VIP), `asOf`, and the last 10 movements `{type: TOPUP|SUBSCRIPTION|ADJUSTMENT, amountUzs, balanceAfterUzs, at}` (no admin notes, no AI scans). Only to the restaurant's own licensed till (activate/complete/renew).
 - [x] Tests (config normalize + fallback, account in grant, no admin notes, wizard support phone); posgro full suite 1603 passed, server + web typecheck clean.
-- [ ] Staging deploy and a till against staging before main.
+- [x] Staging deploy (dev `aa29ea8`, CI + deploy green) and a till against staging: restaurant 1002 checked in, got its account (trial, balance 0) and the support phone from POSGRO's settings (SavdoChef's own still empty).
 
 ### SavdoChef (0.7.0: has a migration)
 - [x] Migration 0013 (additive): `license_state.account` and `license_state.payment` (nullable JSON text), so the last known balance and pay details survive restarts and offline days.
@@ -503,6 +503,80 @@ Steps:
 - [x] Main never opens the link (no shell.openExternal): shown and as QR only. Strings escaped, QR drawn by our code. Reviews: migration-reviewer, electron-security-reviewer.
 - [x] Tests (account + QR persisted across restart, same licence with a newer bill, broken account ignored without losing the licence); `npm run check` 487. Harness `smoke-bill.cjs` on a copy of the café data (v12 -> v13) against a stand-in server signing with the real key: grace + 75 000 owed -> banner "To'lash", pay window (amount, QR drawn, ID 1001, link, phone), Obuna card; after a top-up -> renewed 30 days, balance 25 000, movements; uz and ru. Fixed: a past charge date was shown as "next charge" while owed.
 - [x] Reviews: migration-reviewer SAFE TO APPLY. electron-security-reviewer, all fixed: `license:status` and `license:checkNow` now hide ids, bill and pay details from the lock screen and staff alike (one `statusFor` in handlers.ts; the fixture carries real values so the test can fail); pay fields held to shape on the till and in posgro's config (https link, phone characters, no control/bidi characters; a bad field dropped alone); the bank QR's text shown under it; QR text encoded as UTF-8 (Cyrillic payee). `npm run check` 489, posgro 1603.
-- [ ] Against staging.
+- [x] Against staging (above). Still open: a top-up on staging seen on the till (needs the super admin in the staging dashboard); then posgro to main, SavdoChef payment details in production, SavdoChef 0.7.0 release + deploy.
 
 **Before it is useful in production:** you fill in SavdoChef's payment details (QR string / pay link / support phone) in the dashboard. Order: posgro to staging → test → main; then SavdoChef 0.7.0 release + deploy.
+
+## Feature F8: card transfer as the second way to pay (approved 2026-10-22 with the recommendations; built, not committed, nothing deployed; posgro on branch `feat/payment-card`)
+
+**Asked:** in the posgro dashboard, "Payment Details" (Subscription Plans page, POSGRO grocery tills) and "How restaurants pay" (SavdoChef page) get a second option: a card picture (e.g. Hamkorbank Humo) with the card number and owner's full name written on it, and the note to put the store / restaurant ID in the transfer comment.
+
+**Answered:** the dashboard bakes number + name into one picture (browser canvas) on save; both tills show it (posgro POS login dialogs and SavdoChef's To'lash window); the pay window shows two numbered blocks side by side: "1. QR / havola" and "2. Kartaga o'tkazma", each only when filled in.
+
+**Copied from:** F7 pay details end to end (`savdochef-config.ts` `paymentFor` fallback, `paymentAnswer` in `license-service.ts`, `pay-bill.ts`); the dashboard's existing `POST /site-config/upload-image` + `siteConfig.uploadImage` (login banners); posgro POS `subscription-handlers.ts` cache, which already stores the QR as a ready data URL for offline opens; SavdoChef `images/image-store.ts` (`sniffImage`, random names in `userData/img`, shown via `savdochef-img:`).
+
+### Design
+
+- New payment fields (both configs): `cardNumber` (16 digits, stored without spaces), `cardHolder` (max 60, Latin/Cyrillic letters, space, `.'-`), `cardBaseImage` (the bare picture you uploaded, `/uploads/<name>`, dashboard only, so number/name can be changed later and re-baked), `cardImage` (the baked JPEG, `/uploads/card-<time>.jpg`). All default `''`. The card counts only when number + baked image are both set.
+- Fallback stays as in F7 but **per block, not per field**: SavdoChef uses its own card if it has one, else POSGRO's whole card (never SavdoChef's number on POSGRO's picture).
+- Dashboard: in each section a "Karta orqali" block: pick an image (JPEG/PNG ≤ 5 MB) → uploaded at once as the base; inputs for number and name; a live preview (canvas: number centred at ~60 % height in `0000 0000 0000 0000` groups, name bottom-left at ~88 %, font size relative to the picture's width, colour black or white per Q2). Save bakes the canvas to JPEG (quality 0.9, max 1200 px wide), uploads it, then saves the config with `cardImage`. "Remove card" clears all four.
+- Image to tills (Q1): the server sends only the path `/uploads/card-….jpg` plus number and name. Each till downloads the picture **only when the path changes**, from its own configured server URL (never a host the answer names: path must match `^/uploads/card-[0-9]+\.jpg$`), checks the first bytes are JPEG and the size ≤ 1 MB, and keeps it. Offline the last picture keeps showing. A failed download leaves the number + name as text, no picture.
+- Number and name are also shown as plain text under the picture (number in groups, copyable) so the cashier can type them into a bank app.
+- Under the card block: "Izohda do'kon/restoran ID sini yozing: **1002**" (same strong ID as block 1).
+- No money or stock logic changes: payments stay manual (super admin records the top-up); nothing on the till computes with these fields.
+
+### posgro server (branch `feat/payment-card` → `dev` → staging; `main` only after your OK)
+
+- [x] `site-config.service.ts` `SubscriptionPayment` + `DEFAULT_PAYMENT`: the four card fields, normalized on read and write (old stored JSON without them → `''`). `SubscriptionPaymentDto`: four `@IsOptional() @IsString()` fields (the global `whitelist` would strip undecorated ones). Absent in a PUT = keep the stored value (an older dashboard tab must not wipe the card).
+- [x] `savdochef-config.ts` `SavdochefPayment` + `PAYMENT_LIMITS` + validators (`cardNumber` `^\d{16}$`, `cardHolder` letters, image paths `^/uploads/[\w.-]+\.(jpg|jpeg|png|webp)$`, baked `^/uploads/card-\d+\.jpg$`); `paymentFor` falls back per block.
+- [x] Upload: `upload-image` gets an optional `?kind=card` naming the file `card-<time>.jpg` (and accepting only image/jpeg for it); everything else unchanged.
+- [x] Out to tills (additive only, N-1 safe): `store-config.controller.ts` `payment` gains `card_number`, `card_holder`, `card_image` (posgro POS, snake_case like its siblings); SavdoChef grant `payment` gains `cardNumber`, `cardHolder`, `cardImage`. `cardBaseImage` never leaves the server. Old tills ignore the extra keys (posgro POS reads named keys; SavdoChef's zod object strips unknown keys).
+- [x] Tests: `savdochef-config` normalize + per-block fallback + bad values dropped; `site-config` round trip with and without card fields (old JSON); grant carries the card and never `cardBaseImage` (store-config: no controller test exists; covered through `tillCard`); full suite + `npx tsc --noEmit` + lint.
+
+### posgro web dashboard
+
+- [x] `api/client.ts`: types for the four fields; `uploadImage(file, kind?)`.
+- [x] New `components/PaymentCardEditor.tsx` (one component for both pages): upload, inputs, canvas preview, `bake()` → Blob. Same-origin `/uploads` image, so the canvas is not tainted.
+- [x] `SubscriptionPlansPage.tsx` "Payment Details" and `SavdochefPage.tsx` "How restaurants pay": add the editor as option 2; on Save bake + upload first, then save config (one Save button as now). Hints updated ("empty SavdoChef card uses the POSGRO card").
+- [ ] `npx tsc` for web; check it in the browser against local/staging (screenshots of both sections, with the Hamkorbank picture).
+
+### posgro POS (grocery till) — version 1.38.2 → 1.38.3 (`npm version patch --no-git-tag-version`)
+
+- [x] `subscription-handlers.ts`: read `card_*`; cache gains `cardNumber`, `cardHolder`, `cardImageUrl` (the server path) and `cardImageDataUrl` (downloaded once via the existing server base URL, JPEG-sniffed, ≤ 1 MB, stored as a data URL like `qrDataUrl`, so offline opens cost nothing). Optional fields: an old cache still reads.
+- [x] `StoreSubscription['payment']` (shared type, additive) gains `card: { number, holder, imageDataUrl } | null`.
+- [x] `TerminalAccessBar.tsx` subscription dialog and `LicenseBlockPanel.tsx`: block "2. Kartaga o'tkazma" with the picture, number, name and "Izohda do'kon ID sini yozing: N". uz + ru keys in its locales.
+- [x] Tests: handler test for the card (download once, reuse on same path, bad bytes → no picture, old server without fields → `card: null`). Compile check `npx cross-env APP_MODE=pos electron-vite build`. Installer + deploy stay yours.
+
+### SavdoChef (goes into 0.7.0 with F7: minor, no migration)
+
+- [x] **No schema change:** the card lives in the existing `license_state.payment` JSON column (F7, migration 0013); the picture is a file in `userData/img` (existing image dir). Installed databases are untouched.
+- [x] `shared/license.ts` `LicensePaymentDto` gains `card: { number: string; holder: string; image: string | null } | null` (`image` = file name for `savdochef-img://img/<name>`).
+- [x] `main/license/license-service.ts`: `paymentAnswer` accepts `cardNumber`/`cardHolder`/`cardImage` (same `.catch('')` per field; card dropped as a block if the number is bad). After a successful grant, if `cardImage` differs from the stored one: fetch it with the existing `httpClient` (timeout, no redirects, base URL from config), cap 1 MB, `sniffImage` must say jpg, write under a random name via an `image-store` helper, delete the previous card file. Failures are logged and leave the card as text. Never blocks or fails the check-in.
+- [x] `license:status` keeps hiding pay details from the lock screen and staff (`statusFor` in handlers.ts) — the card goes through the same gate. No new IPC channel.
+- [x] `renderer/components/pay-bill.ts`: two numbered blocks side by side (`.pay-bill-option`), card block = picture (`<img src="savdochef-img://img/…">`), number in groups, name, "write the ID" note; stacks on narrow windows. CSS in `styles/` (no inline style, CSP).
+- [x] Strings uz + ru: `bill.optionQr` ("1. QR yoki havola orqali" / "1. По QR или ссылке"), `bill.optionCard` ("2. Kartaga o'tkazma" / "2. Перевод на карту"), `bill.cardNumber`, `bill.cardHolder`, `bill.cardWriteId` ("O'tkazma izohiga restoran ID sini yozing:" / "В комментарии к переводу укажите ID ресторана:").
+- [x] Tests: `license.test.ts` card persisted across restart, downloaded once, re-downloaded on a new path, refused when not JPEG / too big / path not `/uploads/card-…` (no request made), check-in still succeeds when the download fails; `secrets.test.ts`/access fixture carries a card so hiding it is tested. `npm run check`.
+- [x] Real app: `npm run build`, harness `smoke-card.cjs` on a scratch copy of the café data against the stand-in server (as `smoke-bill.cjs`), serving the Hamkorbank picture baked with a test number: screenshots of the To'lash window uz + ru, with and without QR, offline after a restart (picture from disk).
+- [x] Reviews: electron-security-reviewer (main now downloads a file from the server and the renderer shows it).
+
+### Order
+
+posgro server + dashboard → `dev` → staging; you upload the card in the staging dashboard and check both tills against staging → your OK → `main`. Then the posgro POS installer (yours) and SavdoChef 0.7.0 release + deploy (with F7).
+
+
+### Done so far (2026-10-22)
+
+- Answers taken: download once per change; black/white switch (preset from the picture's brightness); 16 digits; fixed spots; holder in capitals; QR/link and card side by side when both exist.
+- posgro: server tsc + web tsc clean, lint 0 errors, full jest 1616 passed (before the review fixes; POS handler suite 28 after them), POS compile check `APP_MODE=pos electron-vite build` OK, version 1.38.3. Not done: a store-config controller test (no existing harness for it), the dashboard editor not opened in a browser yet (needs staging or a local server).
+- SavdoChef: `npm run check` 495 tests. Harness `smoke-card.cjs` on a copy of the café data against a stand-in server: the Hamkorbank picture baked with the dashboard's drawing, downloaded once, reused on the next check-in, shown in To'lash card-only and beside the QR, uz and ru; after a restart with no server the picture comes from disk and the startup orphan cleanup keeps it.
+- electron-security-reviewer: no high findings. Fixed: download cap counted while streaming + `Accept-Encoding: identity` (also in the posgro POS), replaced card picture deleted at once, picture re-downloaded when number/holder change under the same path, JPEG-only error text. Left as a design note: the card number travels beside the signed licence (TLS only), like the F7 pay fields.
+- Open: confirm `https://api.posgro.uz/uploads/card-*.jpg` is served (the tills fetch the picture from the API host, the dashboard uses `/uploads` on its own host).
+
+### Open questions (answered)
+
+1. Picture to the tills: download once per change from `/uploads` (recommended, above), or inline the JPEG (~100 KB) in every check-in/store-config answer (simpler, no download code, heavier on every call)?
+2. Text colour on the card: a black/white switch in the editor (recommended; black reads on the green Hamkorbank card), or always black?
+3. Card numbers: 16 digits only (Humo/Uzcard/Visa), or allow other lengths?
+4. Should the editor also let you drag the number/name to other spots, or are the fixed spots (number centre, name bottom-left, like a real card) enough?
+5. Owner name: shown in capitals like an embossed card (e.g. `BOBURMIRZO ERGASHEV`), or as typed?
+6. When the card is set, should option 1 (QR/link) still show if it is also filled in, i.e. both side by side (assumed yes)?

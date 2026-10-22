@@ -71,6 +71,19 @@ export interface LicensePaymentDto {
   paymentUrl: string;
   /** Raw bank-transfer string, drawn as a QR on the till. */
   qrPayload: string;
+  /** The card to transfer to (feature F8); null when the server sends none. */
+  card: LicensePaymentCardDto | null;
+}
+
+export interface LicensePaymentCardDto {
+  /** 16 digits, no spaces. */
+  number: string;
+  holder: string;
+  /**
+   * The card picture (number and holder drawn on it by the dashboard) as a file name for
+   * `savdochef-img://img/<name>`; null until it has been downloaded.
+   */
+  image: string | null;
 }
 
 export type LicenseMovementType = 'TOPUP' | 'SUBSCRIPTION' | 'ADJUSTMENT';

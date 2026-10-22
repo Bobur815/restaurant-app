@@ -1673,6 +1673,57 @@
 }
 
 /* What the bank QR holds, so the cashier can see it matches. */
+/* Feature F8: QR / link and the card side by side, stacked on a narrow window. */
+.pay-bill-options {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-5);
+}
+.pay-bill-options-two {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+@media (max-width: 760px) {
+  .pay-bill-options-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.pay-bill-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.pay-bill-options-two .pay-bill-option + .pay-bill-option {
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--color-border);
+}
+@media (max-width: 760px) {
+  .pay-bill-options-two .pay-bill-option + .pay-bill-option {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+.pay-bill-option-title {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+.pay-bill-card p {
+  margin: 0;
+}
+.pay-bill-card-image {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  aspect-ratio: 1.586;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+}
+.pay-bill-card-number {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--font-size-xl);
+  letter-spacing: 0.04em;
+  user-select: all;
+}
 .pay-bill-qr-text {
   display: block;
   margin-top: var(--space-1);

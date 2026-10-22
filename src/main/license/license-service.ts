@@ -1,4 +1,5 @@
 import { randomUUID, type KeyObject } from 'node:crypto';
+import fs from 'node:fs';
 import { z } from 'zod';
 import type { IpcChannel } from '@shared/ipc';
 import {
@@ -13,6 +14,7 @@ import {
 import { toMoneyString } from '@shared/utils/decimal';
 import type { Db } from '../domain/db';
 import { conflict } from '../domain/errors';
+import { IMAGE_FILE_NAME, resolveImagePath, storeImageBytes } from '../images/image-store';
 import { getSetupStatus } from '../settings/setup';
 import {
   readLicense,
@@ -96,6 +98,9 @@ const uzs = z.number().finite().min(-1e12).max(1e12);
  * field is dropped on its own; the others stay.
  */
 const NO_HIDDEN_CHARS = /^[^\p{Cc}\p{Cf}]*$/u;
+const CARD_IMAGE_PATH = /^\/uploads\/card-\d{1,20}\.jpg$/;
+/** The baked card is a JPEG of about 100 KB; anything this big is not one. */
+export const CARD_IMAGE_MAX_BYTES = 1024 * 1024;
 const paymentField = (schema: z.ZodType<string>) => schema.default('').catch('');
 const paymentAnswer = z.object({
   paymentUrl: paymentField(
@@ -115,7 +120,28 @@ const paymentAnswer = z.object({
       .regex(/^[+\d ()-]*$/),
   ),
   qrPayload: paymentField(z.string().max(512).regex(NO_HIDDEN_CHARS)),
+  // Feature F8: the card to transfer to. The picture is a path on the server this till talks to,
+  // in the one shape the dashboard names baked cards (posgro site-config/payment-card.ts).
+  cardNumber: paymentField(z.union([z.literal(''), z.string().regex(/^\d{16}$/)])),
+  cardHolder: paymentField(z.string().max(60).regex(NO_HIDDEN_CHARS)),
+  cardImage: paymentField(z.union([z.literal(''), z.string().regex(CARD_IMAGE_PATH)])),
 });
+type PaymentAnswer = z.infer<typeof paymentAnswer>;
+/** As stored: the answer plus the downloaded picture's file name in the image store. */
+const storedPayment = paymentAnswer.extend({
+  cardFile: z.string().regex(IMAGE_FILE_NAME).nullable().default(null).catch(null),
+});
+type StoredPayment = z.infer<typeof storedPayment>;
+
+function paymentDto(p: StoredPayment | null): LicensePaymentDto | null {
+  if (!p) return null;
+  return {
+    supportPhone: p.supportPhone,
+    paymentUrl: p.paymentUrl,
+    qrPayload: p.qrPayload,
+    card: p.cardNumber ? { number: p.cardNumber, holder: p.cardHolder, image: p.cardFile } : null,
+  };
+}
 /** Feature F7. Stored as received and read back with the same schema. */
 const accountAnswer = z.object({
   balanceUzs: uzs,
@@ -181,10 +207,22 @@ function parseAnswer<T>(schema: z.ZodType<T>, body: unknown): T {
   return parsed.data;
 }
 
+/** Pictures in the image store the licence row refers to (the card), for the orphan cleanup. */
+export async function licenseImageNames(db: Db): Promise<string[]> {
+  const row = await db.licenseState.findUnique({
+    where: { id: ROW_ID },
+    select: { payment: true },
+  });
+  const file = stored(storedPayment, row?.payment ?? null)?.cardFile;
+  return file ? [file] : [];
+}
+
 // ── HTTP ───────────────────────────────────────────────────────────────────────────────────
 
 export type HttpPost = (path: string, body: unknown) => Promise<unknown>;
 export type HttpGet = (path: string) => Promise<unknown>;
+/** A file at an absolute path on the API's own host (`/uploads/...`), at most `maxBytes`. */
+export type HttpDownload = (path: string, maxBytes: number) => Promise<Buffer>;
 
 /** An error the server or the network gave, in Uzbek, for the renderer to show. */
 export class ServerError extends Error {
@@ -204,7 +242,37 @@ export class ServerError extends Error {
 export function httpClient(
   baseUrl: string,
   fetchImpl: typeof fetch = fetch,
-): { get: HttpGet; post: HttpPost } {
+): { get: HttpGet; post: HttpPost; download: HttpDownload } {
+  const download: HttpDownload = async (path, maxBytes) => {
+    // Resolved against the API URL, so only ever the same host; the path's shape is checked by
+    // the caller. No redirects, no compression (a small body must not unpack into a huge one), a
+    // timeout, and the size counted while reading: past `maxBytes` the transfer is cancelled.
+    const res = await fetchImpl(new URL(path, baseUrl).toString(), {
+      headers: { 'Accept-Encoding': 'identity' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+    const length = res.headers.get('content-length');
+    if (length !== null && !(Number(length) <= maxBytes)) {
+      await res.body.cancel();
+      throw new Error('too big');
+    }
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('too big');
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks);
+  };
   const call = async (path: string, init: RequestInit): Promise<unknown> => {
     let res: Response;
     try {
@@ -231,6 +299,7 @@ export function httpClient(
     return body;
   };
   return {
+    download,
     get: (path) => call(path, { method: 'GET', headers: { Accept: 'application/json' } }),
     post: (path, body) =>
       call(path, {
@@ -247,7 +316,10 @@ export interface LicenseServiceOptions {
   db: Db;
   publicKey: KeyObject;
   clock: TrustedClock;
-  http: { get: HttpGet; post: HttpPost };
+  /** Without `download` (or `imageDir`) a card is shown as text only. */
+  http: { get: HttpGet; post: HttpPost; download?: HttpDownload };
+  /** The image store (userData/img), where the card picture is kept (feature F8). */
+  imageDir?: string;
   appVersion: string;
   machineName: string;
   /** Every change the renderer should re-read (main broadcasts `license-changed`). */
@@ -342,7 +414,7 @@ export class LicenseService {
       checkinBy: l?.checkinBy ?? null,
       terminalId: row.terminalId,
       lastError: row.lastError,
-      payment: stored(paymentAnswer, row.payment),
+      payment: paymentDto(stored(storedPayment, row.payment)),
       account: accountDto(stored(accountAnswer, row.account)),
     };
   }
@@ -498,11 +570,45 @@ export class LicenseService {
 
   /** What came with a licence (feature F7); kept until the next one, or dropped if not sent. */
   private async saveExtras(grant: Grant): Promise<void> {
-    const payment: LicensePaymentDto | null = grant.payment ?? null;
+    const payment: StoredPayment | null = grant.payment
+      ? { ...grant.payment, cardFile: await this.cardFile(grant.payment) }
+      : null;
     await this.save({
       payment: payment ? JSON.stringify(payment) : null,
       account: grant.account ? JSON.stringify(grant.account) : null,
     });
+  }
+
+  /**
+   * The card picture in the image store (feature F8): the one held while the server names the
+   * same picture for the same number and holder (the picture shows them, so it must never show
+   * other ones than the text), else downloaded again. The picture it replaces is deleted. Never
+   * fails the check-in: without a picture the card shows as text.
+   */
+  private async cardFile(p: PaymentAnswer): Promise<string | null> {
+    const { imageDir } = this.o;
+    const download = this.o.http.download;
+    const held = stored(storedPayment, this.requireRow().payment);
+    const heldPath = imageDir && held?.cardFile ? resolveImagePath(imageDir, held.cardFile) : null;
+    if (
+      held?.cardFile &&
+      heldPath &&
+      held.cardImage === p.cardImage &&
+      held.cardNumber === p.cardNumber &&
+      held.cardHolder === p.cardHolder &&
+      fs.existsSync(heldPath)
+    ) {
+      return held.cardFile;
+    }
+    if (heldPath) fs.rmSync(heldPath, { force: true });
+    if (!p.cardNumber || !p.cardImage || !imageDir || !download) return null;
+    try {
+      const bytes = await download(p.cardImage, CARD_IMAGE_MAX_BYTES);
+      return storeImageBytes(bytes, imageDir, ['jpg']);
+    } catch (error) {
+      this.o.log.warn(`[license] card picture not downloaded: ${p.cardImage}`, error);
+      return null;
+    }
   }
 
   private async save(data: Partial<Omit<Row, 'terminalId' | 'firstRunAt'>>): Promise<void> {

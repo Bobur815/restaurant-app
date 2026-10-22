@@ -40,9 +40,27 @@ export function importImage(sourcePath: string, imageDir: string): string {
   if (!stat.isFile()) throw new ImageImportError('Fayl emas');
   if (stat.size > MAX_IMAGE_BYTES) throw new ImageImportError('Rasm 5 MB dan katta');
 
-  const data = fs.readFileSync(sourcePath);
+  return storeImageBytes(fs.readFileSync(sourcePath), imageDir);
+}
+
+/**
+ * Writes picture bytes into `imageDir` under a fresh random name and returns that name. The real
+ * format must be one of `kinds` (from the bytes, not from where they came from).
+ */
+export function storeImageBytes(
+  data: Buffer,
+  imageDir: string,
+  kinds: readonly Kind[] = ['jpg', 'png', 'webp'],
+): string {
+  if (data.length > MAX_IMAGE_BYTES) throw new ImageImportError('Rasm 5 MB dan katta');
   const kind = sniffImage(data.subarray(0, 16));
-  if (!kind) throw new ImageImportError('Faqat JPG, PNG yoki WEBP rasm');
+  if (!kind || !kinds.includes(kind)) {
+    throw new ImageImportError(
+      kinds.length === 1
+        ? `Faqat ${kinds[0]!.toUpperCase()} rasm`
+        : 'Faqat JPG, PNG yoki WEBP rasm',
+    );
+  }
 
   fs.mkdirSync(imageDir, { recursive: true });
   const name = `${crypto.randomBytes(16).toString('hex')}.${kind}`;

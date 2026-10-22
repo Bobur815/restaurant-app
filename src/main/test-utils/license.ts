@@ -21,6 +21,7 @@ export function allowAllLicense(): HandlerServices['license'] {
       supportPhone: '998712000000',
       paymentUrl: 'https://pay.example/1000',
       qrPayload: 'QR',
+      card: { number: '9860123412341234', holder: 'EGASI', image: null },
     },
     account: {
       balance: '-75000',

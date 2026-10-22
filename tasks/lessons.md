@@ -35,6 +35,7 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 - `guard-bash` checks the whole command text: a heredoc or commit message that mentions a blocked command (e.g. writing docs about it) is blocked. Put that text in a file and pass the file.
 - `.claude/settings.json` hooks apply immediately in the running session, not only in the next one.
 - `guard-bash` also blocks a line that moves a scratch folder and later copies **from** `%APPDATA%\SavdoChef`; run the move and the copy as separate commands.
+- posgro files are mostly not prettier-clean: `prettier --write` on a touched file reflows hundreds of unrelated lines. Edit in the file's own style there; to undo a reflow keep your change with `git merge-file -p mine prettier(HEAD) HEAD`. (2026-10-22, F8)
 
 ## Tests
 

@@ -18,7 +18,12 @@ import { installSecurityHandlers } from './security';
 import { createUpdater, UPDATE_FEED_URL, type UpdaterEngine } from './updater/updater';
 import { publicKeyFrom } from './license/license-core';
 import { LICENSE_PUBLIC_KEY } from './license/license-public-key';
-import { DEFAULT_API_URL, httpClient, LicenseService } from './license/license-service';
+import {
+  DEFAULT_API_URL,
+  httpClient,
+  licenseImageNames,
+  LicenseService,
+} from './license/license-service';
 import { dbMarkStore, fileMarkStore } from './license/mark-stores';
 import { TrustedClock } from './license/trusted-clock';
 import { createWindow, DEV_SERVER_URL, INDEX_HTML_PATH } from './window';
@@ -37,7 +42,8 @@ let license: LicenseService | null = null;
 function licenseApiUrl(): string {
   const override = process.env['SAVDOCHEF_API_URL']?.trim();
   if (!override || app.isPackaged) return DEFAULT_API_URL;
-  const ok = /^https:\/\//.test(override) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(override);
+  const ok =
+    /^https:\/\//.test(override) || /^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(override);
   return ok ? override : DEFAULT_API_URL;
 }
 
@@ -48,10 +54,11 @@ async function removeOrphanImages(imageDir: string): Promise<void> {
       where: { imageFile: { not: null } },
       select: { imageFile: true },
     });
-    // Dish pictures and the receipt layouts' top and bottom pictures share the store.
+    // Dish pictures, the receipt layouts' top and bottom pictures and the pay card share the store.
     const referenced = new Set([
       ...rows.map((r) => r.imageFile!),
       ...(await receiptImageNames(getPrisma())),
+      ...(await licenseImageNames(getPrisma())),
     ]);
     const removed = cleanupOrphanImages(imageDir, referenced);
     if (removed.length) logger.info(`[img] removed ${removed.length} unused picture(s)`);
@@ -128,6 +135,7 @@ if (!app.requestSingleInstanceLock()) {
       publicKey: publicKeyFrom(LICENSE_PUBLIC_KEY),
       clock: new TrustedClock([dbMarkStore(getPrisma), fileMarkStore(app.getPath('userData'))]),
       http: httpClient(licenseApiUrl()),
+      imageDir,
       appVersion: app.getVersion(),
       machineName: os.hostname(),
       onChange: () => broadcast([{ type: 'license-changed' }]),

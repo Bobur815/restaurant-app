@@ -114,7 +114,12 @@
     "writeId": "To'lov izohiga restoran raqamini yozing:",
     "noDetails": "To'lov ma'lumotlari hali kiritilmagan. Qo'llab-quvvatlash xizmatiga murojaat qiling.",
     "nextCharge": "Keyingi oylik to'lov {{date}} kuni balansdan yechiladi.",
-    "afterPaying": "To'lov qo'lda tasdiqlanadi. Tasdiqlangach «Hozir tekshirish» ni bosing: balans va obuna yangilanadi."
+    "afterPaying": "To'lov qo'lda tasdiqlanadi. Tasdiqlangach «Hozir tekshirish» ni bosing: balans va obuna yangilanadi.",
+    "optionQr": "1. QR yoki havola orqali",
+    "optionCard": "2. Kartaga o'tkazma",
+    "cardNumber": "Karta raqami",
+    "cardHolder": "Karta egasi",
+    "cardWriteId": "O'tkazma izohiga restoran raqamini yozing:"
   },
   "moveTable": {
     "button": "Stolni almashtirish",
