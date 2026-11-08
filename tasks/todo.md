@@ -797,3 +797,9 @@ F10 + F11: 0.8.0 → **0.9.0** (minor, migration 0015). F12: → **0.10.0** (min
 5. Should the image switches be one setting for the restaurant that affects only the order screen (R), or set per till (a satellite could hide pictures while the main shows them)?
 6. Should takeaway/delivery orders print kitchen tickets too (R), and should cancelling an order or moving a table print a ticket (R)?
 7. Does each satellite count against the plan's `terminals` limit (R: at most `terminals − 1` paired), or are satellites free?
+
+## Release 0.8.0 (F9 + F10 + F11 + F12, 2026-11-08)
+
+- `npm run release -- minor`: check 44 suites / 603 tests, commit + tag `v0.8.0`, `release/v0.8.0/SavdoChef-Setup-0.8.0.exe` sha256 `f21af54aea4be183a0584599b6eb6254c834d3a074592e85437a82213988b05f`. Not pushed, not uploaded.
+- Upgrade test on this PC: installed 0.6.0 -> silent 0.7.0 -> ran (packaged, `--user-data-dir` = scratch copy of the v13 backup of the cafe data): schema v13, licence check-in OK -> silent 0.8.0 over it -> ran on the same copy: backup `savdochef-v13-*` written, migrated v13 -> v16 (0014, 0015, 0016). Row counts of every existing table identical before/after, orders total identical (50 000); new: printers 1 (main, auto pick as before), kitchen_tickets 0, lan_devices 0, pre_bill_layout 0, settings +2 (picture switches, on). Desktop + Start menu shortcuts point to the 0.8.0 install. This PC now has 0.8.0 installed.
+- Note: the real `%APPDATA%\SavdoChef` database was migrated to v16 by `npm run dev` runs on 2026-11-08 (21:18 v14->v15, 22:55 v15->v16, backups in its backups/ folder); a dev run also switched yo'ldosh tills on there (lan_enabled).
