@@ -14,3 +14,16 @@ export function printReceipt(orderId: number): void {
       toast(t('printing.failed', { reason: errorMessage(error) }), 'error', 8000),
     );
 }
+
+/**
+ * The pre-bill ("Hisob", feature F9): the saved order's total for a guest who asks, not a payment.
+ * Fire and toast like the receipt.
+ */
+export function printPreBill(orderId: number): void {
+  api.printing
+    .printPreBill({ orderId })
+    .then((r) => toast(t('preBill.printed', { printer: r.printer }), 'success'))
+    .catch((error: unknown) =>
+      toast(t('preBill.failed', { reason: errorMessage(error) }), 'error', 8000),
+    );
+}

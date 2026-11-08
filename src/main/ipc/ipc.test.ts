@@ -85,6 +85,7 @@ describe('access levels', () => {
       user: [
         'users:updateProfile',
         'printing:printReceipt',
+        'printing:printPreBill',
         'halls:list',
         'categories:list',
         'menu:list',
@@ -110,6 +111,8 @@ describe('access levels', () => {
         'receipt:update',
         'receipt:layouts',
         'receipt:updateLayout',
+        'receipt:preBillLayout',
+        'receipt:updatePreBillLayout',
         'receipt:pickImage',
         'updater:status',
         'updater:check',

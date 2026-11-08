@@ -46,12 +46,16 @@ export interface IpcChannels {
   'receipt:update': Channel<In<typeof S.updateReceiptSettingsInput>, T.ReceiptSettingsDto>;
   'receipt:layouts': Channel<undefined, T.ReceiptLayoutDto[]>;
   'receipt:updateLayout': Channel<In<typeof S.updateReceiptLayoutInput>, T.ReceiptLayoutDto>;
+  // The pre-bill ("Hisob", feature F9).
+  'receipt:preBillLayout': Channel<undefined, T.PreBillLayoutDto>;
+  'receipt:updatePreBillLayout': Channel<In<typeof S.updatePreBillLayoutInput>, T.PreBillLayoutDto>;
   /** Copies a picked picture into the image store; its file name, or null when cancelled. */
   'receipt:pickImage': Channel<undefined, string | null>;
 
   // printing (content always built in main from the database)
   'printing:printers': Channel<undefined, T.PrinterInfo[]>;
   'printing:printReceipt': Channel<In<typeof S.printReceiptInput>, { printer: string }>;
+  'printing:printPreBill': Channel<In<typeof S.printPreBillInput>, { printer: string }>;
   'printing:test': Channel<In<typeof S.testPrintInput>, { printer: string }>;
   'printing:shiftReport': Channel<In<typeof S.shiftReportInput>, { printer: string }>;
   /** PNG data URL of the sample receipt. */
@@ -184,9 +188,12 @@ export const IPC_CHANNELS = [
   'receipt:update',
   'receipt:layouts',
   'receipt:updateLayout',
+  'receipt:preBillLayout',
+  'receipt:updatePreBillLayout',
   'receipt:pickImage',
   'printing:printers',
   'printing:printReceipt',
+  'printing:printPreBill',
   'printing:test',
   'printing:shiftReport',
   'printing:preview',

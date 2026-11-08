@@ -2,7 +2,14 @@ import type { DeliveryStatus, OrderDto } from '@shared/types';
 import { dec, isDecimalString } from '@shared/utils/decimal';
 import { isUzPhoneComplete, normalizeUzPhone } from '@shared/utils/phone';
 import { api } from '../../api';
-import { clearErrors, field, formError, showFormError, value } from '../../components/forms';
+import {
+  clearErrors,
+  field,
+  formError,
+  refreshAmountHint,
+  showFormError,
+  value,
+} from '../../components/forms';
 import { phoneField } from '../../components/phone-field';
 import { t } from '../../i18n';
 import { appStore, licensed } from '../../store/app';
@@ -95,6 +102,7 @@ export function createCustomerPanel(options: {
     name: 'deliveryFee',
     label: t('customer.fee'),
     inputmode: 'decimal',
+    amount: true,
   });
 
   const statusBox = document.createElement('div');
@@ -133,6 +141,7 @@ export function createCustomerPanel(options: {
             input('deliveryFee').value = toInputDecimal(
               appStore.get().settings?.deliveryFeeDefault ?? '0',
             );
+          refreshAmountHint(input('deliveryFee'));
           render();
           options.onChange();
         });
@@ -201,6 +210,7 @@ export function createCustomerPanel(options: {
     input('deliveryFee').value = toInputDecimal(
       next ? next.deliveryFee : (appStore.get().settings?.deliveryFeeDefault ?? '0'),
     );
+    refreshAmountHint(input('deliveryFee'));
     known.hidden = true;
     clearErrors(el);
     render();

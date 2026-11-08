@@ -636,6 +636,16 @@
     "imageWidth": "Kengligi",
     "testHint": "Saqlangan sozlamalar bilan namuna chek chiqaradi"
   },
+  "preBill": {
+    "button": "Hisob",
+    "title": "Hisobni chop etish (to'lov emas)",
+    "printed": "Hisob chop etildi ({{printer}})",
+    "failed": "Hisob chop etilmadi: {{reason}}",
+    "tab": "Hisob",
+    "layoutTitle": "Hisob ko'rinishi (to'lovdan oldin)",
+    "hint": "Mijoz to'lashdan oldin jami summani so'raganda chiqariladi: saqlangan buyurtma va jami. Bu to'lov cheki emas, buyurtmada hech narsa o'zgarmaydi.",
+    "inherited": "Hisob hali saqlanmagan: «Umumiy» sozlamalari bilan, rasmsiz chiqadi. Logotip kerak bo'lsa, rasmni tanlab saqlang."
+  },
   "update": {
     "current": "O'rnatilgan versiya",
     "loading": "Yuklanmoqda...",

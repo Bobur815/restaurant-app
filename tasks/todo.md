@@ -580,3 +580,71 @@ posgro server + dashboard → `dev` → staging; you upload the card in the stag
 4. Should the editor also let you drag the number/name to other spots, or are the fixed spots (number centre, name bottom-left, like a real card) enough?
 5. Owner name: shown in capitals like an embossed card (e.g. `BOBURMIRZO ERGASHEV`), or as typed?
 6. When the card is set, should option 1 (QR/link) still show if it is also filled in, i.e. both side by side (assumed yes)?
+
+## Feature F9: amount in words under money fields, pre-bill ("Hisob") print (approved 2026-10-22 with the recommendations; built, not committed)
+
+Two independent parts; A needs no schema change, B adds one table.
+
+### A. Amount hint (posgro `amountHint`, `src/shared/utils/transformers.ts`, used under every cash field of `SmenaPage.tsx`)
+
+Under a money input, live as it is typed: `1 250 000 so'm — bir million ikki yuz ellik ming` (ru: `1 250 000 сум — один миллион двести пятьдесят тысяч`). Empty or 0 shows nothing. Display only: values sent to main are unchanged.
+
+- [x] `src/shared/utils/amount-words.ts`: `amountInWords(value: DecimalString, lang)` ported from posgro `numberToWordsUz/Ru` (whole so'm; tiyin dropped as the till never takes them), Decimal input, no float math; amounts above 999 999 999 999 show digits only.
+- [x] `amount-words.test.ts`: 0, 1, 11, 21, 100, 101, 1 000 (uz `ming`, ru `одна тысяча`), 2 000 / 5 000 (ru plural `две тысячи` / `пять тысяч`), 1 250 000, 12 000 000, `1 250 000,50`, spaces and comma typed.
+- [x] `renderer/components/forms.ts`: `withAmountHint(input)` adds a `<p class="amount-hint" aria-live="polite">` after the input and updates it on `input` (and when code sets `.value`, through an `update()` it returns); `field({ ..., amount: true })` uses it. Text via `formatMoney` + `amountInWords`, through `textContent`.
+- [x] CSS `.amount-hint` in `renderer/styles/` (small, muted, italic, fixed min-height so the form does not jump), tokens only.
+- [x] Wire every money input (13 places): menu price + cost price (`menu-modals.ts`); weight modal price (`weight-modal.ts`, set by code from kg -> `update()`); delivery fee (`customer-panel.ts`); default delivery fee (`settings/orders-section.ts`); payment received + each split line (`tender-editor.ts`, set by "Qolgan" -> `update()`); debt repay + write-off (`debtors-view.ts`); shift opening cash (`quantities-modal.ts`); cash in/out (`cash-panel.ts`); counted cash at close (`close-modal.ts`). Not quantities, PIN, table numbers, phone.
+
+### B. Pre-bill ("Hisob" / "Счёт"): the guest asks for the total, nothing is paid
+
+Behaviour: prints the saved pending order with a clear "HISOB · TO'LOV CHEKI EMAS" heading, lines and total, no payment block, time = now. Changes no order, money, stock or shift data (before = after for every table). A completed or cancelled order is refused (completed already has its receipt in Cheklar).
+
+- [x] Schema (skill `prisma-migration`, then agent `migration-reviewer`): new singleton table `pre_bill_layout` (`id` = 1, `showAddress`, `showPhone`, `showDateTime`, `showOrderNumber`, `footerNote` default '', `topImage`/`topImageWidth`, `bottomImage`/`bottomImageWidth`, `updatedAt`), migration `0014_pre_bill_layout.ts`. Additive: installed databases get an empty table; no row = General's switches with **no pictures** (so the logo is off until the owner turns it on). Why a table and not a 4th `receipt_layouts` row: its key is the `OrderType` enum and Prisma would fail reading an unknown value.
+- [x] `shared/schemas.ts`: `preBillLayoutValues` (same rules as `receiptLayoutValues` minus `showCustomer`), `updatePreBillLayoutInput`, `printPreBillInput { orderId }`, preview input gains `kind: 'receipt' | 'preBill'` (default receipt).
+- [x] `shared/types.ts`: `PreBillLayoutDto`.
+- [x] `shared/ipc.ts` + `IPC_CHANNELS`: `receipt:preBillLayout` (read, `settings`), `receipt:updatePreBillLayout` (`settings`, emits SETTINGS), `printing:printPreBill` (`user`, same as `printing:printReceipt`; read-only list). Access snapshot in `ipc.test.ts` updated.
+- [x] `main/printing/layouts.ts`: `getPreBillLayout`, `updatePreBillLayout` (pictures refused without the `receiptLogos` plan feature, as now); `receiptImageNames` includes its pictures so the image cleanup keeps them.
+- [x] `main/printing/receipt.ts`: `buildReceiptHtml(..., { preBill: true })`: heading + "not a payment receipt" line, payment block left out, `printedAt` = now; labels uz/ru in `LABELS`.
+- [x] `main/printing/printing.ts`: `printPreBill(db, printer, orderId, image)` (pending only, refuses `Bekor qilingan…` / `To'langan buyurtma uchun hisob chiqarilmaydi`), `printTestReceipt`/`previewReceipt` handle the pre-bill kind with the sample order.
+- [x] `main/ipc/handlers.ts`, `events.ts` entries.
+- [x] Renderer `views/order/print-receipt.ts`: `printPreBill(orderId)`, fire-and-toast like `printReceipt`.
+- [x] Table grid (`views/tables.ts`): printer icon button beside the move button on busy cards (same `table-cell`, shown to any logged-in user; move stays `orders`-only). Takeaway/delivery cards in the open strip get it too? (question 3)
+- [x] Order page (`views/order/order-view.ts`): "Hisob" button in the actions with a printer icon; disabled while unsaved or stale, like Pay/Move, title "save first".
+- [x] Settings → Receipt (`settings/receipt-section.ts`): fourth tab "Hisob" with its switches, footer, pictures, test print and live preview (same form, no customer switch); notice that it starts without pictures.
+- [x] Icon `printer` in `ui/icons.ts` if not there (lucide).
+- [x] i18n uz + ru: `preBill.button`, `preBill.printed`, `preBill.tab`, `preBill.hint`, `preBill.noPicturesDefault`, `preBill.saveFirst`, table-card aria label.
+
+### Tests
+
+- [x] `printing.test.ts`: pre-bill of a pending order prints heading, lines, total, no payment block; completed/cancelled refused; order, payments, session quantities identical before/after; layout defaults (no row -> General switches, no pictures); pictures refused without the plan feature; `receiptImageNames` keeps pre-bill pictures.
+- [x] `layouts.test.ts`: save/read the pre-bill layout.
+- [x] `database.test.ts` drift check passes with 0014; upgrade of a v13 copy keeps data.
+- [x] `ipc.test.ts` access snapshot, `events.test.ts`, `secrets.test.ts` cover the 3 channels.
+- [x] `amount-words.test.ts` (above). `npm run check`.
+
+### Verify in the real app
+
+- [x] `npm run build`, harness on a scratch copy of the café data: amount hints in the payment window (single + split, after "Qolgan"), shift open/close, cash in, menu dish, uz + ru screenshots.
+- [x] Busy table -> printer icon -> pre-bill printed to the default printer (or "Microsoft Print to PDF" and look at the file); same from the order page; button disabled with unsaved lines.
+- [x] Settings -> Receipt -> Hisob tab: preview without logo by default, with logo after turning it on; test print.
+- [x] Migration on the copy: v13 -> v14 with backup in `backups/`.
+- [x] Reviews: `migration-reviewer`, `electron-security-reviewer` (new print channel, settings form), `prisma-reviewer` (printing reads orders).
+
+### Version
+
+0.7.0 -> **0.8.0** (minor: new features + a migration). Commit/release only when asked.
+
+### Open questions (answered: 1 one layout, 2 log only, 3 tables only (order page covers takeaway/delivery), 4 any user, 5 wording as proposed, 6 split lines too)
+
+1. Pre-bill layout: one for all order types (recommended), or one per type like the receipt (General / takeaway / delivery)?
+2. Should each pre-bill print be counted on the order (shown in Cheklar, e.g. "Hisob 2 marta chiqarildi"), to spot a guest paying cash on a bill that is later cancelled? That adds a column; recommended: not now, log only.
+3. Printer icon also on takeaway/delivery cards in the open-orders strip, or tables only (delivery already prints on every save)?
+4. Who may print it: any logged-in user (recommended, as receipts now), or only users with `orders` / `payments`?
+5. Heading text: "HISOB · To'lov cheki emas" / "СЧЁТ · Не является чеком оплаты" — OK, or your wording?
+6. Amount hint for the split payment lines too (four inputs in a row, the hint makes the window taller), or only the single "Olingan" field?
+
+### Verified (2026-10-22)
+
+- `npm run check`; harness `smoke-f9.cjs` on a copy of the café data (scratch userData, prints intercepted as PNG): start migrated v13 -> v14 with a `savdochef-v13-*` backup; table card printer -> pre-bill printed (HISOB · To'lov cheki emas, lines, total, no payment block, no logo); order page Hisob button -> printed, order unchanged after both; hints in payment received, split lines (also after Bo'lib to'lash), Kirim (1 001 000 -> bir million bir ming); Settings -> Chek -> Hisob tab with notice, no customer switch, preview and test print; ru: Счёт button, `5 000 сум — пять тысяч`.
+- Not exercised in the harness: Hisob disabled with unsaved lines (same condition as To'lov), takeaway/delivery order page. Still to do at release: install 0.7.0, run on a data copy, install 0.8.0 over it, compare counts (`npm run release -- minor`).
+- Reviews: migration-reviewer safe; electron-security-reviewer no high/medium (pre-bill request now logged before printing, refused ones too); prisma-reviewer no bugs (allow-list on pending, exact total asserted, `bir million bir ming`). Left: layout save not in a transaction (same as receipt layouts, one till).

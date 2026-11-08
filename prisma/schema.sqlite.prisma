@@ -193,6 +193,25 @@ model ReceiptLayout {
   @@map("receipt_layouts")
 }
 
+// The pre-bill ("Hisob", feature F9): the total printed for a guest before paying, one layout for
+// every order type. Exactly one row, id = 1. No row = General's switches and footer with no
+// pictures (the owner turns the logo on), printing/layouts.ts.
+model PreBillLayout {
+  id               Int      @id
+  showAddress      Boolean  @default(true)
+  showPhone        Boolean  @default(true)
+  showDateTime     Boolean  @default(true)
+  showOrderNumber  Boolean  @default(true)
+  footerNote       String   @default("")
+  topImage         String?
+  topImageWidth    Int      @default(60)
+  bottomImage      String?
+  bottomImageWidth Int      @default(40)
+  updatedAt        DateTime @updatedAt
+
+  @@map("pre_bill_layout")
+}
+
 // Named sequences, incremented inside the caller's transaction ("orders" -> orderNumber).
 model Counter {
   name  String @id

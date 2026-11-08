@@ -1,7 +1,7 @@
 import type { SessionCloseResult, SessionDto } from '@shared/types';
 import { dec, isDecimalString, toQtyString } from '@shared/utils/decimal';
 import { api } from '../../api';
-import { formError } from '../../components/forms';
+import { amountHintFor, formError } from '../../components/forms';
 import { openModal } from '../../components/modal';
 import { errorMessage, toast } from '../../components/toast';
 import { t } from '../../i18n';
@@ -53,7 +53,7 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
     </div>
     <div class="field">
       <label for="counted-cash">${t('cash.countedField')}</label>
-      ${counted}
+      ${counted}${amountHintFor(counted)}
     </div>
     ${diffLine}
     <label class="check-field">${printZ}<span>${t('cash.printZ')}</span></label>

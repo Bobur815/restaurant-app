@@ -199,6 +199,16 @@ legend {
   display: none;
 }
 
+/* Amount in words under a money input; keeps its height so the form does not jump. */
+.amount-hint {
+  min-height: 1.35em;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
 .form-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

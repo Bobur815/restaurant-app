@@ -117,6 +117,7 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
         name: 'openingCash',
         label: t('cash.openingField'),
         inputmode: 'decimal',
+        amount: true,
         value: '0',
       });
   const body = html`${cashField}
@@ -134,7 +135,9 @@ export async function shiftQuantitiesModal(session: SessionDto | null): Promise<
             <th>${t('sessions.dish')}</th>
             <th>${t('sessions.category')}</th>
             <th class="num">${t('sessions.quantity')}</th>
-            <th class="center" title="${t('sessions.unlimitedHint')}">${t('sessions.unlimited')}</th>
+            <th class="center" title="${t('sessions.unlimitedHint')}">
+              ${t('sessions.unlimited')}
+            </th>
           </tr>
         </thead>
         <tbody>

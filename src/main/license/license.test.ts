@@ -205,6 +205,17 @@ describe('licence', () => {
     expect(
       await refusal('receipt:updateLayout', { orderType: 'DINE_IN', topImage: null }, start, halls),
     ).toBeNull();
+    expect(
+      await refusal(
+        'receipt:updatePreBillLayout',
+        { bottomImage: 'b'.repeat(32) + '.png' },
+        start,
+        halls,
+      ),
+    ).toMatch(/rasm/);
+    expect(
+      await refusal('receipt:updatePreBillLayout', { footerNote: 'Hisob' }, start, halls),
+    ).toBeNull();
   });
 });
 

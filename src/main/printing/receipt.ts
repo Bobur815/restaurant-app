@@ -54,6 +54,8 @@ const LABELS: Record<Language, Record<string, string>> = {
     remark: 'Izoh',
     due: 'Qaytarish muddati',
     deliveryFee: 'Yetkazib berish xizmati',
+    preBill: 'HISOB',
+    preBillNote: "To'lov cheki emas",
   },
   ru: {
     table: 'Стол',
@@ -79,6 +81,8 @@ const LABELS: Record<Language, Record<string, string>> = {
     remark: 'Комментарий',
     due: 'Вернуть до',
     deliveryFee: 'Услуга доставки',
+    preBill: 'СЧЁТ',
+    preBillNote: 'Не является чеком оплаты',
   },
 };
 
@@ -94,6 +98,11 @@ export interface ReceiptOptions {
    * missing: the receipt then prints without it.
    */
   image?: (fileName: string) => string | null;
+  /**
+   * The pre-bill (feature F9): the guest's total before paying. Says so under the header, has no
+   * payment block and is dated when printed.
+   */
+  preBill?: boolean;
 }
 
 /** A layout picture, centred at its width in % of the paper; nothing when it cannot be loaded. */
@@ -121,8 +130,10 @@ export function buildReceiptHtml(
   const lang = receiptLanguage(settings);
   const L = LABELS[lang];
   const layout = options.layout ?? legacyLayout(settings);
+  const preBill = options.preBill ?? false;
   const when =
-    options.printedAt ?? new Date(order.completedAt ?? order.payments[0]?.paidAt ?? Date.now());
+    options.printedAt ??
+    (preBill ? new Date() : new Date(order.completedAt ?? order.payments[0]?.paidAt ?? Date.now()));
   const separator = settings.printUseStarsSep
     ? `<div class="sep">${e(settings.printSeparatorChar.repeat(Math.max(1, settings.printSeparatorCount)))}</div>`
     : '<hr />';
@@ -195,7 +206,7 @@ export function buildReceiptHtml(
       ? `<div class="muted">${e(L.due)}: ${e(formatDate(new Date(p.dueDate)))}</div>`
       : '');
   const paymentBlock =
-    order.payments.length > 0
+    !preBill && order.payments.length > 0
       ? `<div class="muted">${e(L.method)}:</div>${order.payments.map(tenderRow).join('')}`
       : '';
 
@@ -204,14 +215,15 @@ export function buildReceiptHtml(
 <head>
 <meta charset="utf-8" />
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:" />
-<title>${e(order.orderNumber)}</title>
+<title>${preBill ? `${e(L.preBill)} ` : ''}${e(order.orderNumber)}</title>
 <style>
   /* 72.1 mm = the printable width of 80 mm roll paper (printer.ts RECEIPT_PAGE_MICRONS). */
   @page { size: 72.1mm auto; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: #fff; color: #000; }
-  body { width: 72.1mm; padding: 2mm 2mm 4mm; font: 13px/1.35 Arial, sans-serif; overflow-wrap: anywhere; }
-  .brand { margin: 0 0 4px; font-size: 18px; text-align: center; }
+  /* Top padding 0: the printer already leaves the gap between its cutter and print head. */
+  body { width: 72.1mm; padding: 0 2mm 4mm; font: 13px/1.35 Arial, sans-serif; overflow-wrap: anywhere; }
+  .brand { margin: 0 0 4px; font-size: 18px; line-height: 0.8; text-align: center; }
   .center { margin: 0 0 4px; text-align: center; }
   .sep { margin: 6px 0; overflow: hidden; white-space: nowrap; text-align: center; letter-spacing: 1px; }
   hr { margin: 6px 0; border: 0; border-top: 1px dashed #000; }
@@ -230,12 +242,15 @@ export function buildReceiptHtml(
   .picture img { max-width: 100%; height: auto; filter: grayscale(1); }
   .picture-top { margin-bottom: 6px; }
   .picture-bottom { margin-top: 10px; }
+  .pre-bill { margin: 4px 0; text-align: center; }
+  .pre-bill b { display: block; font-size: 17px; letter-spacing: 3px; }
 </style>
 </head>
 <body>
 ${picture(layout.topImage, layout.topImageWidth, options.image, 'picture-top')}
 ${header}
 ${separator}
+${preBill ? `<div class="pre-bill"><b>${e(L.preBill)}</b>${e(L.preBillNote)}</div>` : ''}
 <div class="meta">${meta}</div>
 ${customer ? `<div class="customer">${customer}</div>` : ''}
 <hr />

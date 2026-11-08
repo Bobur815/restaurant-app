@@ -10,8 +10,8 @@ import { completeSetup } from '../settings/setup';
 import { toCurrentUser } from '../auth/auth';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import { pickPrinter, receiptWindowOptions, type PrinterService } from './printer';
-import { legacyLayout, updateReceiptLayout } from './layouts';
-import { previewReceipt, printOrderReceipt, printTestReceipt } from './printing';
+import { legacyLayout, updatePreBillLayout, updateReceiptLayout } from './layouts';
+import { previewReceipt, printOrderReceipt, printPreBill, printTestReceipt } from './printing';
 import { buildReceiptHtml, sampleOrder } from './receipt';
 
 jest.setTimeout(60_000);
@@ -38,7 +38,8 @@ const settings = (over: Partial<ReceiptSettingsDto> = {}): ReceiptSettingsDto =>
 });
 
 /** A 1x1 PNG, as the image store would hand it out. */
-const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const PNG =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const TOP = `${'a'.repeat(32)}.png`;
 const BOTTOM = `${'b'.repeat(32)}.png`;
 const noImages = () => null;
@@ -220,9 +221,9 @@ describe('printing from the database', () => {
   afterAll(() => t.close());
 
   it('refuses until receipt settings exist', async () => {
-    await expect(printTestReceipt(t.db, fakePrinter, 'DINE_IN', noImages)).rejects.toMatchObject({
-      code: 'CONFLICT',
-    });
+    await expect(
+      printTestReceipt(t.db, fakePrinter, { orderType: 'DINE_IN', preBill: false }, noImages),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
   it('prints the order from the database with the configured printer', async () => {
@@ -282,7 +283,7 @@ describe('printing from the database', () => {
     expect(printed.at(-1)!.html).toContain(PNG);
     await t.db.order.update({ where: { id: order.id }, data: { orderType: 'DINE_IN' } });
 
-    await printTestReceipt(t.db, fakePrinter, 'DELIVERY', image);
+    await printTestReceipt(t.db, fakePrinter, { orderType: 'DELIVERY', preBill: false }, image);
     expect(printed.at(-1)!.html).toContain('Aziza');
     expect(printed.at(-1)!.html).toContain('Yetkazib berdik');
   });
@@ -307,6 +308,7 @@ describe('printing from the database', () => {
       fakePrinter,
       {
         orderType: 'TAKEAWAY',
+        preBill: false,
         receipt: { restaurantName: 'Yangi nom', locale: 'ru' },
         layout: { footerNote: 'Saqlanmagan izoh', bottomImage: BOTTOM },
       },
@@ -320,5 +322,78 @@ describe('printing from the database', () => {
     expect(html).toContain('class="picture picture-bottom"');
     // Nothing was saved.
     expect(await t.db.receiptLayout.findUnique({ where: { orderType: 'TAKEAWAY' } })).toBeNull();
+  });
+
+  describe('pre-bill (Hisob)', () => {
+    /** Everything a pre-bill must leave alone. */
+    const snapshot = async (orderId: number) => ({
+      order: await t.db.order.findUniqueOrThrow({ where: { id: orderId } }),
+      lines: await t.db.orderItem.findMany({ where: { orderId }, orderBy: { id: 'asc' } }),
+      payments: await t.db.payment.count(),
+      stock: await t.db.sessionItem.findMany({ orderBy: { id: 'asc' } }),
+    });
+
+    it('prints a pending order: heading, lines, total, no payment; changes nothing', async () => {
+      const actor = toCurrentUser(await t.db.user.findFirstOrThrow());
+      const dish = await t.db.menuItem.findFirstOrThrow();
+      const order = await saveTableOrder(
+        t.db,
+        actor,
+        saveTableOrderInput.parse({
+          tableNumber: 7,
+          lines: [{ menuItemId: dish.id, quantity: 2 }],
+        }),
+      );
+      const before = await snapshot(order.id);
+      const image = (name: string) => (name === TOP ? PNG : null);
+
+      expect(await printPreBill(t.db, fakePrinter, order.id, image)).toEqual({ printer: 'XP-80' });
+      const html = printed.at(-1)!.html;
+      expect(html).toContain('<div class="pre-bill"><b>HISOB</b>To&#39;lov cheki emas</div>');
+      expect(html).toContain('&lt;b&gt;Non&lt;/b&gt;');
+      // 2 × 5 000: the total row itself, not just a line amount.
+      expect(html).toMatch(
+        /<div class="total"><span>Jami to&#39;lovga:<\/span><span class="amount">10\s000\sso&#39;m<\/span><\/div>/,
+      );
+      expect(html).not.toContain('To&#39;lov usuli');
+      // Never saved: General's footer, and no pictures even though the delivery layout has one.
+      expect(html).toContain('Stol uchun');
+      expect(html).not.toContain('<img');
+      expect(await snapshot(order.id)).toEqual(before);
+
+      // Its own layout once saved, pictures included.
+      await updatePreBillLayout(t.db, { footerNote: 'Hisobingiz', topImage: TOP });
+      await printPreBill(t.db, fakePrinter, order.id, image);
+      expect(printed.at(-1)!.html).toContain('Hisobingiz');
+      expect(printed.at(-1)!.html).toContain(PNG);
+      expect(await snapshot(order.id)).toEqual(before);
+    });
+
+    it('refuses a paid or cancelled order', async () => {
+      const paid = await t.db.order.findFirstOrThrow({ where: { status: 'completed' } });
+      const cancelled = await t.db.order.findFirstOrThrow({ where: { status: 'cancelled' } });
+      for (const o of [paid, cancelled])
+        await expect(printPreBill(t.db, fakePrinter, o.id, noImages)).rejects.toMatchObject({
+          code: 'CONFLICT',
+        });
+    });
+
+    it('test print and preview show the sample as a pre-bill', async () => {
+      await printTestReceipt(t.db, fakePrinter, { orderType: 'DINE_IN', preBill: true }, noImages);
+      expect(printed.at(-1)!.html).toContain('HISOB');
+      expect(printed.at(-1)!.html).not.toContain('To&#39;lov usuli');
+
+      const url = await previewReceipt(
+        t.db,
+        fakePrinter,
+        { orderType: 'DINE_IN', preBill: true, layout: { footerNote: 'Oldindan' } },
+        noImages,
+      );
+      const html = decodeURIComponent(url.replace('data:text/html,', ''));
+      expect(html).toContain('HISOB');
+      expect(html).toContain('Oldindan');
+      // The preview saves nothing.
+      expect((await t.db.preBillLayout.findFirstOrThrow()).footerNote).toBe('Hisobingiz');
+    });
   });
 });

@@ -49,6 +49,7 @@ export const ordersSection: View = () => {
             name: 'deliveryFeeDefault',
             label: t('settings.deliveryFeeDefault'),
             inputmode: 'decimal',
+            amount: true,
             value: toInputDecimal(settings.deliveryFeeDefault),
           })}
           ${formError()}${submitButton()}`,

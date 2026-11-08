@@ -183,6 +183,7 @@ export const debtorsView: View = () => {
         name: 'amount',
         label: t('debts.amount'),
         inputmode: 'decimal',
+        amount: true,
         value: toInputDecimal(d.balance),
       })}
       ${selectField({
@@ -210,6 +211,7 @@ export const debtorsView: View = () => {
         name: 'amount',
         label: t('debts.amount'),
         inputmode: 'decimal',
+        amount: true,
         value: toInputDecimal(d.balance),
       })}
       ${field({ name: 'note', label: t('debts.reason'), required: true })}`;

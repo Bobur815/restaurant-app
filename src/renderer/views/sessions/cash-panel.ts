@@ -106,7 +106,13 @@ export function cashMovementModal(type: CashMovementType): Promise<boolean> {
   const form = document.createElement('div');
   form.append(
     html`<p class="muted small">${t(type === 'PAY_IN' ? 'cash.payInHint' : 'cash.payOutHint')}</p>
-      ${field({ name: 'amount', label: t('cash.amount'), inputmode: 'decimal', required: true })}
+      ${field({
+        name: 'amount',
+        label: t('cash.amount'),
+        inputmode: 'decimal',
+        amount: true,
+        required: true,
+      })}
       ${field({ name: 'note', label: t('cash.note') })}`,
     formError(),
   );

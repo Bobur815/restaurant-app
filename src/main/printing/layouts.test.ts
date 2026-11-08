@@ -3,9 +3,12 @@ import { updateReceiptSettings } from '../settings/settings';
 import { completeSetup } from '../settings/setup';
 import { createTestDb, type TestDb } from '../test-utils/db';
 import {
+  getPreBillLayout,
   getReceiptLayout,
   getReceiptLayouts,
+  preBillReceiptLayout,
   receiptImageNames,
+  updatePreBillLayout,
   updateReceiptLayout,
 } from './layouts';
 
@@ -78,6 +81,42 @@ describe('receipt layouts', () => {
     // A picture removed from a layout is null; the cleanup keeps only pictures in use.
     await updateReceiptLayout(t.db, { orderType: 'DELIVERY', topImage: null });
     expect((await receiptImageNames(t.db)).sort()).toEqual([img('a'), img('b')]);
+  });
+
+  it('pre-bill: General without pictures until saved, then its own', async () => {
+    await updateReceiptLayout(t.db, {
+      orderType: 'DINE_IN',
+      showPhone: false,
+      footerNote: 'Umumiy',
+      topImage: img('a'),
+    });
+    await updateReceiptLayout(t.db, { orderType: 'DELIVERY', showCustomer: false });
+    expect(await getPreBillLayout(t.db)).toMatchObject({
+      saved: false,
+      showPhone: false,
+      footerNote: 'Umumiy',
+      topImage: null,
+      bottomImage: null,
+    });
+
+    await updatePreBillLayout(t.db, { footerNote: 'Hisob', bottomImage: img('c') });
+    await updatePreBillLayout(t.db, { showAddress: false });
+    expect(await getPreBillLayout(t.db)).toMatchObject({
+      saved: true,
+      showPhone: false,
+      showAddress: false,
+      footerNote: 'Hisob',
+      bottomImage: img('c'),
+    });
+    expect(await t.db.preBillLayout.count()).toBe(1);
+    // The customer block follows the order type's own receipt.
+    expect(await preBillReceiptLayout(t.db, 'DELIVERY')).toMatchObject({
+      orderType: 'DELIVERY',
+      showCustomer: false,
+      footerNote: 'Hisob',
+    });
+    // Delivery saved a copy of General's picture: the name is listed for both.
+    expect(new Set(await receiptImageNames(t.db))).toEqual(new Set([img('a'), img('c')]));
   });
 
   it('accepts only names the image store issues and widths of 20-100%', () => {

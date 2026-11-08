@@ -37,7 +37,7 @@ import {
 import { createCustomerPanel, type OpenType } from './customer-panel';
 import { payOrderModal } from './payment-modal';
 import { moveTableModal } from './move-table-modal';
-import { printReceipt } from './print-receipt';
+import { printPreBill, printReceipt } from './print-receipt';
 import { askWeight } from './weight-modal';
 
 const PORTION_LABEL: Record<PortionFactor, string> = {
@@ -162,9 +162,17 @@ export const orderView: View = ({ params, navigate }) => {
   // Guests changed seats: a saved table order moves to a free table.
   const moveButton = document.createElement('button');
   moveButton.type = 'button';
-  moveButton.className = 'btn btn-secondary order-move';
+  moveButton.className = 'btn btn-secondary';
   moveButton.append(html`${icon('move', 18)}<span>${t('moveTable.button')}</span>`);
-  if (target.kind === 'table') r.header.append(moveButton);
+  // The guest asks for the total before paying (feature F9): the saved order, not a payment.
+  const preBillButton = document.createElement('button');
+  preBillButton.type = 'button';
+  preBillButton.className = 'btn btn-secondary';
+  preBillButton.append(html`${icon('printer', 18)}<span>${t('preBill.button')}</span>`);
+  const tools = document.createElement('div');
+  tools.className = 'order-tools';
+  tools.append(...(target.kind === 'table' ? [moveButton] : []), preBillButton);
+  r.header.append(tools);
 
   function button(label: string, kind: string): HTMLButtonElement {
     const b = document.createElement('button');
@@ -257,6 +265,9 @@ export const orderView: View = ({ params, navigate }) => {
     payButton.title = order && unsaved ? t('order.unsaved') : '';
     moveButton.disabled = saving || !order || unsaved || stale;
     moveButton.title = order && unsaved ? t('order.unsaved') : '';
+    // It prints what is saved: unsaved lines would be missing from the guest's total.
+    preBillButton.disabled = saving || !order || unsaved || stale;
+    preBillButton.title = order && unsaved ? t('order.unsaved') : t('preBill.title');
     renderDishes();
   }
 
@@ -523,6 +534,12 @@ export const orderView: View = ({ params, navigate }) => {
       lines = [];
       navigate('/tables');
     }
+  });
+
+  preBillButton.addEventListener('click', () => {
+    playClick();
+    if (!order || dirty()) return;
+    printPreBill(order.id);
   });
 
   moveButton.addEventListener('click', async () => {

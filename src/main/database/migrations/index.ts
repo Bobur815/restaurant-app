@@ -11,6 +11,7 @@ import { sql as receiptLayouts } from './0010_receipt_layouts';
 import { sql as licenseState } from './0011_license_state';
 import { sql as shiftCashUnlimited } from './0012_shift_cash_unlimited';
 import { sql as licenseAccount } from './0013_license_account';
+import { sql as preBillLayout } from './0014_pre_bill_layout';
 
 export interface Migration {
   /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
@@ -39,4 +40,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 11, name: 'license_state', sql: licenseState },
   { version: 12, name: 'shift_cash_unlimited', sql: shiftCashUnlimited },
   { version: 13, name: 'license_account', sql: licenseAccount },
+  { version: 14, name: 'pre_bill_layout', sql: preBillLayout },
 ];

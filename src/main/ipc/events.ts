@@ -14,10 +14,12 @@ export const READ_ONLY_CHANNELS = [
   'settings:get',
   'receipt:get',
   'receipt:layouts',
+  'receipt:preBillLayout',
   'receipt:pickImage', // stores a file; the layout changes on receipt:updateLayout
   // Printing changes no data.
   'printing:printers',
   'printing:printReceipt',
+  'printing:printPreBill',
   'printing:test',
   'printing:shiftReport',
   'printing:preview',
@@ -85,6 +87,7 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'settings:update': () => [SETTINGS],
   'receipt:update': () => [SETTINGS],
   'receipt:updateLayout': () => [SETTINGS],
+  'receipt:updatePreBillLayout': () => [SETTINGS],
   'halls:create': () => [HALLS],
   'halls:update': () => [HALLS],
   'halls:reorder': () => [HALLS],

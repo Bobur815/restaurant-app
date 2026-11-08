@@ -56,8 +56,18 @@ import {
   voidRepayment,
   writeOffDebt,
 } from '../debts/debts';
-import { getReceiptLayouts, updateReceiptLayout } from '../printing/layouts';
-import { previewReceipt, printOrderReceipt, printTestReceipt } from '../printing/printing';
+import {
+  getPreBillLayout,
+  getReceiptLayouts,
+  updatePreBillLayout,
+  updateReceiptLayout,
+} from '../printing/layouts';
+import {
+  previewReceipt,
+  printOrderReceipt,
+  printPreBill,
+  printTestReceipt,
+} from '../printing/printing';
 import { printShiftReport } from '../printing/shift-report';
 import { addCashMovement, getCashSummary } from '../sessions/cash';
 import { salesReport } from '../reports/reports';
@@ -210,6 +220,11 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'receipt:updateLayout': need('settings', S.updateReceiptLayoutInput, (ctx, input) =>
     updateReceiptLayout(ctx.db, input),
   ),
+  // The pre-bill (feature F9): one layout for every order type.
+  'receipt:preBillLayout': need('settings', S.empty, (ctx) => getPreBillLayout(ctx.db)),
+  'receipt:updatePreBillLayout': need('settings', S.updatePreBillLayoutInput, (ctx, input) =>
+    updatePreBillLayout(ctx.db, input),
+  ),
   'receipt:pickImage': need('settings', S.empty, (ctx) => ctx.services.pickImage()),
 
   // ── software update (feature F4) ──────────────────────────────────────────────────────────
@@ -259,8 +274,15 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'printing:printReceipt': user(S.printReceiptInput, (ctx, { orderId }) =>
     printOrderReceipt(ctx.db, ctx.services.printer, orderId, ctx.services.receiptImage),
   ),
-  'printing:test': need('settings', S.testPrintInput, (ctx, { orderType }) =>
-    printTestReceipt(ctx.db, ctx.services.printer, orderType, ctx.services.receiptImage),
+  // Any logged-in user, like the receipt: a waiter hands the guest the total (feature F9). Every
+  // request is logged (who, which order; the id is a validated integer), refused ones too: a
+  // pre-bill is not a payment.
+  'printing:printPreBill': user(S.printPreBillInput, (ctx, { orderId }) => {
+    ctx.log(`[printing] pre-bill requested for order ${orderId} by user ${ctx.actor?.id ?? '?'}`);
+    return printPreBill(ctx.db, ctx.services.printer, orderId, ctx.services.receiptImage);
+  }),
+  'printing:test': need('settings', S.testPrintInput, (ctx, input) =>
+    printTestReceipt(ctx.db, ctx.services.printer, input, ctx.services.receiptImage),
   ),
   'printing:preview': need('settings', S.previewReceiptInput, (ctx, input) =>
     previewReceipt(ctx.db, ctx.services.printer, input, ctx.services.receiptImage),

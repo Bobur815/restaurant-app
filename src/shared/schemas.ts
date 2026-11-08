@@ -234,24 +234,32 @@ export const receiptLayoutValues = z.object(receiptLayoutFields).partial();
 
 export const updateReceiptLayoutInput = receiptLayoutValues.extend({ orderType });
 
+/** The pre-bill ("Hisob", feature F9): one layout for every order type, no customer switch. */
+const { showCustomer: _showCustomer, ...preBillLayoutFields } = receiptLayoutFields;
+export const updatePreBillLayoutInput = z.object(preBillLayoutFields).partial();
+
 /**
  * Receipt preview of one order type: the saved settings and layout with these (unsaved) form
- * values on top.
+ * values on top. `preBill`: the pre-bill with its own layout instead.
  */
 export const previewReceiptInput = z
   .object({
     orderType: orderType.default('DINE_IN'),
+    preBill: z.boolean().default(false),
     receipt: updateReceiptSettingsInput.optional(),
     layout: receiptLayoutValues.optional(),
   })
-  .default({ orderType: 'DINE_IN' });
+  .default({ orderType: 'DINE_IN', preBill: false });
 
-/** Test print of one order type's sample receipt. */
+/** Test print of one order type's sample receipt, or of the sample pre-bill. */
 export const testPrintInput = z
-  .object({ orderType: orderType.default('DINE_IN') })
-  .default({ orderType: 'DINE_IN' });
+  .object({ orderType: orderType.default('DINE_IN'), preBill: z.boolean().default(false) })
+  .default({ orderType: 'DINE_IN', preBill: false });
 
 export const printReceiptInput = z.object({ orderId: id });
+
+/** The pre-bill of a pending order: the total for the guest, not a payment. */
+export const printPreBillInput = z.object({ orderId: id });
 
 export const setupInput = z.object({
   admin: z.object({ fullName: userName, phone: requiredPhone, pin: pinCode }),

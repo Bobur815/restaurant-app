@@ -1,5 +1,10 @@
 import type { UpdateReceiptSettingsInput } from '@shared/schemas';
-import type { OrderType, ReceiptLayoutDto, ReceiptSettingsDto } from '@shared/types';
+import type {
+  OrderType,
+  PreBillLayoutDto,
+  ReceiptLayoutDto,
+  ReceiptSettingsDto,
+} from '@shared/types';
 import { api } from '../../api';
 import {
   checkboxField,
@@ -21,12 +26,20 @@ import type { View } from '../types';
 import { submitButton } from './settings-ui';
 
 type LayoutValues = Omit<ReceiptLayoutDto, 'orderType' | 'saved'>;
+/** A tab: one order type's receipt, or the pre-bill (feature F9), one for every type. */
+type Tab = OrderType | 'PRE_BILL';
+type SavedLayout = LayoutValues & { saved: boolean };
 
-const TYPE_LABEL: Record<OrderType, string> = {
+const TYPE_LABEL: Record<Tab, string> = {
   DINE_IN: 'receiptLayout.general',
   TAKEAWAY: 'orderType.TAKEAWAY',
   DELIVERY: 'orderType.DELIVERY',
+  PRE_BILL: 'preBill.tab',
 };
+
+/** The pre-bill has no customer switch: it follows each type's receipt, so it is not edited. */
+const preBillValues = (l: PreBillLayoutDto): SavedLayout => ({ ...l, showCustomer: true });
+const hasCustomer = (tab: Tab) => tab === 'TAKEAWAY' || tab === 'DELIVERY';
 
 const imageUrl = (file: string) => `savdochef-img://img/${encodeURIComponent(file)}`;
 const PREVIEW_DELAY_MS = 450;
@@ -121,8 +134,13 @@ export const receiptSection: View = () => {
   const load = async () => {
     let receipt: ReceiptSettingsDto | null;
     let layouts: ReceiptLayoutDto[];
+    let preBill: PreBillLayoutDto;
     try {
-      [receipt, layouts] = await Promise.all([api.receipt.get(), api.receipt.layouts()]);
+      [receipt, layouts, preBill] = await Promise.all([
+        api.receipt.get(),
+        api.receipt.layouts(),
+        api.receipt.preBillLayout(),
+      ]);
     } catch (error) {
       toastError(error);
       return;
@@ -205,17 +223,18 @@ export const receiptSection: View = () => {
     });
 
     // ── per order type: the layout ─────────────────────────────────────────────────────────
-    const byType = new Map(layouts.map((l) => [l.orderType, l]));
+    const byType = new Map<Tab, SavedLayout>(layouts.map((l) => [l.orderType, l]));
+    byType.set('PRE_BILL', preBillValues(preBill));
     /** Unsaved edits per tab survive switching tabs. */
-    const drafts = new Map<OrderType, LayoutValues>();
-    let current: OrderType = 'DINE_IN';
+    const drafts = new Map<Tab, LayoutValues>();
+    let current: Tab = 'DINE_IN';
     let readLayout: () => LayoutValues = () => byType.get(current)!;
 
     const tabs = document.createElement('div');
     tabs.className = 'segmented receipt-tabs';
     tabs.setAttribute('role', 'radiogroup');
     tabs.setAttribute('aria-label', t('receiptLayout.typeLabel'));
-    const tabButtons = (['DINE_IN', 'TAKEAWAY', 'DELIVERY'] as const).map((type) => {
+    const tabButtons = (['DINE_IN', 'TAKEAWAY', 'DELIVERY', 'PRE_BILL'] as const).map((type) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.setAttribute('role', 'radio');
@@ -256,7 +275,7 @@ export const receiptSection: View = () => {
       const testButton = button(t('printing.test'), 'secondary', async () => {
         testButton.disabled = true;
         try {
-          const result = await api.printing.test({ orderType: current });
+          const result = await api.printing.test(printTarget());
           toast(t('printing.testSent', { printer: result.printer }), 'success');
         } catch (error) {
           toast(t('printing.failed', { reason: errorMessage(error) }), 'error', 8000);
@@ -268,13 +287,19 @@ export const receiptSection: View = () => {
       const box = (name: keyof LayoutValues, label: string) =>
         checkboxField({ name, label, checked: v[name] as boolean });
 
+      const isPreBill = current === 'PRE_BILL';
       layoutForm.replaceChildren(
         html`<h2 class="card-title">
-            ${t('receiptLayout.title', { type: t(TYPE_LABEL[current]) })}
+            ${isPreBill
+              ? t('preBill.layoutTitle')
+              : t('receiptLayout.title', { type: t(TYPE_LABEL[current]) })}
           </h2>
+          ${isPreBill ? html`<p class="muted small">${t('preBill.hint')}</p>` : ''}
           ${current !== 'DINE_IN' && !saved.saved
             ? html`<p class="notice notice-info">
-                ${icon('receipt')}<span>${t('receiptLayout.inherited')}</span>
+                ${icon('receipt')}<span
+                  >${t(isPreBill ? 'preBill.inherited' : 'receiptLayout.inherited')}</span
+                >
               </p>`
             : ''}
           <div class="check-grid">
@@ -282,7 +307,7 @@ export const receiptSection: View = () => {
             ${box('showPhone', t('settings.showPhone'))}
             ${box('showDateTime', t('settings.showDateTime'))}
             ${box('showOrderNumber', t('settings.showOrderNumber'))}
-            ${current === 'DINE_IN' ? '' : box('showCustomer', t('receiptLayout.showCustomer'))}
+            ${hasCustomer(current) ? box('showCustomer', t('receiptLayout.showCustomer')) : ''}
           </div>
           ${field({ name: 'footerNote', label: t('settings.footerNote'), value: v.footerNote })}
           ${pictures
@@ -296,8 +321,8 @@ export const receiptSection: View = () => {
         showPhone: checked(layoutForm, 'showPhone'),
         showDateTime: checked(layoutForm, 'showDateTime'),
         showOrderNumber: checked(layoutForm, 'showOrderNumber'),
-        // General has no customer block: keep what is stored.
-        showCustomer: current === 'DINE_IN' ? v.showCustomer : checked(layoutForm, 'showCustomer'),
+        // General and the pre-bill have no customer switch: keep what is stored.
+        showCustomer: hasCustomer(current) ? checked(layoutForm, 'showCustomer') : v.showCustomer,
         footerNote: value(layoutForm, 'footerNote'),
         // Without the plan feature (F5) pictures neither print nor save: main refuses them.
         topImage: pictures ? top.value().file : null,
@@ -316,12 +341,21 @@ export const receiptSection: View = () => {
       e.preventDefault();
       clearErrors(layoutForm);
       try {
-        const saved = await api.receipt.updateLayout({ orderType: current, ...readLayout() });
-        byType.set(current, saved);
+        if (current === 'PRE_BILL') {
+          const { showCustomer: _showCustomer, ...values } = readLayout();
+          byType.set(current, preBillValues(await api.receipt.updatePreBillLayout(values)));
+        } else {
+          byType.set(
+            current,
+            await api.receipt.updateLayout({ orderType: current, ...readLayout() }),
+          );
+        }
         drafts.delete(current);
-        // Types that inherit from General follow its new values.
+        // Types (and the pre-bill) that inherit from General follow its new values.
         if (current === 'DINE_IN') {
           for (const l of await api.receipt.layouts()) if (!l.saved) byType.set(l.orderType, l);
+          const p = await api.receipt.preBillLayout();
+          if (!p.saved) byType.set('PRE_BILL', preBillValues(p));
         }
         toast(t('settings.saved'), 'success');
         renderLayout();
@@ -339,6 +373,13 @@ export const receiptSection: View = () => {
     previewCard.append(html`<h2 class="card-title">${t('printing.previewAlt')}</h2>`, previewBox);
     let previewSeq = 0;
 
+    /** What the test print and the preview show: the tab's type, or the sample pre-bill. */
+    function printTarget(): { orderType: OrderType; preBill: boolean } {
+      return current === 'PRE_BILL'
+        ? { orderType: 'DINE_IN', preBill: true }
+        : { orderType: current, preBill: false };
+    }
+
     function schedulePreview(delay = PREVIEW_DELAY_MS) {
       window.clearTimeout(previewTimer);
       if (!r) return; // no receipt settings yet: nothing to render
@@ -349,7 +390,7 @@ export const receiptSection: View = () => {
       const seq = ++previewSeq;
       try {
         const url = await api.printing.preview({
-          orderType: current,
+          ...printTarget(),
           receipt: sharedValues(),
           layout: readLayout(),
         });

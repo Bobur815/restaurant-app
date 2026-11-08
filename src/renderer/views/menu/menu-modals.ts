@@ -1,4 +1,5 @@
 import type { CategoryDto, MenuItemDto } from '@shared/types';
+import { latinToCyrillic } from '@shared/utils/transliterate';
 import { api } from '../../api';
 import {
   checkboxField,
@@ -21,6 +22,21 @@ import { toInputDecimal } from '../../utils/format';
 type SaleType = 'piece' | 'portion' | 'weight';
 
 const imageUrl = (file: string) => `savdochef-img://img/${encodeURIComponent(file)}`;
+
+/**
+ * Prefills nameRu from nameUz as it is typed (posgro pattern): nameRu follows only while it is
+ * empty or still the transliteration, so a name typed or saved by hand is left alone.
+ */
+function mirrorNameRu(form: HTMLElement) {
+  const uz = form.querySelector<HTMLInputElement>('[name="nameUz"]')!;
+  const ru = form.querySelector<HTMLInputElement>('[name="nameRu"]')!;
+  let mirrored = latinToCyrillic(uz.value);
+  uz.addEventListener('input', () => {
+    const next = latinToCyrillic(uz.value);
+    if (ru.value === '' || ru.value === mirrored) ru.value = next;
+    mirrored = next;
+  });
+}
 
 /** Create or edit a dish. Resolves true when saved. */
 export function dishModal(
@@ -71,6 +87,7 @@ export function dishModal(
       name: 'price',
       label: t('menu.price'),
       inputmode: 'decimal',
+      amount: true,
       value: toInputDecimal(dish?.price),
     });
     const typeField = selectField({
@@ -115,6 +132,7 @@ export function dishModal(
             name: 'costPrice',
             label: t('menu.costPrice'),
             inputmode: 'decimal',
+            amount: true,
             value: toInputDecimal(dish?.costPrice),
           })}
         </div>
@@ -137,7 +155,7 @@ export function dishModal(
         ${error}`,
     );
     syncPriceLabel();
-    renderPreview();
+    mirrorNameRu(form);
 
     let saved = false;
     const modal = openModal({
@@ -209,6 +227,7 @@ export function categoryModal(category: CategoryDto | null) {
         : ''}
       ${formError()}`,
     );
+    mirrorNameRu(form);
     let saved = false;
     const modal = openModal({
       title: category ? t('menu.editCategory') : t('menu.addCategory'),

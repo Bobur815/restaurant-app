@@ -1,6 +1,11 @@
 import type { z } from 'zod';
-import type { updateReceiptLayoutInput } from '@shared/schemas';
-import type { OrderType, ReceiptLayoutDto, ReceiptSettingsDto } from '@shared/types';
+import type { updatePreBillLayoutInput, updateReceiptLayoutInput } from '@shared/schemas';
+import type {
+  OrderType,
+  PreBillLayoutDto,
+  ReceiptLayoutDto,
+  ReceiptSettingsDto,
+} from '@shared/types';
 import type { DbOrTx } from '../domain/db';
 import { getReceiptSettings } from '../settings/settings';
 
@@ -84,10 +89,68 @@ export async function updateReceiptLayout(
   return toDto(row);
 }
 
+// ── the pre-bill ("Hisob", feature F9) ─────────────────────────────────────────────────────
+
+/** The single pre_bill_layout row. */
+export const PRE_BILL_LAYOUT_ID = 1;
+
+/**
+ * One layout for every order type. Never saved: General's switches and footer, but no pictures,
+ * so a logo only prints on the guest's bill once the owner chooses it.
+ */
+export async function getPreBillLayout(db: DbOrTx): Promise<PreBillLayoutDto> {
+  const row = await db.preBillLayout.findUnique({ where: { id: PRE_BILL_LAYOUT_ID } });
+  if (row) {
+    const { id: _id, updatedAt: _updatedAt, ...values } = row;
+    return { ...values, saved: true };
+  }
+  const general = await getReceiptLayout(db, 'DINE_IN');
+  return {
+    showAddress: general.showAddress,
+    showPhone: general.showPhone,
+    showDateTime: general.showDateTime,
+    showOrderNumber: general.showOrderNumber,
+    footerNote: general.footerNote,
+    topImage: null,
+    topImageWidth: DEFAULT_TOP_IMAGE_WIDTH,
+    bottomImage: null,
+    bottomImageWidth: DEFAULT_BOTTOM_IMAGE_WIDTH,
+    saved: false,
+  };
+}
+
+/** Saves the pre-bill layout: the given values over what it prints now. */
+export async function updatePreBillLayout(
+  db: DbOrTx,
+  input: z.infer<typeof updatePreBillLayoutInput>,
+): Promise<PreBillLayoutDto> {
+  const { saved: _saved, ...current } = await getPreBillLayout(db);
+  const data = { ...current, ...input };
+  await db.preBillLayout.upsert({
+    where: { id: PRE_BILL_LAYOUT_ID },
+    create: { id: PRE_BILL_LAYOUT_ID, ...data },
+    update: data,
+  });
+  return getPreBillLayout(db);
+}
+
+/** The pre-bill layout in the shape the receipt builder takes, for an order of this type. */
+export async function preBillReceiptLayout(
+  db: DbOrTx,
+  orderType: OrderType,
+): Promise<ReceiptLayoutDto> {
+  const { saved, ...values } = await getPreBillLayout(db);
+  // Who it is for follows the type's own receipt (takeaway / delivery).
+  const { showCustomer } = await getReceiptLayout(db, orderType);
+  return { ...values, orderType, showCustomer, saved };
+}
+
 /** Pictures the layouts use: the image cleanup must keep them. */
 export async function receiptImageNames(db: DbOrTx): Promise<string[]> {
-  const rows = await db.receiptLayout.findMany({
-    select: { topImage: true, bottomImage: true },
-  });
+  const select = { topImage: true, bottomImage: true } as const;
+  const rows = [
+    ...(await db.receiptLayout.findMany({ select })),
+    ...(await db.preBillLayout.findMany({ select })),
+  ];
   return rows.flatMap((r) => [r.topImage, r.bottomImage]).filter((n): n is string => !!n);
 }

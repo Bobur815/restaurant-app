@@ -9,6 +9,7 @@ import { icon } from '../ui/icons';
 import { playClick } from '../ui/sound';
 import { formatMoney, formatTime } from '../utils/format';
 import { moveTableModal } from './order/move-table-modal';
+import { printPreBill } from './order/print-receipt';
 import type { View } from './types';
 
 const ALL = 'all';
@@ -94,21 +95,32 @@ export const tablesView: View = ({ navigate }) => {
       playClick();
       navigate(`/tables/${n}`);
     });
-    // A busy table gets a move button beside the card (a button cannot hold another button).
-    if (!order || !can('orders')) return b;
+    // A busy table gets its tools beside the card (a button cannot hold another button): the
+    // pre-bill for a guest who asks for the total, and moving to another table.
+    if (!order) return b;
+    const tool = (name: 'printer' | 'move', label: string, onClick: () => void) => {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'icon-button';
+      x.title = label;
+      x.setAttribute('aria-label', `${label}: ${t('tables.table', { n })}`);
+      x.append(icon(name, 18));
+      x.addEventListener('click', () => {
+        playClick();
+        onClick();
+      });
+      return x;
+    };
+    const tools = document.createElement('div');
+    tools.className = 'table-tools';
+    tools.append(tool('printer', t('preBill.title'), () => printPreBill(order.orderId)));
+    if (can('orders'))
+      tools.append(
+        tool('move', t('moveTable.button'), () => void moveTableModal(n, order.version)),
+      );
     const cell = document.createElement('div');
     cell.className = 'table-cell';
-    const move = document.createElement('button');
-    move.type = 'button';
-    move.className = 'icon-button table-move';
-    move.title = t('moveTable.button');
-    move.setAttribute('aria-label', `${t('moveTable.button')}: ${t('tables.table', { n })}`);
-    move.append(icon('move', 18));
-    move.addEventListener('click', () => {
-      playClick();
-      void moveTableModal(n, order.version);
-    });
-    cell.append(b, move);
+    cell.append(b, tools);
     return cell;
   };
 

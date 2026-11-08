@@ -8,7 +8,15 @@ import {
   type TenderMethod,
 } from '@shared/utils/split-payment';
 import { api } from '../../api';
-import { clearErrors, field, formError, showFormError, value } from '../../components/forms';
+import {
+  amountHintFor,
+  clearErrors,
+  field,
+  formError,
+  refreshAmountHint,
+  showFormError,
+  value,
+} from '../../components/forms';
 import { phoneField } from '../../components/phone-field';
 import { t } from '../../i18n';
 import { appStore, can, licensed } from '../../store/app';
@@ -80,7 +88,12 @@ export function createTenderEditor(options: {
     });
     return { m, b };
   });
-  const received = field({ name: 'received', label: t('payment.received'), inputmode: 'decimal' });
+  const received = field({
+    name: 'received',
+    label: t('payment.received'),
+    inputmode: 'decimal',
+    amount: true,
+  });
   received.querySelector('input')!.addEventListener('input', () => render());
   const change = document.createElement('output');
   change.className = 'change-amount';
@@ -115,12 +128,13 @@ export function createTenderEditor(options: {
       const others = lines().filter((l) => l.method !== m && l.amount !== 'NaN');
       const left = dec(options.total).minus(sum(others.map((l) => l.amount)));
       input.value = left.gt(0) ? toInputDecimal(left.toFixed()) : '';
+      refreshAmountHint(input);
       render();
     });
     input.addEventListener('input', () => render());
     const row = html`<div class="split-row">
       <span class="split-label">${icon(METHOD_ICON[m], 20)}${t(`payment.${m}`)}</span>
-      ${input}${rest}
+      ${input}${rest}${amountHintFor(input)}
     </div>`;
     return { m, input, row };
   });
@@ -142,6 +156,7 @@ export function createTenderEditor(options: {
       for (const r of splitRows) r.input.value = '';
       const row = splitRows.find((r) => r.m === single);
       if (row) row.input.value = toInputDecimal(options.total);
+      for (const r of splitRows) refreshAmountHint(r.input);
     }
     render();
   });
@@ -220,6 +235,7 @@ export function createTenderEditor(options: {
       const row = splitRows.find((r) => r.m === l.method);
       if (row) row.input.value = toInputDecimal(l.amount);
     }
+    for (const r of splitRows) refreshAmountHint(r.input);
   }
 
   /** The lines as typed now (invalid amounts as 'NaN', so the state reports them). */

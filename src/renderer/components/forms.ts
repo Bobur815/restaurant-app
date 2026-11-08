@@ -1,11 +1,18 @@
+import { amountHint } from '@shared/utils/amount-words';
 import { isApiError } from '../api';
+import { appStore } from '../store/app';
 import { errorMessage } from './toast';
 
 let uid = 0;
 /** Unique per element: a modal's form can sit over a page form with the same field names. */
 const fieldId = (name: string) => `f-${name.replace(/\W/g, '-')}-${++uid}`;
 
-function wrapField(id: string, labelText: string, control: HTMLElement): HTMLElement {
+function wrapField(
+  id: string,
+  labelText: string,
+  control: HTMLElement,
+  ...extra: HTMLElement[]
+): HTMLElement {
   const wrap = document.createElement('div');
   wrap.className = 'field';
   const label = document.createElement('label');
@@ -15,8 +22,32 @@ function wrapField(id: string, labelText: string, control: HTMLElement): HTMLEle
   error.className = 'field-error';
   error.id = `${id}-error`;
   control.setAttribute('aria-describedby', error.id);
-  wrap.append(label, control, error);
+  wrap.append(label, control, ...extra, error);
   return wrap;
+}
+
+const hintUpdaters = new WeakMap<HTMLInputElement, () => void>();
+
+/**
+ * The amount in words under a money input (posgro `amountHint`): "1 250 000 so'm — bir million
+ * ikki yuz ellik ming", so 125 000 and 1 250 000 are not mixed up. Follows typing; code that sets
+ * the value itself calls `refreshAmountHint`. Returns the line to place after the input.
+ */
+export function amountHintFor(input: HTMLInputElement): HTMLElement {
+  const hint = document.createElement('p');
+  hint.className = 'amount-hint';
+  const update = () => {
+    hint.textContent = amountHint(input.value, appStore.get().language);
+  };
+  input.addEventListener('input', update);
+  hintUpdaters.set(input, update);
+  update();
+  return hint;
+}
+
+/** After setting a money input's value from code (a "Qolgan" button, a computed price). */
+export function refreshAmountHint(input: HTMLInputElement): void {
+  hintUpdaters.get(input)?.();
 }
 
 /** A labelled input, with an error slot under it. `name` is the zod path joined by dots. */
@@ -30,6 +61,8 @@ export function field(options: {
   min?: number;
   max?: number;
   inputmode?: string;
+  /** A money field: shows the amount in words under it (`amountHintFor`). */
+  amount?: boolean;
 }): HTMLElement {
   const id = fieldId(options.name);
   const input = document.createElement('input');
@@ -42,7 +75,9 @@ export function field(options: {
   if (options.min !== undefined) input.min = String(options.min);
   if (options.max !== undefined) input.max = String(options.max);
   if (options.inputmode) input.inputMode = options.inputmode;
-  return wrapField(id, options.label, input);
+  return options.amount
+    ? wrapField(id, options.label, input, amountHintFor(input))
+    : wrapField(id, options.label, input);
 }
 
 export function selectField(options: {

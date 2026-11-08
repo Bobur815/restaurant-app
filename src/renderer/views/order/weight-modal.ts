@@ -6,7 +6,7 @@ import {
   toQtyString,
   type DecimalString,
 } from '@shared/utils/decimal';
-import { field } from '../../components/forms';
+import { field, refreshAmountHint } from '../../components/forms';
 import { openModal } from '../../components/modal';
 import { t } from '../../i18n';
 import { appStore } from '../../store/app';
@@ -37,6 +37,7 @@ export function askWeight(
       label: t('order.unitPrice'),
       type: 'text',
       inputmode: 'numeric',
+      amount: true,
     });
     const kg = kgField.querySelector('input')!;
     const price = priceField.querySelector('input')!;
@@ -49,6 +50,7 @@ export function askWeight(
     const syncFromKg = () => {
       const v = parse(kg.value);
       price.value = v ? toInputDecimal(toMoneyString(v.times(pricePerKg))) : '';
+      refreshAmountHint(price);
     };
     kg.addEventListener('input', syncFromKg);
     price.addEventListener('input', () => {

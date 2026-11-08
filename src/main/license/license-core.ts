@@ -211,6 +211,7 @@ export function featureNeeded(
     case 'reports:sales':
       return input?.['start'] === input?.['end'] ? null : 'reports';
     case 'receipt:updateLayout':
+    case 'receipt:updatePreBillLayout':
       return input?.['topImage'] || input?.['bottomImage'] ? 'receiptLogos' : null;
     case 'halls:create':
       return activeHalls().then((n) => (n >= 1 ? 'multiHall' : null));

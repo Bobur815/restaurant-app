@@ -144,6 +144,12 @@ export interface ReceiptLayoutDto {
   saved: boolean;
 }
 
+/**
+ * The pre-bill's layout (feature F9), one for every order type. `saved` false: never saved, it
+ * prints with General's switches and footer and no pictures.
+ */
+export type PreBillLayoutDto = Omit<ReceiptLayoutDto, 'orderType' | 'showCustomer'>;
+
 export interface PrinterInfo {
   name: string;
   isDefault: boolean;

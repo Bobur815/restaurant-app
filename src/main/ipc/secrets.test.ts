@@ -123,6 +123,8 @@ const today = new Date().toISOString().slice(0, 10);
 const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'halls:list': { includeInactive: true },
   'printing:printReceipt': { orderId: 1 },
+  // The unpaid delivery: a pre-bill is only for a pending order.
+  'printing:printPreBill': { orderId: 2 },
   'orders:get': { id: 1 },
   'debts:get': { customerId: 1 },
   'customers:findByPhone': { phone: '+998 90 123 45 67' },

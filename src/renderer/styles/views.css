@@ -1222,6 +1222,17 @@
   text-align: right;
 }
 
+/* Under the amount, only on the lines that have one: four empty hints would stretch the window. */
+.split-row .amount-hint {
+  grid-column: 2 / -1;
+  min-height: 0;
+  margin-top: calc(-1 * var(--space-1));
+}
+
+.split-row .amount-hint:empty {
+  display: none;
+}
+
 .split-summary {
   display: flex;
   flex-wrap: wrap;
@@ -1523,15 +1534,22 @@
   display: grid;
 }
 
-.table-move {
+.table-tools {
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
+  display: flex;
+  gap: var(--space-1);
+}
+
+.table-tools .icon-button {
   border-color: var(--color-border);
   background: var(--color-surface);
 }
 
-.order-move {
+.order-tools {
+  display: flex;
+  gap: var(--space-2);
   margin-left: auto;
 }
 
