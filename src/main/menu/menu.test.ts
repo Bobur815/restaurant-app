@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { menuItemInput } from '@shared/schemas';
+import { categoryInput, menuItemInput, updateCategoryInput } from '@shared/schemas';
 import {
   cleanupOrphanImages,
   importImage,
@@ -16,6 +16,7 @@ import {
   createMenuItem,
   deleteMenuItem,
   listMenuItems,
+  menuImageNames,
   normalizeForSearch,
   updateMenuItem,
 } from './menu-items';
@@ -43,12 +44,45 @@ describe('categories', () => {
 
   it('duplicate names are a CONFLICT, rename keeps the rest', async () => {
     await expect(
-      createCategory(t.db, { nameUz: 'Ovqatlar', nameRu: null, sortOrder: 0 }),
+      createCategory(t.db, { nameUz: 'Ovqatlar', nameRu: null, sortOrder: 0, imageFile: null }),
     ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
     const renamed = await updateCategory(t.db, { id: categoryId, nameRu: 'Еда' });
     expect(renamed).toMatchObject({ nameUz: 'Ovqatlar', nameRu: 'Еда' });
+  });
+
+  it('keeps a picture (F10): set, read back, cleared; the cleanup keeps it while used', async () => {
+    const pic = `${'a'.repeat(32)}.jpg`;
+    const dishPic = `${'b'.repeat(32)}.png`;
+    expect((await listCategories(t.db))[0]!.imageFile).toBeNull();
+    const created = await createCategory(
+      t.db,
+      categoryInput.parse({ nameUz: 'Somsa', imageFile: pic }),
+    );
+    expect(created.imageFile).toBe(pic);
+    await createMenuItem(t.db, dish({ imageFile: dishPic }));
+    expect((await menuImageNames(t.db)).sort()).toEqual([pic, dishPic].sort());
+
+    const cleared = await updateCategory(
+      t.db,
+      updateCategoryInput.parse({ id: created.id, imageFile: null }),
+    );
+    expect(cleared.imageFile).toBeNull();
+    expect(await menuImageNames(t.db)).toEqual([dishPic]);
+    // A name change alone leaves the picture as it is.
+    await updateCategory(t.db, updateCategoryInput.parse({ id: created.id, imageFile: pic }));
+    const renamed = await updateCategory(
+      t.db,
+      updateCategoryInput.parse({ id: created.id, nameRu: 'Самса' }),
+    );
+    expect(renamed.imageFile).toBe(pic);
+  });
+
+  it('refuses a picture that is not an image store name', () => {
+    expect(categoryInput.safeParse({ nameUz: 'X', imageFile: '../../evil.jpg' }).success).toBe(
+      false,
+    );
   });
 
   it('only an empty category can be deleted', async () => {

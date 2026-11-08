@@ -204,10 +204,15 @@ describe('migration 7 (order types) on a database with orders', () => {
     // A v6 database, written with plain SQL (the v7 client would ask for columns v6 lacks).
     const v6 = await openAt(dbFile, { migrations: MIGRATIONS.slice(0, 6) });
     const p = v6.prisma;
-    const category = await p.category.findFirstOrThrow();
-    const dish = await p.menuItem.create({
-      data: { nameUz: 'Non', price: '5000', categoryId: category.id },
-    });
+    const [category] = await p.$queryRawUnsafe<Array<{ id: number }>>(
+      `SELECT "id" FROM "categories" LIMIT 1`,
+    );
+    await p.$executeRawUnsafe(
+      `INSERT INTO "menu_items" ("nameUz", "price", "categoryId", "updatedAt") VALUES ('Non', 5000, ${Number(category!.id)}, CURRENT_TIMESTAMP)`,
+    );
+    const [dish] = await p.$queryRawUnsafe<Array<{ id: number }>>(
+      `SELECT "id" FROM "menu_items" WHERE "nameUz" = 'Non'`,
+    );
     await p.$executeRawUnsafe(
       `INSERT INTO "sessions" ("id", "status", "openGuard", "updatedAt") VALUES (1, 'open', 1, CURRENT_TIMESTAMP)`,
     );
@@ -219,7 +224,7 @@ describe('migration 7 (order types) on a database with orders', () => {
         `INSERT INTO "orders" ("id", "orderNumber", "tableNumber", "status", "sessionId", "totalAmount", "updatedAt") VALUES (${id}, '2026-0000${id}', ${table}, '${status}', 1, 10000, CURRENT_TIMESTAMP)`,
       );
       await p.$executeRawUnsafe(
-        `INSERT INTO "order_items" ("orderId", "menuItemId", "quantity", "unitPrice", "totalPrice", "stockQuantity", "updatedAt") VALUES (${id}, ${dish.id}, 2, 5000, 10000, 2, CURRENT_TIMESTAMP)`,
+        `INSERT INTO "order_items" ("orderId", "menuItemId", "quantity", "unitPrice", "totalPrice", "stockQuantity", "updatedAt") VALUES (${id}, ${Number(dish!.id)}, 2, 5000, 10000, 2, CURRENT_TIMESTAMP)`,
       );
     }
     await p.$executeRawUnsafe(
@@ -339,6 +344,51 @@ describe('migration 9 (PIN login, permissions) on a database with users', () => 
     expect(cols.map((c) => c.name)).not.toContain('passwordHash');
     expect((await v9.prisma.order.findUniqueOrThrow({ where: { id: 1 } })).createdById).toBe(2);
     expect((await v9.prisma.session.findUniqueOrThrow({ where: { id: 1 } })).openedById).toBe(1);
+  });
+});
+
+describe('migration 15 (printers, kitchen tickets, category pictures) on a v14 database', () => {
+  async function v14With(printerName: string | null | 'no-settings') {
+    const dbFile = newDbFile();
+    const v14 = await openAt(dbFile, { migrations: MIGRATIONS.slice(0, 14) });
+    const p = v14.prisma;
+    if (printerName !== 'no-settings') {
+      await p.$executeRawUnsafe(
+        `INSERT INTO "receipt_settings" ("id", "restaurantName", "printerName", "updatedAt") VALUES (1, 'Cafe', ${printerName === null ? 'NULL' : `'${printerName}'`}, CURRENT_TIMESTAMP)`,
+      );
+    }
+    const [category] = await p.$queryRawUnsafe<Array<{ id: number }>>(
+      `SELECT "id" FROM "categories" LIMIT 1`,
+    );
+    await p.$executeRawUnsafe(
+      `INSERT INTO "menu_items" ("nameUz", "price", "categoryId", "updatedAt") VALUES ('Osh', 25000, ${Number(category!.id)}, CURRENT_TIMESTAMP)`,
+    );
+    await p.$disconnect();
+    return openAt(dbFile);
+  }
+
+  it('makes the receipt printer the main printer; dishes and categories get nothing', async () => {
+    const { prisma, migration } = await v14With('XP-80C');
+    expect(migration.applied).toContain('15_kitchen_printers');
+    const printers = await prisma.printer.findMany();
+    expect(
+      printers.map((r) => [r.windowsName, r.isMain, r.mainGuard, r.label, r.isActive]),
+    ).toEqual([['XP-80C', true, 1, null, true]]);
+    const dish = await prisma.menuItem.findFirstOrThrow({ where: { nameUz: 'Osh' } });
+    expect(dish.printerId).toBeNull();
+    expect(dish.price.toString()).toBe('25000');
+    expect((await prisma.category.findMany()).every((c) => c.imageFile === null)).toBe(true);
+  });
+
+  it('keeps "pick automatically" and works before setup', async () => {
+    const auto = await v14With(null);
+    expect((await auto.prisma.printer.findMany()).map((r) => [r.windowsName, r.isMain])).toEqual([
+      [null, true],
+    ]);
+    const fresh = await v14With('no-settings');
+    expect((await fresh.prisma.printer.findMany()).map((r) => [r.windowsName, r.isMain])).toEqual([
+      [null, true],
+    ]);
   });
 });
 
@@ -535,6 +585,54 @@ describe('database-level guarantees', () => {
         },
       }),
     ).rejects.toMatchObject({ code: 'P2002' });
+  });
+
+  it('allows only one main printer; the guard follows isMain via triggers (migration 15)', async () => {
+    const main = await prisma.printer.findFirstOrThrow({ where: { isMain: true } });
+    expect(main.mainGuard).toBe(1);
+    await expect(prisma.printer.create({ data: { isMain: true } })).rejects.toMatchObject({
+      code: 'P2002',
+    });
+    const kitchen = await prisma.printer.create({ data: { label: 'Oshxona', windowsName: 'K1' } });
+    expect(kitchen.mainGuard).toBeNull();
+    // Writing the guard directly cannot make a second main or drop the main's guard.
+    await prisma.printer.update({ where: { id: main.id }, data: { mainGuard: null } });
+    expect((await prisma.printer.findUniqueOrThrow({ where: { id: main.id } })).mainGuard).toBe(1);
+    // Moving "main" is two steps: release, then take.
+    await prisma.$transaction([
+      prisma.printer.update({ where: { id: main.id }, data: { isMain: false } }),
+      prisma.printer.update({ where: { id: kitchen.id }, data: { isMain: true } }),
+    ]);
+    expect((await prisma.printer.findUniqueOrThrow({ where: { id: kitchen.id } })).mainGuard).toBe(
+      1,
+    );
+    await prisma.$transaction([
+      prisma.printer.update({ where: { id: kitchen.id }, data: { isMain: false } }),
+      prisma.printer.update({ where: { id: main.id }, data: { isMain: true } }),
+    ]);
+  });
+
+  it('a kitchen ticket keeps its printer; a dish loses a deleted printer (SET NULL)', async () => {
+    const printer = await prisma.printer.create({ data: { label: 'Bar', windowsName: 'B1' } });
+    await prisma.menuItem.update({ where: { id: menuItemId }, data: { printerId: printer.id } });
+    await prisma.printer.delete({ where: { id: printer.id } });
+    expect(
+      (await prisma.menuItem.findUniqueOrThrow({ where: { id: menuItemId } })).printerId,
+    ).toBeNull();
+
+    const p2 = await prisma.printer.create({ data: { label: 'Bar', windowsName: 'B2' } });
+    const session =
+      (await prisma.session.findFirst()) ?? (await prisma.session.create({ data: {} }));
+    const order = await prisma.order.create({
+      data: { orderNumber: '2026-09999', tableNumber: 99, sessionId: session.id },
+    });
+    await prisma.kitchenTicket.create({
+      data: { orderId: order.id, printerId: p2.id, kind: 'NEW', payload: '{}' },
+    });
+    await expect(prisma.printer.delete({ where: { id: p2.id } })).rejects.toThrow();
+    await expect(prisma.order.delete({ where: { id: order.id } })).rejects.toThrow();
+    await prisma.kitchenTicket.deleteMany({ where: { orderId: order.id } });
+    await prisma.order.delete({ where: { id: order.id } });
   });
 
   it('a menu item in use cannot be hard-deleted (soft delete via isActive instead)', async () => {

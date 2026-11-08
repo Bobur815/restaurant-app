@@ -25,6 +25,8 @@ const SETTING_KEYS = {
   splitPaymentEnabled: { key: 'split_payment_enabled', schema: z.boolean() },
   debtEnabled: { key: 'debt_enabled', schema: z.boolean() },
   lanEnabled: { key: 'lan_enabled', schema: z.boolean() },
+  showCategoryImages: { key: 'show_category_images', schema: z.boolean() },
+  showMenuImages: { key: 'show_menu_images', schema: z.boolean() },
   setupComplete: { key: 'setup_complete', schema: z.boolean() },
 } as const satisfies Record<keyof AppSettings, { key: string; schema: z.ZodType }>;
 
@@ -90,6 +92,30 @@ export async function updateReceiptSettings(
 ): Promise<ReceiptSettingsDto> {
   const existing = await db.receiptSettings.findUnique({ where: { id: RECEIPT_SETTINGS_ID } });
   if (!existing) throw notFound('Chek sozlamalari');
-  const row = await db.receiptSettings.update({ where: { id: RECEIPT_SETTINGS_ID }, data: input });
+  const write = async (tx: DbOrTx) => {
+    const row = await tx.receiptSettings.update({
+      where: { id: RECEIPT_SETTINGS_ID },
+      data: input,
+    });
+    if (input.printerName !== undefined) await setMainPrinterWindowsName(tx, input.printerName);
+    return row;
+  };
+  // Both or neither (F11): receipts follow the printer row, the page shows the setting.
+  const row =
+    input.printerName !== undefined && '$transaction' in db
+      ? await db.$transaction((tx) => write(tx))
+      : await write(db);
   return toReceiptDto(row);
+}
+
+/**
+ * Feature F11: the main printer row (printers, isMain) is where receipts look for their printer;
+ * a receipt-settings write that names a printer keeps it in step (printing/printers.ts keeps the
+ * other direction).
+ */
+export async function setMainPrinterWindowsName(
+  db: DbOrTx,
+  windowsName: string | null,
+): Promise<void> {
+  await db.printer.updateMany({ where: { isMain: true }, data: { windowsName } });
 }

@@ -69,6 +69,8 @@ import {
   printTestReceipt,
 } from '../printing/printing';
 import { printShiftReport } from '../printing/shift-report';
+import { listFailedTickets, printTestTicket, reprintKitchenTicket } from '../printing/kitchen';
+import { createPrinter, listPrinters, setMainPrinter, updatePrinter } from '../printing/printers';
 import { addCashMovement, getCashSummary } from '../sessions/cash';
 import { salesReport } from '../reports/reports';
 import { applyResiduals, listExpenses, listResiduals } from '../residuals/residuals';
@@ -291,6 +293,29 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'printing:shiftReport': need('shifts', S.shiftReportInput, (ctx, input) =>
     printShiftReport(ctx.db, ctx.services.printer, input),
   ),
+  'printing:testPrinter': need('settings', S.printerIdInput, (ctx, { printerId }) =>
+    printTestTicket(ctx.db, ctx.services.printer, printerId),
+  ),
+
+  // ── printers and kitchen tickets (feature F11) ───────────────────────────────────────────
+  // Any user reads the names (the dish form, the reprint prompt); hidden ones for settings only.
+  'printers:list': user(S.listPrintersInput, (ctx, input) =>
+    listPrinters(ctx.db, {
+      includeInactive: input.includeInactive && hasPermission(ctx.actor, 'settings'),
+    }),
+  ),
+  'printers:create': need('settings', S.printerInput, (ctx, input) => createPrinter(ctx.db, input)),
+  'printers:update': need('settings', S.updatePrinterInput, (ctx, input) =>
+    updatePrinter(ctx.db, input),
+  ),
+  'printers:setMain': need('settings', S.printerIdInput, (ctx, { printerId }) =>
+    setMainPrinter(ctx.db, printerId),
+  ),
+  'kitchen:failed': need('orders', S.empty, (ctx) => listFailedTickets(ctx.db)),
+  'kitchen:reprint': need('orders', S.ticketIdInput, (ctx, { ticketId }) => {
+    ctx.log(`[kitchen] reprint of ticket ${ticketId} by user ${ctx.actor.id}`);
+    return reprintKitchenTicket(ctx.db, ctx.services.printer, ticketId);
+  }),
 
   // ── halls & tables ───────────────────────────────────────────────────────────────────────
   // Hidden halls and tables are for the settings page (admins); everyone else sees active ones.
@@ -374,23 +399,54 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'orders:getByNumber': need('checks', S.orderNumberInput, (ctx, { orderNumber }) =>
     getOrderByNumber(ctx.db, orderNumber),
   ),
-  'orders:save': need('orders', S.saveTableOrderInput, (ctx, input) =>
-    saveTableOrder(ctx.db, ctx.actor, input),
-  ),
-  'orders:cancel': need('orders', S.cancelTableOrderInput, (ctx, input) =>
-    cancelTableOrder(ctx.db, input),
-  ),
-  'orders:moveTable': need('orders', S.moveTableInput, (ctx, input) =>
-    moveTableOrder(ctx.db, input),
-  ),
+  // Kitchen tickets (F11) are written with the order and printed once it is saved.
+  'orders:save': need('orders', S.saveTableOrderInput, async (ctx, input) => {
+    const tickets: number[] = [];
+    try {
+      return await saveTableOrder(ctx.db, ctx.actor, input, tickets);
+    } finally {
+      // Committed tickets print even if reading the order back fails.
+      ctx.services.printKitchen?.(tickets);
+    }
+  }),
+  'orders:cancel': need('orders', S.cancelTableOrderInput, async (ctx, input) => {
+    const tickets: number[] = [];
+    try {
+      return await cancelTableOrder(ctx.db, input, { actor: ctx.actor, tickets });
+    } finally {
+      // Committed tickets print even if reading the order back fails.
+      ctx.services.printKitchen?.(tickets);
+    }
+  }),
+  'orders:moveTable': need('orders', S.moveTableInput, async (ctx, input) => {
+    const tickets: number[] = [];
+    try {
+      return await moveTableOrder(ctx.db, input, { actor: ctx.actor, tickets });
+    } finally {
+      // Committed tickets print even if reading the order back fails.
+      ctx.services.printKitchen?.(tickets);
+    }
+  }),
   'orders:get': need('orders', S.idInput, (ctx, { id }) => getOrder(ctx.db, id)),
   'orders:openList': need('orders', S.empty, (ctx) => listOpenOrders(ctx.db)),
-  'orders:saveOpen': need('orders', S.saveOpenOrderInput, (ctx, input) =>
-    saveOpenOrder(ctx.db, ctx.actor, input),
-  ),
-  'orders:cancelOpen': need('orders', S.orderIdInput, (ctx, input) =>
-    cancelOpenOrder(ctx.db, input),
-  ),
+  'orders:saveOpen': need('orders', S.saveOpenOrderInput, async (ctx, input) => {
+    const tickets: number[] = [];
+    try {
+      return await saveOpenOrder(ctx.db, ctx.actor, input, tickets);
+    } finally {
+      // Committed tickets print even if reading the order back fails.
+      ctx.services.printKitchen?.(tickets);
+    }
+  }),
+  'orders:cancelOpen': need('orders', S.orderIdInput, async (ctx, input) => {
+    const tickets: number[] = [];
+    try {
+      return await cancelOpenOrder(ctx.db, input, { actor: ctx.actor, tickets });
+    } finally {
+      // Committed tickets print even if reading the order back fails.
+      ctx.services.printKitchen?.(tickets);
+    }
+  }),
   'orders:setDeliveryStatus': need('orders', S.deliveryStatusInput, (ctx, input) =>
     setDeliveryStatus(ctx.db, input),
   ),

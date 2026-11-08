@@ -86,6 +86,7 @@ describe('access levels', () => {
         'users:updateProfile',
         'printing:printReceipt',
         'printing:printPreBill',
+        'printers:list',
         'halls:list',
         'categories:list',
         'menu:list',
@@ -121,6 +122,10 @@ describe('access levels', () => {
         'printing:printers',
         'printing:test',
         'printing:preview',
+        'printing:testPrinter',
+        'printers:create',
+        'printers:update',
+        'printers:setMain',
         'halls:create',
         'halls:update',
         'halls:reorder',
@@ -150,6 +155,8 @@ describe('access levels', () => {
       ],
       corrections: ['sessions:delete', 'checks:update', 'checks:delete'],
       orders: [
+        'kitchen:failed',
+        'kitchen:reprint',
         'orders:save',
         'orders:cancel',
         'orders:moveTable',
@@ -483,5 +490,75 @@ describe('users, PINs and permissions', () => {
       ok: false,
       error: { code: 'CONFLICT' },
     });
+  });
+});
+
+describe('kitchen tickets (feature F11)', () => {
+  it('a saved order hands its new tickets to the printer service; a refused one hands none', async () => {
+    const printedBatches: number[][] = [];
+    const ctx = (): HandlerContext => ({
+      db: t.db,
+      actor: admin,
+      setActor: () => undefined,
+      services: {
+        appInfo: () => ({ name: 'savdochef', version: '0.0.0-test', isPackaged: false }),
+        printer: {
+          list: async () => [],
+          print: async () => ({ printer: 'Test' }),
+          preview: async () => '',
+        },
+        pickImage: async () => null,
+        receiptImage: () => null,
+        // Handlers hand over every outcome (empty on a refusal); only real batches count.
+        printKitchen: (ids) => {
+          if (ids.length) printedBatches.push(ids);
+        },
+        updater: unsupportedUpdater(),
+        license: allowAllLicense(),
+      },
+      log: () => undefined,
+    });
+    const call = <C extends IpcChannel>(channel: C, input?: unknown) =>
+      invokeHandler(channel, HANDLERS[channel] as never, ctx(), input);
+
+    const printer = await call('printers:create', { label: 'Oshxona', windowsName: 'K-80' });
+    if (!printer.ok) throw new Error(printer.error.message);
+    const categoryId = (await t.db.category.findFirstOrThrow()).id;
+    const dish = await call('menu:create', {
+      nameUz: 'Kabob F11',
+      price: '20000',
+      categoryId,
+      printerId: printer.data.id,
+    });
+    if (!dish.ok) throw new Error(dish.error.message);
+    if (!(await t.db.session.findFirst({ where: { status: 'open' } }))) {
+      const opened = await call('sessions:open', {
+        items: [{ menuItemId: dish.data.id, initialQuantity: '10' }],
+      });
+      expect(opened.ok).toBe(true);
+    } else {
+      const open = await t.db.session.findFirstOrThrow({ where: { status: 'open' } });
+      await t.db.sessionItem.create({
+        data: { sessionId: open.id, menuItemId: dish.data.id, initialQuantity: '10' },
+      });
+    }
+
+    const saved = await call('orders:save', {
+      tableNumber: 9,
+      lines: [{ menuItemId: dish.data.id, quantity: 2 }],
+    });
+    expect(saved.ok).toBe(true);
+    expect(printedBatches).toHaveLength(1);
+    const rows = await t.db.kitchenTicket.findMany({ where: { id: { in: printedBatches[0] } } });
+    expect(rows.map((r) => [r.printerId, r.kind])).toEqual([[printer.data.id, 'NEW']]);
+
+    // A stale save is refused before anything is written or printed.
+    const refused = await call('orders:save', {
+      tableNumber: 9,
+      expectedVersion: 99,
+      lines: [{ menuItemId: dish.data.id, quantity: 3 }],
+    });
+    expect(refused.ok).toBe(false);
+    expect(printedBatches).toHaveLength(1);
   });
 });

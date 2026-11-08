@@ -6,6 +6,7 @@ import { conflict } from '../domain/errors';
 import { getOrder } from '../orders/orders';
 import { getReceiptSettings } from '../settings/settings';
 import { getReceiptLayout, preBillReceiptLayout } from './layouts';
+import { mainPrinterName } from './printers';
 import type { PrinterService, PrintResult } from './printer';
 import { buildReceiptHtml, receiptLanguage, sampleOrder } from './receipt';
 
@@ -34,7 +35,7 @@ export async function printOrderReceipt(
   const settings = await settingsOrThrow(db);
   const layout = await getReceiptLayout(db, order.orderType);
   return printer.print(buildReceiptHtml(order, settings, { layout, image }), {
-    preferredName: settings.printerName,
+    preferredName: await mainPrinterName(db),
   });
 }
 
@@ -59,7 +60,7 @@ export async function printPreBill(
   const settings = await settingsOrThrow(db);
   const layout = await preBillReceiptLayout(db, order.orderType);
   return printer.print(buildReceiptHtml(order, settings, { layout, image, preBill: true }), {
-    preferredName: settings.printerName,
+    preferredName: await mainPrinterName(db),
   });
 }
 
@@ -91,7 +92,7 @@ export async function printTestReceipt(
   const order = sampleFor(settings, input.orderType, input.preBill);
   return printer.print(
     buildReceiptHtml(order, settings, { layout, image, preBill: input.preBill }),
-    { preferredName: settings.printerName },
+    { preferredName: await mainPrinterName(db) },
   );
 }
 

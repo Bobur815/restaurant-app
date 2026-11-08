@@ -312,6 +312,8 @@ model Category {
   nameRu    String?
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
+  // Feature F10: file name inside userData/img (like MenuItem.imageFile). Never a full path.
+  imageFile String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -337,17 +339,79 @@ model MenuItem {
   soldByWeight Boolean  @default(false)
   // Soft delete: dishes referenced by orders, sessions or expenses are never removed.
   isActive     Boolean  @default(true)
+  // Feature F11: where saving an order sends this dish's kitchen ticket; null = no ticket.
+  printerId    Int?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   category     Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  printer      Printer?      @relation(fields: [printerId], references: [id], onDelete: SetNull)
   orderItems   OrderItem[]
   sessionItems SessionItem[]
   residuals    Residual[]
   expenses     Expense[]
 
   @@index([categoryId])
+  @@index([printerId])
   @@map("menu_items")
+}
+
+// ==================== PRINTERS & KITCHEN TICKETS (feature F11) ====================
+
+// A Windows printer the till prints to. Exactly one main printer (receipts, pre-bills, shift
+// reports, tests); the others are kitchen/bar printers that dishes point at. Hidden, never deleted.
+model Printer {
+  id          Int      @id @default(autoincrement())
+  // Optional name shown in the app ("Kassa", "Oshxona", "Bar").
+  label       String?
+  // The Windows printer name. Null = pick automatically (main printer only), as
+  // receipt_settings.printerName did.
+  windowsName String?
+  isMain      Boolean  @default(false)
+  // 1 while isMain, NULL otherwise. UNIQUE, so the database allows only one main printer. Kept in
+  // step with isMain by triggers (migration 0015): code never writes it. Same trick as
+  // Session.openGuard.
+  mainGuard   Int?     @unique
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  menuItems MenuItem[]
+  tickets   KitchenTicket[]
+
+  @@map("printers")
+}
+
+enum KitchenTicketKind {
+  NEW
+  ADD
+  CANCEL
+  MOVE
+}
+
+// What the kitchen was told when an order was saved, cancelled or moved: one row per printer,
+// written in the same transaction as the order change, printed afterwards in the background.
+// `payload` is JSON (header + lines) frozen at that moment, so a reprint says the same thing.
+model KitchenTicket {
+  id          Int               @id @default(autoincrement())
+  orderId     Int
+  printerId   Int
+  kind        KitchenTicketKind
+  payload     String
+  createdById Int?
+  createdAt   DateTime          @default(now())
+  printedAt   DateTime?
+  // Why the last print failed (Uzbek); cleared by a successful reprint.
+  error       String?
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  printer Printer @relation(fields: [printerId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([printerId])
+  @@index([printedAt])
+  @@map("kitchen_tickets")
 }
 
 // ==================== SESSIONS (trading day) ====================
@@ -511,11 +575,12 @@ model Order {
   updatedAt       DateTime        @updatedAt
   completedAt     DateTime?
 
-  session   Session     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  createdBy User?       @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  customer  Customer?   @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  createdBy User?           @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  customer  Customer?       @relation(fields: [customerId], references: [id], onDelete: Restrict)
   items     OrderItem[]
   payments  Payment[]
+  tickets   KitchenTicket[]
 
   @@index([status])
   @@index([tableNumber, status])

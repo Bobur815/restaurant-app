@@ -16,7 +16,14 @@ export interface PrintResult {
 /** What handlers use; injected so they are testable without a printer. */
 export interface PrinterService {
   list(): Promise<PrinterInfo[]>;
-  print(html: string, options: { preferredName: string | null }): Promise<PrintResult>;
+  /**
+   * `exact` (kitchen printers, feature F11): only the named printer will do; no fallback to the
+   * thermal-printer guess or the Windows default.
+   */
+  print(
+    html: string,
+    options: { preferredName: string | null; exact?: boolean },
+  ): Promise<PrintResult>;
   /** PNG data URL of the document as the receipt printer would get it. */
   preview(html: string): Promise<string>;
 }
@@ -53,15 +60,29 @@ const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
  * 2. else the XP-80 thermal family (legacy heuristic: prefer USB, never XPS/OneNote/PDF/fax);
  * 3. else the Windows default printer; else the first one. Null when there are none.
  */
-export function pickPrinter(printers: PrinterInfo[], preferredName: string | null): string | null {
+export function pickPrinter(
+  printers: PrinterInfo[],
+  preferredName: string | null,
+  { exact: exactOnly = false }: { exact?: boolean } = {},
+): string | null {
   if (printers.length === 0) return null;
   if (preferredName?.trim()) {
-    const wanted = normalize(preferredName);
     const exact = printers.find((p) => p.name === preferredName);
     if (exact) return exact.name;
-    const loose = printers.find((p) => normalize(p.name).includes(wanted));
+    // A kitchen printer (feature F11) must be that printer: the same name, ignoring case and
+    // surrounding spaces, never a printer whose name merely contains it ("XP-80" in "XP-80C").
+    const wantedName = preferredName.trim().toLocaleLowerCase();
+    if (exactOnly) {
+      return printers.find((p) => p.name.trim().toLocaleLowerCase() === wantedName)?.name ?? null;
+    }
+    // Receipts: loosely ("XP-80C" finds "XP-80C (copy 1) on USB001"). A name with no Latin
+    // letters or digits normalizes to '' and would match every printer, so it is not tried.
+    const wanted = normalize(preferredName);
+    const loose = wanted ? printers.find((p) => normalize(p.name).includes(wanted)) : undefined;
     if (loose) return loose.name;
   }
+  // A kitchen printer that is gone must not come out of the cashier's printer.
+  if (exactOnly) return null;
   const virtual = /xps|onenote|pdf|fax|redirected/;
   const scored = printers
     .map((p) => {
@@ -184,9 +205,24 @@ async function contentHeight(win: BrowserWindow): Promise<number> {
 }
 
 export function createPrinterService(): PrinterService {
+  const service = unboundedPrinterService();
+  return {
+    ...service,
+    // The whole job (window, printer list, measuring, printing) is bounded, not only the print
+    // call: one stuck spooler must not hold the kitchen queue forever (security review, F11).
+    print: (html, options) =>
+      withTimeout(service.print(html, options), PRINT_TIMEOUT_MS + 10_000, () => undefined),
+  };
+}
+
+function unboundedPrinterService(): PrinterService {
   return {
     async list() {
-      const win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+      // Loads nothing; locked down like the receipt window all the same.
+      const win = new BrowserWindow({
+        show: false,
+        webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+      });
       try {
         return (await win.webContents.getPrintersAsync()).map(toPrinterInfo);
       } finally {
@@ -194,13 +230,17 @@ export function createPrinterService(): PrinterService {
       }
     },
 
-    async print(html, { preferredName }) {
+    async print(html, { preferredName, exact = false }) {
       const win = await openReceiptWindow(html);
       try {
         const printers = (await win.webContents.getPrintersAsync()).map(toPrinterInfo);
-        const deviceName = pickPrinter(printers, preferredName);
+        const deviceName = pickPrinter(printers, preferredName, { exact });
         if (!deviceName)
-          throw new AppError('CONFLICT', 'Printer topilmadi', { reason: 'NO_PRINTER' });
+          throw new AppError(
+            'CONFLICT',
+            exact && preferredName ? `Printer topilmadi: ${preferredName}` : 'Printer topilmadi',
+            { reason: 'NO_PRINTER' },
+          );
 
         // Page as wide as the paper's printable area and as long as the receipt (plus a little
         // for the cutter): no metre of blank paper after it, nothing for Chromium to scale.

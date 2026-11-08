@@ -18,6 +18,7 @@ type Row = {
   hasPortions: boolean;
   soldByWeight: boolean;
   isActive: boolean;
+  printerId: number | null;
   category: { nameUz: string };
 };
 
@@ -35,6 +36,7 @@ export function toMenuItemDto(m: Row): MenuItemDto {
     hasPortions: m.hasPortions,
     soldByWeight: m.soldByWeight,
     isActive: m.isActive,
+    printerId: m.printerId,
   };
 }
 
@@ -85,11 +87,19 @@ async function assertCategory(db: Db, categoryId: number): Promise<void> {
   }
 }
 
+/** A dish may send its tickets to any shown printer (F11); a hidden one keeps what it had. */
+async function assertPrinter(db: Db, printerId: number | null, current?: number | null) {
+  if (printerId === null || printerId === current) return;
+  const printer = await db.printer.findUnique({ where: { id: printerId } });
+  if (!printer || !printer.isActive) throw invalid('Printer topilmadi', { field: 'printerId' });
+}
+
 export async function createMenuItem(
   db: Db,
   input: z.infer<typeof menuItemInput>,
 ): Promise<MenuItemDto> {
   await assertCategory(db, input.categoryId);
+  await assertPrinter(db, input.printerId);
   try {
     const created = await db.menuItem.create({ data: input });
     return getMenuItem(db, created.id);
@@ -119,6 +129,7 @@ export async function updateMenuItem(
   const current = await db.menuItem.findUnique({ where: { id } });
   if (!current) throw notFound('Taom');
   if (data.categoryId !== undefined) await assertCategory(db, data.categoryId);
+  if (data.printerId !== undefined) await assertPrinter(db, data.printerId, current.printerId);
 
   const hasPortions = data.hasPortions ?? current.hasPortions;
   const soldByWeight = data.soldByWeight ?? current.soldByWeight;
@@ -173,4 +184,15 @@ export async function deleteMenuItem(db: Db, id: number): Promise<DeleteOutcome>
   }
   await db.menuItem.delete({ where: { id } });
   return 'deleted';
+}
+
+/** Every picture a dish or a category uses, so the start-up cleanup keeps them (main/index.ts). */
+export async function menuImageNames(db: Db): Promise<string[]> {
+  const where = { imageFile: { not: null } };
+  const select = { imageFile: true } as const;
+  const rows = [
+    ...(await db.menuItem.findMany({ where, select })),
+    ...(await db.category.findMany({ where, select })),
+  ];
+  return rows.map((r) => r.imageFile!);
 }

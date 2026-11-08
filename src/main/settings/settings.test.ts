@@ -71,10 +71,15 @@ describe('settings', () => {
       splitPaymentEnabled: true,
       debtEnabled: true,
       lanEnabled: false,
+      showCategoryImages: true,
+      showMenuImages: true,
       setupComplete: false,
     });
     const after = await updateSettings(t.db, { language: 'ru' });
     expect(after).toMatchObject({ language: 'ru', tableCount: 10 });
+    // Feature F10: each picture switch on its own.
+    const noDishPics = await updateSettings(t.db, { showMenuImages: false });
+    expect(noDishPics).toMatchObject({ showMenuImages: false, showCategoryImages: true });
   });
 
   it('falls back to the default for a corrupt stored value', async () => {

@@ -116,6 +116,17 @@ beforeAll(async () => {
   await t.db.cashMovement.create({
     data: { sessionId: session.id, type: 'PAY_IN', amount: '10000', createdById: staff.id },
   });
+  // A kitchen ticket that did not print (feature F11), so kitchen:failed returns a real row.
+  await t.db.kitchenTicket.create({
+    data: {
+      orderId: 1,
+      printerId: 1,
+      kind: 'NEW',
+      payload: '{}',
+      createdById: staff.id,
+      error: 'offline',
+    },
+  });
 });
 afterAll(() => t.close());
 
@@ -125,6 +136,8 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'printing:printReceipt': { orderId: 1 },
   // The unpaid delivery: a pre-bill is only for a pending order.
   'printing:printPreBill': { orderId: 2 },
+  // The main printer row from migration 0015 (a sample ticket, feature F11).
+  'printing:testPrinter': { printerId: 1 },
   'orders:get': { id: 1 },
   'debts:get': { customerId: 1 },
   'customers:findByPhone': { phone: '+998 90 123 45 67' },

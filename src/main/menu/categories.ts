@@ -21,6 +21,7 @@ export async function listCategories(
     nameRu: c.nameRu,
     sortOrder: c.sortOrder,
     isActive: c.isActive,
+    imageFile: c.imageFile,
     menuItemCount: c._count.menuItems,
   }));
 }

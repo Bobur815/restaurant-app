@@ -5,7 +5,12 @@ import { newRecoveryCode, setPinOf, toCurrentUser } from '../auth/auth';
 import type { Db, DbOrTx } from '../domain/db';
 import { conflict } from '../domain/errors';
 import { setDefaultTables } from '../halls/halls';
-import { getSettings, RECEIPT_SETTINGS_ID, setSetting } from './settings';
+import {
+  getSettings,
+  RECEIPT_SETTINGS_ID,
+  setMainPrinterWindowsName,
+  setSetting,
+} from './settings';
 
 /**
  * Legacy rule kept: setup is complete when the flag is set, or when an admin and receipt settings
@@ -45,6 +50,9 @@ export async function completeSetup(db: Db, input: SetupInput): Promise<LoginWit
       update: input.receipt,
       create: { id: RECEIPT_SETTINGS_ID, ...input.receipt },
     });
+    if (input.receipt.printerName !== undefined) {
+      await setMainPrinterWindowsName(tx, input.receipt.printerName);
+    }
     await setSetting(tx, 'tableCount', input.tableCount);
     await setDefaultTables(tx, input.tableCount);
     await setSetting(tx, 'setupComplete', true);

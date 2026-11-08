@@ -26,6 +26,9 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   debt_enabled: true,
   // LAN access for waiter phones (Phase 8.5); off until enabled in settings.
   lan_enabled: false,
+  // Pictures on the order screen (feature F10): both shown, as before the switches existed.
+  show_category_images: true,
+  show_menu_images: true,
 };
 
 /** Legacy defaults (backend/utils/category-add-init.js), with Russian names. Fresh databases only. */

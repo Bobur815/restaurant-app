@@ -1,4 +1,4 @@
-import type { CategoryDto, MenuItemDto } from '@shared/types';
+import type { CategoryDto, MenuItemDto, PrinterDto } from '@shared/types';
 import { latinToCyrillic } from '@shared/utils/transliterate';
 import { api } from '../../api';
 import {
@@ -38,14 +38,81 @@ function mirrorNameRu(form: HTMLElement) {
   });
 }
 
+/**
+ * Picture block shared by the dish and category forms: preview, pick (main copies the file into
+ * the image store and returns its name), remove. `value()` is the file name to save, or null.
+ */
+function imagePicker(initial: string | null) {
+  let imageFile = initial;
+  const preview = document.createElement('div');
+  preview.className = 'image-preview';
+  const render = () => {
+    preview.replaceChildren();
+    if (imageFile) {
+      const img = document.createElement('img');
+      img.src = imageUrl(imageFile);
+      img.alt = '';
+      preview.append(img);
+    } else {
+      preview.append(icon('noImage', 32));
+    }
+    remove.hidden = !imageFile;
+  };
+  const pick = button(t('menu.pickImage'), 'secondary', async () => {
+    try {
+      const picked = await api.menu.pickImage();
+      if (picked) {
+        imageFile = picked;
+        render();
+      }
+    } catch (e) {
+      toastError(e);
+    }
+  });
+  const remove = button(t('menu.removeImage'), 'ghost', () => {
+    imageFile = null;
+    render();
+  });
+  const el = html`<div class="image-row">
+    ${preview}
+    <div class="image-actions">
+      <span class="field-label">${t('menu.image')}</span>${pick}${remove}
+    </div>
+  </div>`;
+  render();
+  return { el, value: () => imageFile };
+}
+
+/** A printer as the dish form names it: its own name, or "Asosiy printer" / the Windows name. */
+export function printerName(p: PrinterDto): string {
+  return p.label || (p.isMain ? t('printers.main') : (p.windowsName ?? t('printers.main')));
+}
+
+/**
+ * The dish form's printer choices (feature F11): none, then shown printers. A hidden printer the
+ * dish already uses stays listed (marked) so saving another field does not drop it.
+ */
+function printerChoices(printers: PrinterDto[], current: number | null) {
+  return [
+    { value: '', label: t('printers.noneForDish') },
+    ...printers
+      .filter((p) => p.isActive || p.id === current)
+      .map((p) => ({
+        value: String(p.id),
+        label: `${printerName(p)}${p.isMain ? ` (${t('printers.mainShort')})` : ''}${p.isActive ? '' : ` (${t('printers.hidden')})`}`,
+      })),
+  ];
+}
+
 /** Create or edit a dish. Resolves true when saved. */
 export function dishModal(
   categories: CategoryDto[],
+  printers: PrinterDto[],
   dish: MenuItemDto | null,
   defaultCategoryId?: number,
 ) {
   return new Promise<boolean>((resolve) => {
-    let imageFile = dish?.imageFile ?? null;
+    const picture = imagePicker(dish?.imageFile ?? null);
     const saleType: SaleType = dish?.soldByWeight
       ? 'weight'
       : dish?.hasPortions
@@ -53,35 +120,6 @@ export function dishModal(
         : 'piece';
 
     const form = document.createElement('div');
-    const preview = document.createElement('div');
-    preview.className = 'image-preview';
-    const renderPreview = () => {
-      preview.replaceChildren();
-      if (imageFile) {
-        const img = document.createElement('img');
-        img.src = imageUrl(imageFile);
-        img.alt = '';
-        preview.append(img);
-      } else {
-        preview.append(icon('noImage', 32));
-      }
-      remove.hidden = !imageFile;
-    };
-    const pick = button(t('menu.pickImage'), 'secondary', async () => {
-      try {
-        const picked = await api.menu.pickImage();
-        if (picked) {
-          imageFile = picked;
-          renderPreview();
-        }
-      } catch (e) {
-        toastError(e);
-      }
-    });
-    const remove = button(t('menu.removeImage'), 'ghost', () => {
-      imageFile = null;
-      renderPreview();
-    });
 
     const priceField = field({
       name: 'price',
@@ -137,18 +175,20 @@ export function dishModal(
           })}
         </div>
         <p class="muted small">${t('menu.costHint')}</p>
+        ${selectField({
+          name: 'printerId',
+          label: t('printers.dishPrinter'),
+          value: dish?.printerId ? String(dish.printerId) : '',
+          options: printerChoices(printers, dish?.printerId ?? null),
+        })}
+        <p class="muted small">${t('printers.dishPrinterHint')}</p>
         ${textareaField({
           name: 'description',
           label: t('menu.description'),
           value: dish?.description ?? '',
           rows: 2,
         })}
-        <div class="image-row">
-          ${preview}
-          <div class="image-actions">
-            <span class="field-label">${t('menu.image')}</span>${pick}${remove}
-          </div>
-        </div>
+        ${picture.el}
         ${dish
           ? checkboxField({ name: 'isActive', label: t('menu.active'), checked: dish.isActive })
           : ''}
@@ -179,7 +219,8 @@ export function dishModal(
               costPrice: value(form, 'costPrice').replace(/\s/g, '').replace(',', '.') || null,
               hasPortions: type === 'portion',
               soldByWeight: type === 'weight',
-              imageFile,
+              imageFile: picture.value(),
+              printerId: Number(value(form, 'printerId')) || null,
             };
             try {
               if (dish)
@@ -206,6 +247,7 @@ export function dishModal(
 /** Create or edit a category. Resolves true when saved. */
 export function categoryModal(category: CategoryDto | null) {
   return new Promise<boolean>((resolve) => {
+    const picture = imagePicker(category?.imageFile ?? null);
     const form = document.createElement('div');
     form.append(
       html`${field({
@@ -222,6 +264,7 @@ export function categoryModal(category: CategoryDto | null) {
         inputmode: 'numeric',
         value: String(category?.sortOrder ?? 0),
       })}
+      ${picture.el}
       ${category
         ? checkboxField({ name: 'isActive', label: t('menu.active'), checked: category.isActive })
         : ''}
@@ -244,6 +287,7 @@ export function categoryModal(category: CategoryDto | null) {
               nameUz: value(form, 'nameUz'),
               nameRu: value(form, 'nameRu') || null,
               sortOrder: Number(value(form, 'sortOrder')) || 0,
+              imageFile: picture.value(),
             };
             try {
               if (category)

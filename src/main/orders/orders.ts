@@ -16,6 +16,7 @@ import { upsertCustomer } from '../customers/customers';
 import { requireOpenSessionId } from '../sessions/sessions';
 import { getSettings } from '../settings/settings';
 import { applyStockDeltas } from '../sessions/stock';
+import { writeKitchenTickets } from '../printing/kitchen';
 
 export const ORDER_COUNTER = 'orders';
 
@@ -140,6 +141,18 @@ export async function nextOrderNumber(tx: Tx, now: Date = new Date()): Promise<s
   return `${now.getFullYear()}-${String(counter.value).padStart(5, '0')}`;
 }
 
+/**
+ * Feature F11: the ids of the kitchen tickets an order change wrote, for the caller to print once
+ * the transaction has committed (handlers.ts). Filled only on success.
+ */
+export type TicketSink = number[];
+
+/** Who made a cancel or move (named on the kitchen ticket) and where its tickets go. */
+export interface ChangeContext {
+  actor?: Actor | null;
+  tickets?: TicketSink;
+}
+
 function staleOrder(currentVersion: number | null) {
   return conflict("Buyurtma boshqa joyda o'zgartirilgan. Qayta oching", {
     reason: 'STALE',
@@ -228,9 +241,10 @@ export async function saveTableOrder(
   db: Db,
   actor: Actor,
   input: SaveTableOrderInput,
+  tickets?: TicketSink,
 ): Promise<OrderDto> {
   try {
-    const id = await db.$transaction(async (tx) => {
+    const { id, ticketIds } = await db.$transaction(async (tx) => {
       const sessionId = await requireOpenSessionId(tx);
       const existing = await tx.order.findUnique({
         where: { pendingTable: input.tableNumber },
@@ -274,7 +288,14 @@ export async function saveTableOrder(
         });
         if (res.count !== 1) throw staleOrder(null);
         await tx.orderItem.createMany({ data: lines.map((l) => ({ ...l, orderId: existing.id })) });
-        return existing.id;
+        const ticketIds = await writeKitchenTickets(tx, {
+          orderId: existing.id,
+          kind: 'ADD',
+          actor,
+          oldItems: existing.items,
+          newItems: lines,
+        });
+        return { id: existing.id, ticketIds };
       }
 
       const order = await tx.order.create({
@@ -287,8 +308,16 @@ export async function saveTableOrder(
           items: { create: lines },
         },
       });
-      return order.id;
+      const ticketIds = await writeKitchenTickets(tx, {
+        orderId: order.id,
+        kind: 'NEW',
+        actor,
+        oldItems: [],
+        newItems: lines,
+      });
+      return { id: order.id, ticketIds };
     });
+    tickets?.push(...ticketIds);
     return getOrder(db, id);
   } catch (error) {
     // pendingTable is UNIQUE: another device opened this table at the same moment.
@@ -337,16 +366,25 @@ async function cancelPending(
 export async function cancelTableOrder(
   db: Db,
   input: z.infer<typeof tableInput> & { expectedVersion?: number },
+  change: ChangeContext = {},
 ): Promise<OrderDto> {
-  const id = await db.$transaction(async (tx) => {
+  const { id, ticketIds } = await db.$transaction(async (tx) => {
     const order = await tx.order.findUnique({
       where: { pendingTable: input.tableNumber },
       include: { items: true, _count: { select: { payments: true } } },
     });
     if (!order) throw notFound('Bekor qilinadigan buyurtma');
     await cancelPending(tx, order, input.expectedVersion);
-    return order.id;
+    const ticketIds = await writeKitchenTickets(tx, {
+      orderId: order.id,
+      kind: 'CANCEL',
+      actor: change.actor ?? null,
+      oldItems: order.items,
+      newItems: [],
+    });
+    return { id: order.id, ticketIds };
   });
+  change.tickets?.push(...ticketIds);
   return getOrder(db, id);
 }
 
@@ -356,15 +394,22 @@ export async function cancelTableOrder(
  * database moves the one-unpaid-order-per-table lock with it (pendingTable trigger, 0003), so two
  * moves to the same table at once cannot both succeed.
  */
-export async function moveTableOrder(db: Db, input: MoveTableInput): Promise<OrderDto> {
+export async function moveTableOrder(
+  db: Db,
+  input: MoveTableInput,
+  change: ChangeContext = {},
+): Promise<OrderDto> {
   const busy = () =>
     conflict(`${input.toTable}-stol band. Bo'sh stolni tanlang`, {
       reason: 'TABLE_BUSY',
       tableNumber: input.toTable,
     });
   try {
-    const id = await db.$transaction(async (tx) => {
-      const order = await tx.order.findUnique({ where: { pendingTable: input.fromTable } });
+    const { id, ticketIds } = await db.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { pendingTable: input.fromTable },
+        include: { items: true },
+      });
       // Paid, cancelled or moved elsewhere since it was loaded.
       if (!order) throw staleOrder(null);
       if (order.version !== input.expectedVersion) throw staleOrder(order.version);
@@ -385,8 +430,18 @@ export async function moveTableOrder(db: Db, input: MoveTableInput): Promise<Ord
         data: { tableNumber: input.toTable, version: { increment: 1 } },
       });
       if (res.count !== 1) throw staleOrder(null);
-      return order.id;
+      // The kitchens cooking for this order learn where it went.
+      const ticketIds = await writeKitchenTickets(tx, {
+        orderId: order.id,
+        kind: 'MOVE',
+        actor: change.actor ?? null,
+        oldItems: [],
+        newItems: order.items,
+        fromTable: input.fromTable,
+      });
+      return { id: order.id, ticketIds };
     });
+    change.tickets?.push(...ticketIds);
     return getOrder(db, id);
   } catch (error) {
     // pendingTable is UNIQUE: an order was opened on the target table at the same moment.
@@ -422,8 +477,9 @@ export async function saveOpenOrder(
   db: Db,
   actor: Actor,
   input: SaveOpenOrderInput,
+  tickets?: TicketSink,
 ): Promise<OrderDto> {
-  const id = await db.$transaction(async (tx) => {
+  const { id, ticketIds } = await db.$transaction(async (tx) => {
     const sessionId = await requireOpenSessionId(tx);
     const existing =
       input.orderId === undefined
@@ -490,7 +546,14 @@ export async function saveOpenOrder(
       });
       if (res.count !== 1) throw staleOrder(null);
       await tx.orderItem.createMany({ data: lines.map((l) => ({ ...l, orderId: existing.id })) });
-      return existing.id;
+      const ticketIds = await writeKitchenTickets(tx, {
+        orderId: existing.id,
+        kind: 'ADD',
+        actor,
+        oldItems: existing.items,
+        newItems: lines,
+      });
+      return { id: existing.id, ticketIds };
     }
 
     const order = await tx.order.create({
@@ -503,8 +566,16 @@ export async function saveOpenOrder(
         items: { create: lines },
       },
     });
-    return order.id;
+    const ticketIds = await writeKitchenTickets(tx, {
+      orderId: order.id,
+      kind: 'NEW',
+      actor,
+      oldItems: [],
+      newItems: lines,
+    });
+    return { id: order.id, ticketIds };
   });
+  tickets?.push(...ticketIds);
   return getOrder(db, id);
 }
 
@@ -533,11 +604,20 @@ export async function listOpenOrders(db: DbOrTx): Promise<OpenOrderSummaryDto[]>
 export async function cancelOpenOrder(
   db: Db,
   input: z.infer<typeof orderIdInput>,
+  change: ChangeContext = {},
 ): Promise<OrderDto> {
-  await db.$transaction(async (tx) => {
+  const ticketIds = await db.$transaction(async (tx) => {
     const order = await openOrderForChange(tx, input.orderId, input.expectedVersion);
     await cancelPending(tx, order, input.expectedVersion);
+    return writeKitchenTickets(tx, {
+      orderId: order.id,
+      kind: 'CANCEL',
+      actor: change.actor ?? null,
+      oldItems: order.items,
+      newItems: [],
+    });
   });
+  change.tickets?.push(...ticketIds);
   return getOrder(db, input.orderId);
 }
 

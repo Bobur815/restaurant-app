@@ -7,6 +7,7 @@ import { conflict } from '../domain/errors';
 import { getReceiptSettings } from '../settings/settings';
 import { getCashSummary } from '../sessions/cash';
 import { getSession } from '../sessions/sessions';
+import { mainPrinterName } from './printers';
 import type { PrinterService, PrintResult } from './printer';
 import { receiptLanguage } from './receipt';
 
@@ -223,6 +224,6 @@ export async function printShiftReport(
   if (!settings) throw conflict('Chek sozlamalari kiritilmagan', { reason: 'NO_RECEIPT_SETTINGS' });
   const cash = await getCashSummary(db, session.id);
   return printer.print(buildShiftReportHtml(input.kind, session, cash, settings), {
-    preferredName: settings.printerName,
+    preferredName: await mainPrinterName(db),
   });
 }

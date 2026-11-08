@@ -9,6 +9,7 @@ import {
   initializeDatabase,
 } from './database/sqlite-client';
 import { cleanupOrphanImages } from './images/image-store';
+import { menuImageNames } from './menu/menu-items';
 import { receiptImageNames } from './printing/layouts';
 import { removeLeftoverReceiptFiles } from './printing/printer';
 import { handleImageScheme, registerImageScheme } from './images/images-protocol';
@@ -50,13 +51,10 @@ function licenseApiUrl(): string {
 /** Housekeeping, never blocks or breaks startup. */
 async function removeOrphanImages(imageDir: string): Promise<void> {
   try {
-    const rows = await getPrisma().menuItem.findMany({
-      where: { imageFile: { not: null } },
-      select: { imageFile: true },
-    });
-    // Dish pictures, the receipt layouts' top and bottom pictures and the pay card share the store.
+    // Dish and category pictures, the receipt layouts' top and bottom pictures and the pay card
+    // share the store.
     const referenced = new Set([
-      ...rows.map((r) => r.imageFile!),
+      ...(await menuImageNames(getPrisma())),
       ...(await receiptImageNames(getPrisma())),
       ...(await licenseImageNames(getPrisma())),
     ]);

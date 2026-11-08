@@ -1,4 +1,4 @@
-import type { CategoryDto, MenuItemDto } from '@shared/types';
+import type { CategoryDto, MenuItemDto, PrinterDto } from '@shared/types';
 import { api } from '../../api';
 import { confirmDialog } from '../../components/modal';
 import { button, pageHeader } from '../../components/page';
@@ -9,7 +9,7 @@ import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { formatMoney } from '../../utils/format';
 import type { View } from '../types';
-import { categoryModal, dishModal } from './menu-modals';
+import { categoryModal, dishModal, printerName } from './menu-modals';
 
 const imageUrl = (file: string) => `savdochef-img://img/${encodeURIComponent(file)}`;
 
@@ -30,6 +30,7 @@ function thumb(file: string | null): HTMLElement {
 export const menuView: View = () => {
   let categories: CategoryDto[] = [];
   let dishes: MenuItemDto[] = [];
+  let printers: PrinterDto[] = [];
   let categoryId: number | null = null;
   let search = '';
   let showInactive = false;
@@ -37,7 +38,7 @@ export const menuView: View = () => {
   const el = document.createElement('section');
   el.className = 'page';
   const addDish = button(t('menu.addDish'), 'primary', async () => {
-    if (await dishModal(categories, null, categoryId ?? undefined)) await load();
+    if (await dishModal(categories, printers, null, categoryId ?? undefined)) await load();
   });
   const catList = document.createElement('div');
   catList.className = 'category-list';
@@ -91,8 +92,15 @@ export const menuView: View = () => {
       select.type = 'button';
       select.className = 'category-select';
       select.setAttribute('aria-pressed', String(categoryId === id));
+      // Feature F10: the category's picture, small, when it has one.
+      if (cat?.imageFile) {
+        const pic = thumb(cat.imageFile);
+        pic.classList.add('thumb-sm');
+        select.classList.add('has-image');
+        select.append(pic);
+      }
       select.append(
-        html`<span>${label}</span>${count !== null
+        html`<span class="category-name">${label}</span>${count !== null
             ? html`<span class="muted small">${t('menu.count', { count })}</span>`
             : ''}`,
       );
@@ -153,7 +161,7 @@ export const menuView: View = () => {
     }
     const rows = visible.map((d) => {
       const edit = iconButton('edit', t('menu.edit'), async () => {
-        if (await dishModal(categories, d)) await load();
+        if (await dishModal(categories, printers, d)) await load();
       });
       const del = iconButton('trash', t('menu.delete'), async () => {
         const ok = await confirmDialog({
@@ -185,6 +193,7 @@ export const menuView: View = () => {
         </td>
         <td class="num strong">${formatMoney(d.price, lang)}</td>
         <td class="num muted">${d.costPrice ? formatMoney(d.costPrice, lang) : '—'}</td>
+        <td class="muted">${dishPrinter(d)}</td>
         <td class="row-actions">${edit}${del}</td>
       </tr>`;
     });
@@ -198,6 +207,7 @@ export const menuView: View = () => {
             <th>${t('menu.saleType')}</th>
             <th class="num">${t('menu.price')}</th>
             <th class="num">${t('menu.costPrice')}</th>
+            <th>${t('printers.dishPrinter')}</th>
             <th></th>
           </tr>
         </thead>
@@ -219,11 +229,19 @@ export const menuView: View = () => {
     return b;
   }
 
+  /** Feature F11: where the dish's kitchen ticket goes, or a dash. */
+  function dishPrinter(d: MenuItemDto): string {
+    const p = d.printerId ? printers.find((x) => x.id === d.printerId) : undefined;
+    return p ? printerName(p) : '—';
+  }
+
   const load = async () => {
     try {
-      [categories, dishes] = await Promise.all([
+      [categories, dishes, printers] = await Promise.all([
         api.categories.list({ includeInactive: true }),
         api.menu.list({ includeInactive: showInactive }),
+        // Hidden printers come back only for settings users; the column then shows a dash.
+        api.printers.list({ includeInactive: true }).catch(() => printers),
       ]);
       renderCategories();
       renderDishes();
@@ -234,7 +252,8 @@ export const menuView: View = () => {
 
   void load();
   const stop = api.events.subscribe((e) => {
-    if (e.type === 'menu-changed') void load();
+    // Printer names (F11) live in the settings.
+    if (e.type === 'menu-changed' || e.type === 'settings-changed') void load();
   });
   return { el, destroy: stop };
 };

@@ -16,6 +16,7 @@ import { profileView } from './views/users/profile-view';
 import { setupView } from './views/setup';
 import { tablesView } from './views/tables';
 import type { View } from './views/types';
+import { watchKitchenFailures } from './components/kitchen-alerts';
 
 /** A route that only forwards to another (kept for old addresses), replacing the history entry. */
 const redirectTo =
@@ -139,6 +140,9 @@ async function boot(): Promise<void> {
       appStore.set({ user: fresh });
     }
   });
+
+  // Kitchen tickets that did not print (feature F11): a toast with "Qayta".
+  watchKitchenFailures();
 
   router = startRouter({ root, routes: ROUTES, createShell });
 }

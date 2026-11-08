@@ -60,6 +60,18 @@ export interface IpcChannels {
   'printing:shiftReport': Channel<In<typeof S.shiftReportInput>, { printer: string }>;
   /** PNG data URL of the sample receipt. */
   'printing:preview': Channel<In<typeof S.previewReceiptInput>, string>;
+  /** A short sample ticket to one printer (feature F11). */
+  'printing:testPrinter': Channel<In<typeof S.printerIdInput>, { printer: string }>;
+
+  // printers and kitchen tickets (feature F11)
+  'printers:list': Channel<In<typeof S.listPrintersInput>, T.PrinterDto[]>;
+  'printers:create': Channel<In<typeof S.printerInput>, T.PrinterDto>;
+  'printers:update': Channel<In<typeof S.updatePrinterInput>, T.PrinterDto>;
+  /** Makes another printer the main one (receipts, pre-bills, reports). */
+  'printers:setMain': Channel<In<typeof S.printerIdInput>, T.PrinterDto[]>;
+  /** Recent kitchen tickets that failed to print. */
+  'kitchen:failed': Channel<undefined, T.KitchenTicketDto[]>;
+  'kitchen:reprint': Channel<In<typeof S.ticketIdInput>, { printer: string }>;
 
   // software update (feature F4); the updater pushes 'update-changed' as its state moves
   'updater:status': Channel<undefined, T.UpdateStatusDto>;
@@ -197,6 +209,13 @@ export const IPC_CHANNELS = [
   'printing:test',
   'printing:shiftReport',
   'printing:preview',
+  'printing:testPrinter',
+  'printers:list',
+  'printers:create',
+  'printers:update',
+  'printers:setMain',
+  'kitchen:failed',
+  'kitchen:reprint',
   'updater:status',
   'updater:check',
   'updater:download',
@@ -315,7 +334,9 @@ export type AppEvent =
   /** The software updater's state moved (re-read updater:status). */
   | { type: 'update-changed' }
   /** The licence or the till's mode changed (re-read license:status). */
-  | { type: 'license-changed' };
+  | { type: 'license-changed' }
+  /** A kitchen ticket printed or failed (feature F11; re-read kitchen:failed). */
+  | { type: 'kitchen-changed' };
 
 export const APP_EVENT_TYPES = [
   'orders-changed',
@@ -327,6 +348,7 @@ export const APP_EVENT_TYPES = [
   'debts-changed',
   'update-changed',
   'license-changed',
+  'kitchen-changed',
 ] as const satisfies ReadonlyArray<AppEvent['type']>;
 
 /** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */

@@ -17,7 +17,10 @@ import { toInputDecimal } from '../../utils/format';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
 
-/** Which order types the till offers besides tables, and the usual delivery fee. */
+/**
+ * Which order types the till offers besides tables, the usual delivery fee, and whether the order
+ * screen shows category and dish pictures (feature F10).
+ */
 export const ordersSection: View = () => {
   const el = document.createElement('section');
   el.className = 'page';
@@ -52,6 +55,18 @@ export const ordersSection: View = () => {
             amount: true,
             value: toInputDecimal(settings.deliveryFeeDefault),
           })}
+          <h3 class="form-subtitle">${t('settings.picturesTitle')}</h3>
+          <p class="muted small">${t('settings.picturesHint')}</p>
+          ${checkboxField({
+            name: 'showCategoryImages',
+            label: t('settings.showCategoryImages'),
+            checked: settings.showCategoryImages,
+          })}
+          ${checkboxField({
+            name: 'showMenuImages',
+            label: t('settings.showMenuImages'),
+            checked: settings.showMenuImages,
+          })}
           ${formError()}${submitButton()}`,
       );
       form.addEventListener('submit', async (e) => {
@@ -63,6 +78,8 @@ export const ordersSection: View = () => {
             deliveryEnabled: checked(form, 'deliveryEnabled'),
             deliveryFeeDefault:
               value(form, 'deliveryFeeDefault').replace(/\s/g, '').replace(',', '.') || '0',
+            showCategoryImages: checked(form, 'showCategoryImages'),
+            showMenuImages: checked(form, 'showMenuImages'),
           });
           toast(t('settings.saved'), 'success');
         } catch (error) {

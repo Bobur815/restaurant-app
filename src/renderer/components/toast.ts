@@ -14,11 +14,16 @@ function ensureRegion(): HTMLElement {
   return region;
 }
 
-/** A short message at the corner; errors stay longer. Text only (never markup). */
+/**
+ * A short message at the corner; errors stay longer. Text only (never markup). An optional
+ * action adds one button (e.g. "Qayta" for a kitchen ticket that did not print); pressing it
+ * closes the toast.
+ */
 export function toast(
   message: string,
   kind: 'success' | 'error' | 'info' = 'info',
   ms?: number,
+  action?: { label: string; onClick: () => void },
 ): void {
   const el = document.createElement('div');
   el.className = `toast toast-${kind}`;
@@ -27,6 +32,17 @@ export function toast(
   const text = document.createElement('span');
   text.textContent = message;
   el.append(text);
+  if (action) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-secondary toast-action';
+    b.textContent = action.label;
+    b.addEventListener('click', () => {
+      el.remove();
+      action.onClick();
+    });
+    el.append(b);
+  }
   ensureRegion().append(el);
   window.setTimeout(() => el.remove(), ms ?? (kind === 'error' ? 6000 : 3000));
 }

@@ -261,6 +261,27 @@ export const printReceiptInput = z.object({ orderId: id });
 /** The pre-bill of a pending order: the total for the guest, not a payment. */
 export const printPreBillInput = z.object({ orderId: id });
 
+// ── Printers and kitchen tickets (feature F11) ───────────────────────────────────────────────
+
+/** A Windows printer name as the printer list shows it. */
+const windowsPrinterName = trimmed(1, 120, 'Printer');
+const printerLabel = optionalText(40);
+
+export const listPrintersInput = z
+  .object({ includeInactive: z.boolean().default(false) })
+  .default({ includeInactive: false });
+/** An extra (kitchen/bar) printer: always a named Windows printer. */
+export const printerInput = z.object({ label: printerLabel, windowsName: windowsPrinterName });
+/** windowsName null = pick automatically, allowed for the main printer only (checked in main). */
+export const updatePrinterInput = z.object({
+  id,
+  label: printerLabel.optional(),
+  windowsName: windowsPrinterName.nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+export const printerIdInput = z.object({ printerId: id });
+export const ticketIdInput = z.object({ ticketId: id });
+
 export const setupInput = z.object({
   admin: z.object({ fullName: userName, phone: requiredPhone, pin: pinCode }),
   receipt: receiptSettingsInput,
@@ -279,6 +300,8 @@ export const updateSettingsInput = z
     splitPaymentEnabled: z.boolean(),
     debtEnabled: z.boolean(),
     lanEnabled: z.boolean(),
+    showCategoryImages: z.boolean(),
+    showMenuImages: z.boolean(),
   })
   .partial();
 
@@ -330,10 +353,18 @@ export const tableRangeInput = z
 
 // ── Menu ─────────────────────────────────────────────────────────────────────────────────────
 
+/** A file name in the image store (images/image-store.ts), never a path. */
+const imageFile = z
+  .string()
+  .regex(/^[a-f0-9]{32}\.(jpg|png|webp)$/, { message: "Rasm fayli noto'g'ri" })
+  .nullish()
+  .transform((v) => v ?? null);
+
 const categoryFields = {
   nameUz: trimmed(1, 60, 'Nomi (uz)'),
   nameRu: optionalText(60),
   sortOrder: z.number().int().min(0).max(10_000),
+  imageFile,
 };
 export const categoryInput = z.object({
   ...categoryFields,
@@ -356,12 +387,6 @@ export const listMenuInput = z
   })
   .default({ includeInactive: false });
 
-const imageFile = z
-  .string()
-  .regex(/^[a-f0-9]{32}\.(jpg|png|webp)$/, { message: "Rasm fayli noto'g'ri" })
-  .nullish()
-  .transform((v) => v ?? null);
-
 const menuItemFields = {
   nameUz: trimmed(1, 80, 'Nomi (uz)'),
   nameRu: optionalText(80),
@@ -373,6 +398,8 @@ const menuItemFields = {
   categoryId: id,
   hasPortions: z.boolean(),
   soldByWeight: z.boolean(),
+  /** Feature F11: where saving an order sends this dish's kitchen ticket; null = nowhere. */
+  printerId: id.nullish().transform((v) => v ?? null),
 };
 export const menuItemInput = z
   .object({

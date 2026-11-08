@@ -399,6 +399,10 @@
     "takeawayEnabled": "Olib ketish",
     "deliveryEnabled": "Yetkazib berish",
     "deliveryFeeDefault": "Yetkazib berish narxi (odatiy, so'm)",
+    "picturesTitle": "Rasmlar",
+    "picturesHint": "Buyurtma oynasida rasmlar ko'rinsinmi. O'chirilsa, nomlar ixcham ro'yxatda chiqadi; menyu bo'limida rasmlar baribir ko'rinadi.",
+    "showCategoryImages": "Kategoriya rasmlari",
+    "showMenuImages": "Taom rasmlari",
     "sectionPayments": "To'lov",
     "paymentsHint": "Bo'lib to'lash: bitta chekni bir nechta usulda (naqd + karta). Nasiya: chekning hammasi yoki bir qismi mijoz nomiga qarzga yoziladi.",
     "splitPaymentEnabled": "Bo'lib to'lash",
@@ -789,5 +793,34 @@
     "printZ": "Z-hisobotni chop etish",
     "reportSent": "{{kind}}-hisobot printerga yuborildi: {{printer}}",
     "correction": "Yopilgandan keyingi tuzatish"
+  },
+  "printers": {
+    "main": "Asosiy printer",
+    "mainShort": "asosiy",
+    "mainTitle": "Asosiy printer",
+    "mainHint": "To'lov cheki, hisob, X/Z-hisobot va sinov cheki shu printerdan chiqadi. Uni taomlar uchun ham tanlash mumkin.",
+    "extraTitle": "Qo'shimcha printerlar",
+    "extraHint": "Oshxona, bar va boshqa printerlar. Taomga printer tanlansa, buyurtma saqlanganda o'sha taom shu printerga chiqadi (stol, ofitsiant, vaqt).",
+    "label": "Nomi (ixtiyoriy)",
+    "noLabel": "Nomsiz",
+    "add": "Printer qo'shish",
+    "edit": "Printerni tahrirlash",
+    "test": "Sinov cheki",
+    "makeMain": "Asosiy qilish",
+    "hide": "Yashirish",
+    "show": "Ko'rsatish",
+    "hidden": "yashirilgan",
+    "none": "Qo'shimcha printer yo'q.",
+    "dishes": "Taomlar",
+    "dishPrinter": "Printer",
+    "dishPrinterHint": "Buyurtma saqlanganda bu taom shu printerga chiqadi. Tanlanmasa, hech qayerga chiqmaydi.",
+    "noneForDish": "Yo'q (chiqmaydi)"
+  },
+  "kitchen": {
+    "table": "{{table}}-stol",
+    "printer": "Printer",
+    "failed": "{{printer}}: {{where}} cheki chiqmadi. {{reason}}",
+    "retry": "Qayta",
+    "reprinted": "{{printer}}: chek qayta chiqdi"
   }
 }

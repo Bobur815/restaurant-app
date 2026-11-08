@@ -25,6 +25,11 @@ export interface HandlerServices {
   pickImage(): Promise<string | null>;
   /** A stored picture as a `data:` URL for the receipt, or null when it cannot be read. */
   receiptImage(fileName: string): string | null;
+  /**
+   * Feature F11: prints kitchen tickets an order change just wrote, in the background (never
+   * awaited: a printer problem must not hold up the order). Absent in tests that do not print.
+   */
+  printKitchen?(ticketIds: number[]): void;
   updater: UpdaterService;
   /** Feature F5: the licence; `refusal` is asked on every call (invokeHandler). */
   license: Pick<

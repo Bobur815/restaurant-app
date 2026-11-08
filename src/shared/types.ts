@@ -79,6 +79,9 @@ export interface AppSettings {
   splitPaymentEnabled: boolean;
   debtEnabled: boolean;
   lanEnabled: boolean;
+  /** Feature F10: pictures on the order screen, for categories and for dishes. */
+  showCategoryImages: boolean;
+  showMenuImages: boolean;
   setupComplete: boolean;
 }
 
@@ -153,6 +156,33 @@ export type PreBillLayoutDto = Omit<ReceiptLayoutDto, 'orderType' | 'showCustome
 export interface PrinterInfo {
   name: string;
   isDefault: boolean;
+}
+
+/** Feature F11: a printer the till prints to: the main one, or a kitchen/bar printer. */
+export interface PrinterDto {
+  id: number;
+  label: string | null;
+  /** Windows printer name; null = pick automatically (main printer only). */
+  windowsName: string | null;
+  isMain: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  /** Active dishes that send their kitchen ticket here. */
+  menuItemCount: number;
+}
+
+/** A kitchen ticket that did not print (feature F11), for the reprint prompt. */
+export interface KitchenTicketDto {
+  id: number;
+  orderId: number;
+  orderNumber: string;
+  tableNumber: number | null;
+  kind: 'NEW' | 'ADD' | 'CANCEL' | 'MOVE';
+  printerId: number;
+  printerLabel: string | null;
+  printerWindowsName: string | null;
+  createdAt: string;
+  error: string | null;
 }
 
 // ── Debt (nasiya) ────────────────────────────────────────────────────────────────────────────
@@ -238,6 +268,8 @@ export interface CategoryDto {
   nameRu: string | null;
   sortOrder: number;
   isActive: boolean;
+  /** Feature F10: picture file name in the image store, or null. */
+  imageFile: string | null;
   menuItemCount: number;
 }
 
@@ -255,6 +287,8 @@ export interface MenuItemDto {
   hasPortions: boolean;
   soldByWeight: boolean;
   isActive: boolean;
+  /** Feature F11: the kitchen/bar printer for this dish's tickets; null = none. */
+  printerId: number | null;
 }
 
 /** Result of a delete request: removed, or hidden because history refers to it. */

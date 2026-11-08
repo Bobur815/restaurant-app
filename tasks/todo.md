@@ -648,3 +648,139 @@ Behaviour: prints the saved pending order with a clear "HISOB · TO'LOV CHEKI EM
 - `npm run check`; harness `smoke-f9.cjs` on a copy of the café data (scratch userData, prints intercepted as PNG): start migrated v13 -> v14 with a `savdochef-v13-*` backup; table card printer -> pre-bill printed (HISOB · To'lov cheki emas, lines, total, no payment block, no logo); order page Hisob button -> printed, order unchanged after both; hints in payment received, split lines (also after Bo'lib to'lash), Kirim (1 001 000 -> bir million bir ming); Settings -> Chek -> Hisob tab with notice, no customer switch, preview and test print; ru: Счёт button, `5 000 сум — пять тысяч`.
 - Not exercised in the harness: Hisob disabled with unsaved lines (same condition as To'lov), takeaway/delivery order page. Still to do at release: install 0.7.0, run on a data copy, install 0.8.0 over it, compare counts (`npm run release -- minor`).
 - Reviews: migration-reviewer safe; electron-security-reviewer no high/medium (pre-bill request now logged before printing, refused ones too); prisma-reviewer no bugs (allow-list on pending, exact total asserted, `bir million bir ming`). Left: layout save not in a transaction (same as receipt layouts, one till).
+
+## F10 category pictures + image switches, F11 kitchen printers, F12 satellite till (approved 2026-11-08)
+
+Builds on F9 (built, not committed, 0.8.0). Three separate commits, two releases: F10 + F11 together (one migration, 0015), then F12 (migration 0016). Answers: every (R) recommendation accepted **except question 2: a satellite's receipt and pre-bill always print on the main printer** (no local printing on satellites).
+
+### F10. Category pictures and image switches
+
+Copied from: the dish picture (`MenuItem.imageFile`, `menu:pickImage`, preview/remove in `menu-modals.ts`, `thumb()` in `order-view.ts`, orphan cleanup in `main/index.ts`).
+
+- [x] Schema: `categories.imageFile TEXT NULL` (a file name in userData/img, never a path), in migration `0015_kitchen_printers.ts` (shared with F11). Installed databases: every category gets NULL, so no picture and the same look as today.
+- [x] Settings (key/value, so no migration): `show_category_images` and `show_menu_images`, both defaulting to `true` in `seed.ts DEFAULT_SETTINGS`. Add `AppSettings.showCategoryImages / showMenuImages`, `SETTING_KEYS`, `updateSettingsInput`. One setting for the whole restaurant (R, question 5).
+- [x] `shared/schemas.ts`: `categoryFields.imageFile` (same rule as dishes). `shared/types.ts`: `CategoryDto.imageFile`.
+- [x] `main/menu/categories.ts`: read and write `imageFile`. No new channel: the picker is `menu:pickImage` (it only stores the file; access `menu`).
+- [x] `main/index.ts` orphan cleanup also keeps `categories.imageFile`.
+- [x] Renderer: the category modal in `menu-modals.ts` gets the picture block (pick/remove/preview) and the menu-view category list shows the thumb. Order screen (`order-view.ts`): category chips show picture + name when `showCategoryImages` is on (fallback icon). Dish tiles and line thumbs hide pictures when `showMenuImages` is off (compact text tiles). The menu admin screen always shows pictures (R). Both views re-render on `settings-changed`.
+- [x] Settings → Buyurtmalar (`orders-section.ts`): two checkboxes, "Kategoriya rasmlari" and "Taom rasmlari".
+- [x] CSS: `.chip-with-image` and `.dish-tile.no-image` in `views.css`, tokens only.
+- [x] i18n uz + ru: `menu.categoryImage`, `settings.showCategoryImages`, `settings.showMenuImages`, hints.
+- [x] Tests: `menu.test.ts` category imageFile create/update/clear; `settings.test.ts` defaults true and round-trips; orphan cleanup keeps category pictures.
+- Money/stock: none.
+
+### F11. Main printer + extra (kitchen/bar) printers, ticket on order save
+
+Copied from: `printing/printer.ts` (`pickPrinter`, hidden sandboxed window, timeout), `receipt.ts` (escaped HTML builder, own CSP), `printer-section.ts` (Windows printer list + refresh), fire-and-toast from `print-receipt.ts`.
+
+**Behaviour**
+- Settings → Printer: first the **main printer** (a Windows printer + optional name, e.g. "Kassa"). It prints the payment receipt, pre-bill, shift reports and test prints, as `receipt_settings.printerName` does today. Below it, a list of **extra printers** (a Windows printer from the list + optional name, e.g. "Oshxona", "Bar") with add/edit/hide and a test ticket for each.
+- Dish form (create/edit): "Printer" select with none / main printer / each extra printer. A new dish defaults to none (R, question 4).
+- On `orders:save` and `orders:saveOpen` (the Save button), main compares old and new lines per dish (quantity, units/kg, portion) inside the save transaction. It writes **one kitchen ticket per printer** holding only what changed: additions (+qty), plus a "BEKOR / ОТМЕНА −qty" block for lines that were reduced or removed (R, question 3). Unchanged dishes print nothing. A save with no changes prints nothing. Dishes without a printer print nothing.
+- Ticket (80 mm, big font, no prices): header "YANGI BUYURTMA" on the first save, "QO'SHIMCHA" on later saves; table number + hall (takeaway/delivery: "Olib ketish" / "Yetkazish" + order number, R question 6); order number; waiter = the user who pressed Save (`actor.fullName`); time; printer name; lines such as `2 × Osh (0.7)` and `1 × Shashlik 0.450 kg`. Language = the receipt language.
+- Printing runs in main after the commit, in the background, and never blocks or fails the save (hardware rule). Each ticket row records `printedAt` or `error`. A failure raises `kitchen-changed`, and the renderer shows the toast "Oshxona printeri: chop etilmadi" with a "Qayta" (reprint) action. Tickets still unprinted at a restart are not reprinted automatically, so the kitchen never cooks twice; they print only on request.
+- Cancelling a whole pending order (`orders:cancel`, `orders:cancelOpen`) prints a "BEKOR" ticket to every printer that had lines on it. Moving a table prints a short "STOL O'ZGARDI 5 → 8" ticket to those printers (R, question 6).
+
+**Schema (migration 0015, additive; then agent `migration-reviewer`)**
+- [x] `printers`: `id`, `label TEXT NULL`, `windowsName TEXT NULL` (null = auto-pick, main only), `isMain BOOLEAN DEFAULT false`, `mainGuard INTEGER NULL UNIQUE` (1 on the main row, so only one main printer; same trick as `openGuard`, kept by a trigger), `isActive`, `sortOrder`, timestamps.
+- [x] The migration fills in the main row from `receipt_settings.printerName` (null stays null = auto), so the upgrade changes nothing. `receipt_settings.printerName` stays and follows the main printer, so an older build after a rollback still prints to the right printer.
+- [x] `menu_items.printerId INTEGER NULL REFERENCES printers(id) ON DELETE SET NULL` + index. Existing dishes: NULL = no kitchen ticket = today's behaviour.
+- [x] `kitchen_tickets`: `id`, `orderId` (FK, Restrict), `printerId` (FK), `kind` (NEW/ADD/CANCEL/MOVE), `payload TEXT` (JSON header + lines, frozen at save), `createdById`, `createdAt`, `printedAt NULL`, `error NULL`. Indexes on `printedAt` and `orderId`. It is the source for reprints and the record of what the kitchen was told.
+- [x] `categories.imageFile` (F10).
+- [x] `database.test.ts` drift check. Upgrade test on a v14 copy: the main printer row equals the old printerName and every dish has printerId NULL.
+
+**Shared → main → renderer**
+- [x] `shared/schemas.ts`: `printerInput {label?, windowsName?}`, `updatePrinterInput`, `setMainPrinterInput`, `menuItemFields.printerId: id.nullable().optional()`, `reprintKitchenInput {ticketId}`, `testPrinterInput {printerId}`.
+- [x] `shared/types.ts`: `PrinterDto {id,label,windowsName,isMain,isActive}`, `MenuItemDto.printerId`, `KitchenTicketDto` (failed list), `AppEvent 'kitchen-changed'`.
+- [x] New channels in `shared/ipc.ts` + `IPC_CHANNELS`, with access:
+  - `printers:list` (`user`, read-only: the dish form and the toasts need the names)
+  - `printers:create`, `printers:update`, `printers:setMain` (`settings`, emit SETTINGS)
+  - `printing:testPrinter` (`settings`, read-only list)
+  - `kitchen:failed` (`orders`, read-only)
+  - `kitchen:reprint` (`orders`, emits `kitchen-changed`)
+  - Update the `ipc.test.ts` access snapshot, `events.ts` and `secrets.test.ts`.
+- [x] `main/printing/printers.ts` (new domain, no Electron): list/create/update/setMain; keeps `receipt_settings.printerName` in step; `mainPrinterName(db)`, which `printing.ts` uses in place of `settings.printerName`.
+- [x] `main/printing/kitchen.ts` (no Electron): pure `diffLines(oldItems, newLines)` (Decimal, keyed by dish + portion + weight); `writeTickets(tx, actor, order, diff)`; `buildKitchenTicketHtml(ticket, lang)` (escaped, own CSP, like receipt.ts); `printPendingTickets(db, printer, ids)`.
+- [x] `main/orders/orders.ts`: `saveTableOrder`, `saveOpenOrder`, `cancelTableOrder`, `cancelOpenOrder` and `moveTableOrder` call `writeTickets` inside their existing transaction and return the new ticket ids next to the order (internal, not in `OrderDto`). Stock, totals and versions are untouched.
+- [x] `main/ipc/handlers.ts`: after a successful save, `void printKitchen(ids)` in main (logs, records the error, broadcasts `kitchen-changed`). `PrinterService.print` gets an exact-device mode for kitchen tickets with no auto-pick fallback to the receipt printer: a ticket for a printer that is gone fails loudly (R).
+- [x] Renderer: rebuild `printer-section.ts` (main printer card + table of extra printers with add/edit/test/hide); printer select in the `menu-modals.ts` dish form; `order-view.ts`/`tables.ts` subscribe to `kitchen-changed` and toast failures with "Qayta"; printer-name column in the menu list.
+- [x] i18n uz + ru: `printers.*` (main, extra, label, add, test, hidden, none), `kitchen.*` (new, add, cancel, moved, failed, reprint, waiter, table), the dish form label.
+
+**Money/stock before → after:** no change. Totals, stock reservation (`priceAndReserve`), versions and payments are byte-for-byte the same. The only new writes in the save transaction are `kitchen_tickets` rows. A test asserts that session quantities and order totals are identical with and without dish printers. Agent `prisma-reviewer` because `orders.ts` changes.
+
+**Tests**
+- [x] `kitchen.test.ts`: diff cases (new order, add qty, reduce, remove, portion change = cancel old + add new, weight change, no change = no ticket, dish without printer skipped, split across two printers); ticket HTML escapes names and shows table/waiter/time; takeaway header.
+- [x] `orders.test.ts`: save writes tickets in the same transaction (rolled back on a stock shortage or a stale version, so no ticket); cancel and move tickets; stock and totals unchanged.
+- [x] `printers.test.ts`: only one main (trigger); setMain keeps `receipt_settings.printerName` in step; hiding a printer leaves dishes' printerId set, its tickets fail loudly, and the select shows "(yashirilgan)".
+- [x] `printing.test.ts`: receipt and pre-bill go to the main printer row; with a fake PrinterService, the handler prints kitchen tickets after save and records failures without failing the save.
+
+### F10 + F11 built (2026-11-08, not committed)
+
+- Changes from the plan: a **hidden** printer gets no tickets (the owner hid it on purpose) instead of failing loudly; tickets for later saves are `ADD` per printer even when that printer had no earlier ticket for the order, and CANCEL/MOVE go to the dishes' current printers (prisma-reviewer note 7, accepted and written down here); a whole portion ("1") and no portion count as the same line.
+- Review fixes: exact printer match for kitchen printers (no substring, no "every printer" match for a Cyrillic name; receipts skip the loose match for such names too); the paper-out record cannot turn into "failed"; never-tried tickets (> 2 min) are listed for "Qayta"; reprint refuses printed, hidden-printer and > 12 h tickets; handlers hand tickets to the printer in `finally`; receipt printer name + main printer row written in one transaction; making another printer main is refused while dishes use a main printer without a name; the whole print job is bounded (timeout text says it may have printed); the printer-list window is locked down; secrets test sees a real failed ticket.
+- Checks: `npm run check` 42 suites / 564 tests. Reviews: migration-reviewer (safe), prisma-reviewer (no stock/money change; risks fixed above), electron-security-reviewer (no high; the medium exact-match issue fixed).
+- Real app (`npm run build`, harness `smoke-f11.cjs` + `smoke-f10.cjs` on a copy of the cafe data in a scratch userData, Windows printers faked and every print saved as PNG): v14 -> v15 with a `savdochef-v14-*` backup; main printer row = old receipt printer, renamed "Kassa"; Oshxona + Bar added; dishes assigned; table order through the UI -> YANGI BUYURTMA on Kitchen-80 and Bar-58 (table, hall, waiter, time); later save -> QO'SHIMCHA (+1) on the kitchen and O'ZGARISH/BEKOR on the bar; bar offline -> save succeeds, toast "Bar: 1-stol cheki chiqmadi ... Qayta", Qayta -> printed, failed list empty; pre-bill on XP-80C (main); move -> STOL O'ZGARDI 1 -> 2 on both; cancel -> BUYURTMA BEKOR QILINDI; category pictures on chips and in the menu list, both switches off/on; printer page, dish form, category form, orders settings in uz and ru (screenshots looked at).
+- Not exercised: a real thermal printer (only the faked list), takeaway/delivery tickets in the UI (covered by tests).
+- Version: 0.9.0 with F9 still uncommitted at 0.8.0 -> decide at release whether F9 + F10 + F11 ship as one minor.
+
+### F12. Satellite till (posgro `src/main/lan` + `src/main/local-server`, design `posgro/tasks/LAN_MAIN_TERMINAL_PLAN.md`)
+
+Every SavdoChef call already goes through one map (`HANDLERS` + `invokeHandler`, actor per caller), and `register.ts` already notes that "the LAN adapter will key the same thing by device token". So the satellite is a **thin client (R, question 1)**. The renderer is unchanged. On a satellite, main forwards every IPC call (channel + raw input) over HTTP to the main till, which runs the **same** `invokeHandler` with the satellite's user as actor. The satellite's database holds no business data, so there is nothing to reconcile and no double-selling. The one-open-shift and one-pending-order-per-table triggers stay the only source of truth.
+
+**Main till**
+- [ ] `main/lan/server.ts`: plain `node:http` (no Express), copied from posgro `local-server/index.ts` + `router.ts` + `serve-policy.ts`. It listens only when the till is a main **and** has a paired satellite or an open pairing code (posgro §12.2: never open a port on every till just because of an upgrade). Port setting `lan_port`, default 5180, LAN interfaces only.
+- [ ] `POST /rpc` `{channel, input}` → `invokeHandler(channel, HANDLERS[channel], ctx, input)` with `ctx.actor` from the session token; `eventsFor` → `broadcast` (local windows) + push to satellites. Allowed channels (R, question 1): all except `setup:*`, `updater:*`, `license:signup*/activate`, `receipt:pickImage`, `menu:pickImage`, `auth:recover`, `auth:bootstrap*` and `printing:printers` (the main's Windows printers mean nothing to a satellite).
+- [ ] `GET /events` (SSE) pushes `AppEvent`s to satellites, so their views refresh by subscription, never by polling.
+- [ ] `GET /img/:file` (device token) serves the image store, so the satellite's `savdochef-img://` protocol shows dish and category pictures.
+- [ ] Auth (posgro `pairing.ts`, `auth.ts`, §6.10):
+  - The main issues a pairing code (6 digits, CSPRNG, 10 min, in memory) in Settings → Satellitlar (`settings` permission).
+  - The satellite redeems it for a device secret, stored hashed in `lan_devices`. Every request carries a device token.
+  - PIN login runs on the main through `auth:pinLogin`, behind the device token, throttled per device with lockout; failed attempts are logged with the device id.
+  - The session token ties user + device and is re-checked on every call (`refreshActor` already does this).
+- [ ] Schema (migration 0016, additive): `lan_devices` (`id`, `name`, `secretHash`, `pairedAt`, `lastSeenAt`, `revokedAt`, `lastIp`). Settings keys (no migration): `lan_role` (default `main`, so every installed till stays exactly as today), `lan_port`, `lan_lineage`/`lan_generation` (posgro §11.3: refuse a main that was replaced). The existing, unused `lan_enabled` becomes the "accept satellites" switch.
+- [ ] Licence: the main's licence is enforced on every forwarded call (`invokeHandler` already runs `license.refusal`). Paired devices are capped at plan `terminals − 1` (R, question 7). Satellites never talk to the posgro server.
+
+**Satellite till**
+- [ ] Role and main address are chosen in the setup wizard ("Asosiy kassa" / "Satellit kassa: asosiy kassa IP manzili + juftlash kodi") and later from the login-screen gear (behind a pairing code from the main; leaving also needs a code). Stored in the satellite's own small database: `lan_role = satellite`, `lan_main_url`, and the device secret encrypted with `safeStorage`.
+- [ ] `main/lan/main-link.ts` (posgro `main-link.ts`): one HTTP client with timeout, device-token renewal, codes `MAIN_UNREACHABLE` / `DEVICE_UNPAIRED` / `MAIN_SUPERSEDED`, and status events.
+- [ ] `register.ts`: on a satellite every channel goes through `main-link`, except the local ones: `app:info` and `updater:*` (each till updates itself). The renderer still calls `api.<ns>.<method>()`. Apart from the banner, nothing in the renderer knows it is on a satellite.
+- [ ] Printing on a satellite (answer 2): **everything prints on the main till**. `printing:printReceipt`, `printing:printPreBill`, `printing:shiftReport` are forwarded like any other call, so the receipt and pre-bill come out of the main printer and kitchen tickets out of the kitchen printers, all installed on the main. No printer setup and no receipt window on a satellite; no new printing channel.
+- [ ] Degraded mode: when the main is unreachable, a full-screen notice "Asosiy kassa bilan aloqa yo'q, qayta ulanmoqda…" with retry. The open order draft stays in the renderer. No offline selling (posgro §5.9). The login screen says "asosiy kassani kuting" instead of "PIN noto'g'ri".
+- [ ] Hidden on a satellite (cosmetic; the main refuses these anyway): Settings → Printer (the main's printers), Satellitlar, licence/subscription, the main's updates. Users and menu editing stay available to users with the permission (R); picture upload only on the main.
+- [ ] Windows firewall on the **main**: no installer change (R). Settings → Satellitlar shows the main's IP and the exact PowerShell command to allow the port, as in posgro §9.
+- [ ] Packaging: no new dependency (node:http; SSE written by hand).
+
+**Security (agent `electron-security-reviewer`)**
+- The renderer never sends URLs to main: the main's address is typed in the wizard and validated in main as `http://<private IPv4>:<port>`.
+- Every HTTP route needs a device token except `/pair` (throttled) and `/health`.
+- No password or PIN hash leaves the main (`secrets.test.ts` also covers the RPC path).
+- Generated HTML only in the receipt window. CSP unchanged.
+
+**Money/stock:** the rules don't change. A satellite's sale is an ordinary `orders:save` / `payments:pay` on the main, serialised by the main's SQLite transaction and the existing `version` / `pendingTable` / `openGuard` guards. The whole restaurant shares one open shift (R, question 1). `createdById` is the user at the satellite.
+
+**Tests**
+- [ ] `lan/serve-policy.test.ts`, `pairing.test.ts`, `auth.test.ts` (copied from posgro and adapted).
+- [ ] `lan/satellite.e2e.test.ts` (posgro pattern): a real main (HTTP server + temp DB) and a satellite client in one process. Covers: pair, PIN login, list menu, save order (tickets written on the main), pay; two satellites racing for one table (one gets STALE); a deactivated user cut off; main stopped → `MAIN_UNREACHABLE`; revoked device → `DEVICE_UNPAIRED`; PIN throttle.
+- [ ] The RPC path runs the same access snapshot as `ipc.test.ts` (a STAFF session cannot call `settings:update` through `/rpc`).
+
+### Verify in the real app (each feature)
+
+- [ ] `npm run build`, then the harness (pattern in `tasks/lessons.md`) on a scratch userData with a **copy** of the café data: migration v14 → v15 (→ v16) with a backup in `backups/`; screenshots in uz + ru.
+- [ ] F10: add category pictures; order screen with both switches on and off.
+- [ ] F11: main printer + two extra printers ("Microsoft Print to PDF", or captured as PNG). Assign dishes and save a new table order → one ticket per printer. Add a dish → ticket shows only the addition. Reduce → BEKOR block. Also: cancel an order, a takeaway order. With a printer missing, the save succeeds and shows the toast with Qayta. Receipt and pre-bill still go to the main printer.
+- [ ] F12: two Electron instances on this PC (`--user-data-dir` scratch copies; main on 127.0.0.1 and the LAN IP). Pair, log in on the satellite, take an order there and watch it appear live on the main's table grid. Pay on the satellite: the receipt comes out of the main printer. Stop the main → banner; start it → recovers. If possible, a second real PC on the café LAN.
+- [ ] `npm run check`. Reviews: `migration-reviewer` (0015, 0016), `prisma-reviewer` (tickets in orders.ts), `electron-security-reviewer` (printers, HTTP server, satellite routing).
+
+### Version
+
+F10 + F11: 0.8.0 → **0.9.0** (minor, migration 0015). F12: → **0.10.0** (minor, migration 0016). Commit and release only when asked.
+
+### Open questions (answered 2026-11-08: all (R) except 2 = always the main printer)
+
+1. Satellite scope: should it be a thin client (every call forwarded to the main, one shared shift, nothing works while the main is off) allowing everything the user's permissions allow (R), or only a waiter/cashier subset?
+2. Should a satellite's receipt and pre-bill print on its own printer (R, like posgro) or always on the main printer?
+3. Should a ticket for a later save show only the changes, with reductions shown as "BEKOR" (R), or reprint the whole order each time?
+4. Should a dish without a printer print no ticket (R) or go to the main printer? Should categories have a default printer that new dishes inherit?
+5. Should the image switches be one setting for the restaurant that affects only the order screen (R), or set per till (a satellite could hide pictures while the main shows them)?
+6. Should takeaway/delivery orders print kitchen tickets too (R), and should cancelling an order or moving a table print a ticket (R)?
+7. Does each satellite count against the plan's `terminals` limit (R: at most `terminals − 1` paired), or are satellites free?

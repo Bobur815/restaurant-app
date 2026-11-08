@@ -23,6 +23,9 @@ export const READ_ONLY_CHANNELS = [
   'printing:test',
   'printing:shiftReport',
   'printing:preview',
+  'printing:testPrinter',
+  'printers:list',
+  'kitchen:failed',
   'updater:status',
   'license:status',
   'license:plans',
@@ -67,6 +70,7 @@ const USERS: AppEvent = { type: 'users-changed' };
 const HALLS: AppEvent = { type: 'halls-changed' };
 const DEBTS: AppEvent = { type: 'debts-changed' };
 const LICENSE: AppEvent = { type: 'license-changed' };
+const KITCHEN: AppEvent = { type: 'kitchen-changed' };
 
 /**
  * What each successful change announces to every window (replaces legacy's `session-updated` /
@@ -88,6 +92,11 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'receipt:update': () => [SETTINGS],
   'receipt:updateLayout': () => [SETTINGS],
   'receipt:updatePreBillLayout': () => [SETTINGS],
+  // Printers (F11): the printer page and the dish form's printer names.
+  'printers:create': () => [SETTINGS],
+  'printers:update': () => [SETTINGS, MENU],
+  'printers:setMain': () => [SETTINGS],
+  'kitchen:reprint': () => [KITCHEN],
   'halls:create': () => [HALLS],
   'halls:update': () => [HALLS],
   'halls:reorder': () => [HALLS],

@@ -6,6 +6,7 @@ import { logger } from '../logger';
 import { createPrinterService } from '../printing/printer';
 import type { UpdaterService } from '../updater/updater';
 import type { LicenseService } from '../license/license-service';
+import { printKitchenTickets } from '../printing/kitchen';
 import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext, type HandlerServices } from './ipc-safe';
@@ -32,8 +33,26 @@ function actorStoreFor(sender: WebContents) {
   };
 }
 
+/**
+ * Feature F11: prints kitchen tickets after the order is saved, one batch after the other (two
+ * quick saves never interleave on a printer), then tells every window, which re-reads what failed.
+ */
+let kitchenQueue: Promise<unknown> = Promise.resolve();
+function printKitchenInBackground(getDb: () => Db, ticketIds: number[]): void {
+  if (ticketIds.length === 0) return;
+  kitchenQueue = kitchenQueue
+    .then(() =>
+      printKitchenTickets(getDb(), printer, ticketIds, (message, error) =>
+        logger.error(message, error),
+      ),
+    )
+    .then(() => broadcast([{ type: 'kitchen-changed' }]))
+    .catch((error: unknown) => logger.error('[kitchen] print batch failed', error));
+}
+
 function servicesFor(
   sender: WebContents,
+  getDb: () => Db,
   imageDir: string,
   updater: UpdaterService,
   license: LicenseService,
@@ -57,6 +76,7 @@ function servicesFor(
     // Pictures on receipts are a plan feature: without it they are left off the paper.
     receiptImage: (fileName) =>
       license.hasFeature('receiptLogos') ? imageDataUrl(imageDir, fileName) : null,
+    printKitchen: (ticketIds) => printKitchenInBackground(getDb, ticketIds),
     updater,
     license,
   };
@@ -84,7 +104,7 @@ export function registerIpcHandlers(
       const ctx: HandlerContext = {
         db: getDb(),
         ...store,
-        services: servicesFor(event.sender, imageDir, updater, license),
+        services: servicesFor(event.sender, getDb, imageDir, updater, license),
         log: (message, error) => logger.error(message, error),
       };
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx, rawInput);

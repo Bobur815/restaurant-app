@@ -93,6 +93,9 @@ export const orderView: View = ({ params, navigate }) => {
   const target = targetFrom(params);
   const tableNumber = target.kind === 'table' ? target.tableNumber : 0;
   const lang = () => appStore.get().language;
+  // Feature F10: the owner can turn pictures off on this screen (Settings -> Buyurtmalar).
+  const dishPictures = () => appStore.get().settings?.showMenuImages !== false;
+  const categoryPictures = () => appStore.get().settings?.showCategoryImages !== false;
 
   let menu: MenuItemDto[] = [];
   let categories: CategoryDto[] = [];
@@ -240,7 +243,7 @@ export const orderView: View = ({ params, navigate }) => {
         html`<table class="lines-table">
           <thead>
             <tr>
-              <th></th>
+              ${dishPictures() ? html`<th></th>` : ''}
               <th>${t('order.dish')}</th>
               <th class="num">${t('order.price')}</th>
               <th class="num">${t('order.qty')}</th>
@@ -329,7 +332,9 @@ export const orderView: View = ({ params, navigate }) => {
     }
 
     tr.append(
-      html`<td class="thumb-cell">${thumb(line.imageFile, 'thumb')}</td>
+      html`${dishPictures()
+          ? html`<td class="thumb-cell">${thumb(line.imageFile, 'thumb')}</td>`
+          : ''}
         <td>
           <div class="line-name">${localName(line, l)}</div>
           <div class="line-variant">${variant}</div>
@@ -375,13 +380,19 @@ export const orderView: View = ({ params, navigate }) => {
 
   function renderChips() {
     const l = lang();
-    const chip = (label: string, id: number | null) => {
+    const pictures = categoryPictures();
+    const chip = (label: string, id: number | null, imageFile: string | null = null) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip';
       b.setAttribute('role', 'tab');
       b.setAttribute('aria-selected', String(categoryId === id));
-      b.textContent = label;
+      if (pictures && imageFile) {
+        b.classList.add('chip-with-image');
+        b.append(thumb(imageFile, 'chip-image'), html`<span>${label}</span>`);
+      } else {
+        b.textContent = label;
+      }
       b.addEventListener('click', () => {
         categoryId = id;
         renderChips();
@@ -391,7 +402,7 @@ export const orderView: View = ({ params, navigate }) => {
     };
     r.chips.replaceChildren(
       chip(t('order.allCategories'), null),
-      ...categories.map((c) => chip(localName(c, l), c.id)),
+      ...categories.map((c) => chip(localName(c, l), c.id, c.imageFile)),
     );
   }
 
@@ -408,7 +419,8 @@ export const orderView: View = ({ params, navigate }) => {
         const out = left === null || (left !== UNLIMITED && dec(left).lte(0));
         const b = document.createElement('button');
         b.type = 'button';
-        b.className = `dish-card${out ? ' is-out' : ''}`;
+        const pictures = dishPictures();
+        b.className = `dish-card${out ? ' is-out' : ''}${pictures ? '' : ' no-image'}`;
         b.disabled = out || appStore.get().openSession === null || stale;
         const badge =
           left === null
@@ -419,7 +431,7 @@ export const orderView: View = ({ params, navigate }) => {
                 ? t('order.outOfStock')
                 : t('order.left', { qty: formatQty(left, l, dish.soldByWeight) });
         b.append(
-          html`${thumb(dish.imageFile, 'dish-image')}
+          html`${pictures ? thumb(dish.imageFile, 'dish-image') : ''}
             <span class="dish-name">${localName(dish, l)}</span>
             <span class="dish-price"
               >${formatMoney(dish.price, l)}${dish.soldByWeight ? ` ${t('order.perKg')}` : ''}</span
@@ -676,13 +688,25 @@ export const orderView: View = ({ params, navigate }) => {
       }
     }
     if (e.type === 'menu-changed') {
-      menu = await api.menu.list({}).catch(() => menu);
+      [menu, categories] = await Promise.all([
+        api.menu.list({}).catch(() => menu),
+        api.categories.list({}).catch(() => categories),
+      ]);
+      renderChips();
       renderDishes();
     }
   });
   const stopStore = appStore.subscribe((s, prev) => {
     if (s.openSession !== prev.openSession) {
       renderHeader();
+      renderLines();
+    }
+    if (
+      s.settings?.showMenuImages !== prev.settings?.showMenuImages ||
+      s.settings?.showCategoryImages !== prev.settings?.showCategoryImages
+    ) {
+      renderChips();
+      renderDishes();
       renderLines();
     }
   });
