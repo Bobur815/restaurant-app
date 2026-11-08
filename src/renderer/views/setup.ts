@@ -10,6 +10,7 @@ import { homeFor } from '../router/routes';
 import { appStore } from '../store/app';
 import { html } from '../ui/html';
 import { linkRestaurant } from '../components/link-restaurant';
+import { joinMainForm } from '../components/lan-link';
 import type { View } from './types';
 
 /**
@@ -51,6 +52,7 @@ export const setupView: View = (ctx) => {
         </div>
       </div>`,
       linker.el,
+      satelliteChoice(card),
     );
     page.append(card);
   } else {
@@ -58,6 +60,33 @@ export const setupView: View = (ctx) => {
   }
   return { el: page, destroy: () => link?.destroy() };
 };
+
+/**
+ * Feature F12: a second till in the same restaurant does not link or set up anything of its own;
+ * it joins the main till (address + pairing code) and restarts as its satellite.
+ */
+function satelliteChoice(card: HTMLElement): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'satellite-choice';
+  const open = document.createElement('button');
+  open.type = 'button';
+  open.className = 'btn btn-ghost btn-block';
+  open.textContent = t('lan.setupChoice');
+  open.addEventListener('click', () => {
+    card.replaceChildren(
+      html`<div class="auth-brand">
+        ${SavdoChefSquare({ size: 72 })}
+        <div>
+          <h1>${t('lan.joinTitle')}</h1>
+          <p class="muted">${t('lan.setupSubtitle')}</p>
+        </div>
+      </div>`,
+      joinMainForm().el,
+    );
+  });
+  box.append(html`<p class="muted small">${t('lan.setupHint')}</p>`, open);
+  return box;
+}
 
 /** Step 2: the first administrator and the receipt details. */
 const setupDetails: View = ({ navigate }) => {

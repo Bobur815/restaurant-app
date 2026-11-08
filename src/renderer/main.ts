@@ -17,6 +17,7 @@ import { setupView } from './views/setup';
 import { tablesView } from './views/tables';
 import type { View } from './views/types';
 import { watchKitchenFailures } from './components/kitchen-alerts';
+import { linkDown, waitForMain, watchLink } from './components/lan-link';
 
 /** A route that only forwards to another (kept for old addresses), replacing the history entry. */
 const redirectTo =
@@ -67,6 +68,20 @@ function showFatal(message: string): void {
 async function boot(): Promise<void> {
   const root = document.getElementById('app');
   if (!root) throw new Error('#app not found');
+
+  // Feature F12: a satellite works through its main till; until that answers there is nothing to
+  // load, so it waits (and offers to re-pair or leave) instead of failing.
+  const lan = await api.lan.link();
+  appStore.set({ lan });
+  if (linkDown(lan)) {
+    // A moment for the first contact before showing the waiting card.
+    for (let i = 0; i < 15 && linkDown(appStore.get().lan); i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      appStore.set({ lan: await api.lan.link() });
+    }
+    const now = appStore.get().lan;
+    if (now && linkDown(now)) await waitForMain(root, now);
+  }
 
   const [setup, settings, receipt, user] = await Promise.all([
     api.setup.status(),
@@ -143,6 +158,8 @@ async function boot(): Promise<void> {
 
   // Kitchen tickets that did not print (feature F11): a toast with "Qayta".
   watchKitchenFailures();
+  // A satellite whose line drops is covered until it is back (feature F12).
+  watchLink();
 
   router = startRouter({ root, routes: ROUTES, createShell });
 }

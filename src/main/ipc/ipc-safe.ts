@@ -9,6 +9,7 @@ import { ImageImportError } from '../images/image-store';
 import type { PrinterService } from '../printing/printer';
 import type { UpdaterService } from '../updater/updater';
 import { ServerError, type LicenseService } from '../license/license-service';
+import type { LanService } from '../lan/lan-service';
 
 /**
  * Who may call a handler: `public` (setup, login, settings for the login screen), `user` (any
@@ -30,6 +31,8 @@ export interface HandlerServices {
    * awaited: a printer problem must not hold up the order). Absent in tests that do not print.
    */
   printKitchen?(ticketIds: number[]): void;
+  /** Feature F12: satellites (main till) and this till's role. Absent in tests without LAN. */
+  lan?: LanService;
   updater: UpdaterService;
   /** Feature F5: the licence; `refusal` is asked on every call (invokeHandler). */
   license: Pick<

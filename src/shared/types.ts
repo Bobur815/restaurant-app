@@ -171,6 +171,57 @@ export interface PrinterDto {
   menuItemCount: number;
 }
 
+// ── LAN: satellite tills (feature F12) ────────────────────────────────────────────────────────
+
+export interface LanDeviceDto {
+  id: number;
+  name: string;
+  pairedAt: string;
+  lastSeenAt: string | null;
+  lastIp: string | null;
+  revoked: boolean;
+}
+
+/** The main till's view of its satellites (Settings -> Satellitlar). */
+export interface LanStatusDto {
+  /** Accept satellites (lan_enabled). */
+  enabled: boolean;
+  port: number;
+  /** Listening right now (enabled and a satellite or an open code; lan/serve-policy.ts). */
+  serving: boolean;
+  /** Why it is not listening although it should (port taken...), Uzbek. */
+  error: string | null;
+  /** This computer's IPv4 addresses on the shop's network, for the satellite's form. */
+  addresses: string[];
+  pairing: { code: string; expiresAt: string } | null;
+  devices: LanDeviceDto[];
+  /** Satellites the plan allows (terminals - 1); null = no limit. */
+  deviceLimit: number | null;
+}
+
+/**
+ * How a satellite's line to its main till stands. `online`: working; `connecting`: first contact;
+ * `unreachable`: no answer (off, unplugged, wrong address); `unpaired`: the main till no longer
+ * knows this satellite; `superseded`: another till answers at the address; `version`: the two
+ * tills run versions that cannot talk.
+ */
+export type LanLinkState =
+  | 'connecting'
+  | 'online'
+  | 'unreachable'
+  | 'unpaired'
+  | 'superseded'
+  | 'version';
+
+/** This till's role; for a satellite, its main till and the line's state. */
+export interface LanLinkDto {
+  role: 'main' | 'satellite';
+  mainUrl: string | null;
+  state: LanLinkState | null;
+  mainVersion: string | null;
+  lastContactAt: string | null;
+}
+
 /** A kitchen ticket that did not print (feature F11), for the reprint prompt. */
 export interface KitchenTicketDto {
   id: number;

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog } from 'electron';
+import { app, BrowserWindow, dialog, safeStorage } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import os from 'node:os';
 import path from 'path';
@@ -13,7 +13,9 @@ import { menuImageNames } from './menu/menu-items';
 import { receiptImageNames } from './printing/layouts';
 import { removeLeftoverReceiptFiles } from './printing/printer';
 import { handleImageScheme, registerImageScheme } from './images/images-protocol';
-import { broadcast, registerIpcHandlers } from './ipc/register';
+import { broadcast, broadcastWindows, registerIpcHandlers, servicesFor } from './ipc/register';
+import { plainCipher, type Cipher } from './lan/config';
+import { LanService } from './lan/lan-service';
 import { initLogger, logger } from './logger';
 import { installSecurityHandlers } from './security';
 import { createUpdater, UPDATE_FEED_URL, type UpdaterEngine } from './updater/updater';
@@ -34,6 +36,23 @@ const STARTUP_UPDATE_CHECK_MS = 15_000;
 
 let mainWindow: BrowserWindow | null = null;
 let license: LicenseService | null = null;
+let lan: LanService | null = null;
+
+/**
+ * Feature F12: a satellite's device secret is kept encrypted with this Windows user's key
+ * (DPAPI through safeStorage); a machine without it keeps it as is in its local database.
+ */
+function machineCipher(): Cipher {
+  if (!safeStorage.isEncryptionAvailable()) {
+    logger.warn('[lan] no OS keychain: a satellite credential would be stored unencrypted');
+    return plainCipher;
+  }
+  return {
+    name: 'dpapi',
+    encrypt: (s) => safeStorage.encryptString(s).toString('base64'),
+    decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64')),
+  };
+}
 
 /**
  * The posgro API the licence comes from. Only a development run may point elsewhere
@@ -105,8 +124,6 @@ if (!app.requestSingleInstanceLock()) {
     }
 
     const imageDir = path.join(app.getPath('userData'), 'img');
-    handleImageScheme(imageDir);
-    void removeOrphanImages(imageDir);
     void removeLeftoverReceiptFiles();
     const updater = createUpdater({
       currentVersion: app.getVersion(),
@@ -140,8 +157,45 @@ if (!app.requestSingleInstanceLock()) {
       log: logger,
     });
     await license.init();
-    license.start();
-    registerIpcHandlers(getPrisma, imageDir, updater, license);
+
+    // Feature F12: a main till may serve satellites; a satellite forwards everything to its main.
+    const lanService = new LanService({
+      getDb: getPrisma,
+      version: app.getVersion(),
+      imageDir,
+      machineName: os.hostname(),
+      cipher: machineCipher(),
+      services: () => servicesFor(null, getPrisma, imageDir, updater, license!),
+      // The licence counts tills: the main one plus its satellites.
+      deviceLimit: () => {
+        // A development run may allow satellites the licence does not (harnesses); never installed.
+        const override = process.env['SAVDOCHEF_LAN_DEVICES'];
+        if (!app.isPackaged && override && /^\d+$/.test(override)) return Number(override);
+        const tills = license?.terminalLimit() ?? null;
+        return tills === null ? null : Math.max(0, tills - 1);
+      },
+      broadcastLocal: broadcastWindows,
+      allowLoopback: !app.isPackaged,
+      restart: () => {
+        setTimeout(() => {
+          app.relaunch();
+          app.quit();
+        }, 400);
+      },
+      log: (message, error) => (error ? logger.warn(message, error) : logger.info(message)),
+    });
+    lan = lanService;
+    await lanService.init();
+
+    if (lanService.isSatellite) {
+      // Pictures come from the main till; its licence rules every call, this till checks in nowhere.
+      handleImageScheme(imageDir, (file) => lanService.mainLink!.image(file));
+    } else {
+      handleImageScheme(imageDir);
+      void removeOrphanImages(imageDir);
+      license.start();
+    }
+    registerIpcHandlers(getPrisma, imageDir, updater, license, lanService);
     setTimeout(() => void updater.check({ quiet: true }), STARTUP_UPDATE_CHECK_MS).unref();
 
     mainWindow = createWindow();
@@ -160,6 +214,6 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on('will-quit', () => {
     // The clock mark first (it writes to the database), then the database.
-    void (license?.stop() ?? Promise.resolve()).finally(() => closeDatabase());
+    void Promise.allSettled([license?.stop(), lan?.stop()]).finally(() => closeDatabase());
   });
 }

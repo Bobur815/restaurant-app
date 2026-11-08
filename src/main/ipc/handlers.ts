@@ -93,7 +93,8 @@ import {
 } from '../settings/settings';
 import { completeSetup, getSetupStatus } from '../settings/setup';
 import { createUser, listUsers, updateProfile, updateUser } from '../users/users';
-import { forbidden } from '../domain/errors';
+import { conflict, forbidden } from '../domain/errors';
+import type { LanLinkDto } from '@shared/types';
 import type { AnyHandlerDef, HandlerContext, HandlerDef, PublicHandlerDef } from './ipc-safe';
 
 // Typed builders: each infers the handler's input type from its schema.
@@ -157,6 +158,20 @@ async function mayLink(ctx: HandlerContext): Promise<void> {
   if (await ctx.services.license.isSetupMode()) return;
   if (!(await settingsActor(ctx))) throw forbidden();
 }
+
+/** Feature F12: the LAN service, wired in by register.ts. */
+function lanOf(ctx: HandlerContext) {
+  if (!ctx.services.lan) throw conflict('Tarmoq xizmati ishlamayapti');
+  return ctx.services.lan;
+}
+
+const STANDALONE: LanLinkDto = {
+  role: 'main',
+  mainUrl: null,
+  state: null,
+  mainVersion: null,
+  lastContactAt: null,
+};
 
 export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'app:info': pub(S.empty, async (ctx) => ctx.services.appInfo()),
@@ -311,6 +326,27 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'printers:setMain': need('settings', S.printerIdInput, (ctx, { printerId }) =>
     setMainPrinter(ctx.db, printerId),
   ),
+  // ── LAN: satellite tills (feature F12). On a satellite these never get here except lan:link
+  // and the main-till-only ones, which refuse (register.ts routes the rest to the main till).
+  'lan:status': need('settings', S.empty, (ctx) => lanOf(ctx).status()),
+  'lan:update': need('settings', S.lanUpdateInput, (ctx, input) => lanOf(ctx).update(input)),
+  'lan:pairingCode': need('settings', S.empty, (ctx) => lanOf(ctx).issueCode()),
+  'lan:cancelPairing': need('settings', S.empty, (ctx) => lanOf(ctx).cancelCode()),
+  'lan:revoke': need('settings', S.lanDeviceInput, (ctx, { deviceId }) =>
+    lanOf(ctx).revoke(deviceId),
+  ),
+  'lan:link': pub(S.empty, async (ctx) => ctx.services.lan?.linkStatus() ?? STANDALONE),
+  // Becoming a satellite leaves this till's own data unused: during first setup anyone at the
+  // till may do it (there is nothing yet), afterwards only a settings user.
+  'lan:join': pub(S.lanJoinInput, async (ctx, input) => {
+    if ((await getSetupStatus(ctx.db)).setupComplete && !(await settingsActor(ctx)))
+      throw forbidden();
+    return lanOf(ctx).join(input);
+  }),
+  'lan:leave': pub(S.empty, async (ctx) => {
+    if (!(await settingsActor(ctx))) throw forbidden();
+    return lanOf(ctx).leave();
+  }),
   'kitchen:failed': need('orders', S.empty, (ctx) => listFailedTickets(ctx.db)),
   'kitchen:reprint': need('orders', S.ticketIdInput, (ctx, { ticketId }) => {
     ctx.log(`[kitchen] reprint of ticket ${ticketId} by user ${ctx.actor.id}`);

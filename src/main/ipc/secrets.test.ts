@@ -9,6 +9,9 @@ import { allowAllLicense } from '../test-utils/license';
 import { READ_ONLY_CHANNELS } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
+import { plainCipher } from '../lan/config';
+import { hashSecret } from '../lan/pairing';
+import { LanService } from '../lan/lan-service';
 
 jest.setTimeout(60_000);
 
@@ -116,6 +119,10 @@ beforeAll(async () => {
   await t.db.cashMovement.create({
     data: { sessionId: session.id, type: 'PAY_IN', amount: '10000', createdById: staff.id },
   });
+  // A paired satellite (feature F12): lan:status lists it, never its secret's hash.
+  await t.db.lanDevice.create({
+    data: { name: 'Kassa-2', secretHash: hashSecret('s'.repeat(64)) },
+  });
   // A kitchen ticket that did not print (feature F11), so kitchen:failed returns a real row.
   await t.db.kitchenTicket.create({
     data: {
@@ -155,7 +162,22 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'license:signupStatus': { verificationId: 'v1' },
 };
 
+/** Feature F12: the main till's LAN side, not started (no server needed to read its status). */
+let lan: LanService;
+
 function ctx(actor: Actor | null): HandlerContext {
+  lan ??= new LanService({
+    getDb: () => t.db,
+    version: '0.0.0',
+    imageDir: '',
+    machineName: 'test',
+    cipher: plainCipher,
+    services: () => ctx(null).services,
+    deviceLimit: () => null,
+    broadcastLocal: () => undefined,
+    restart: () => undefined,
+    log: () => undefined,
+  });
   return {
     db: t.db,
     actor,
@@ -171,6 +193,7 @@ function ctx(actor: Actor | null): HandlerContext {
       receiptImage: () => null,
       updater: unsupportedUpdater(),
       license: allowAllLicense(),
+      lan,
     },
     log: () => undefined,
   };

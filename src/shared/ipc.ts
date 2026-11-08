@@ -69,6 +69,18 @@ export interface IpcChannels {
   'printers:update': Channel<In<typeof S.updatePrinterInput>, T.PrinterDto>;
   /** Makes another printer the main one (receipts, pre-bills, reports). */
   'printers:setMain': Channel<In<typeof S.printerIdInput>, T.PrinterDto[]>;
+  // LAN: satellite tills (feature F12). Main till side (settings permission):
+  'lan:status': Channel<undefined, T.LanStatusDto>;
+  'lan:update': Channel<In<typeof S.lanUpdateInput>, T.LanStatusDto>;
+  'lan:pairingCode': Channel<undefined, T.LanStatusDto>;
+  'lan:cancelPairing': Channel<undefined, T.LanStatusDto>;
+  'lan:revoke': Channel<In<typeof S.lanDeviceInput>, T.LanStatusDto>;
+  /** This till's role and, on a satellite, the line to its main till (public: the login screen). */
+  'lan:link': Channel<undefined, T.LanLinkDto>;
+  /** Become a satellite of the main till at that address (the app restarts). */
+  'lan:join': Channel<In<typeof S.lanJoinInput>, T.LanLinkDto>;
+  /** A satellite becomes a till of its own again (the app restarts). */
+  'lan:leave': Channel<undefined, T.LanLinkDto>;
   /** Recent kitchen tickets that failed to print. */
   'kitchen:failed': Channel<undefined, T.KitchenTicketDto[]>;
   'kitchen:reprint': Channel<In<typeof S.ticketIdInput>, { printer: string }>;
@@ -216,6 +228,14 @@ export const IPC_CHANNELS = [
   'printers:setMain',
   'kitchen:failed',
   'kitchen:reprint',
+  'lan:status',
+  'lan:update',
+  'lan:pairingCode',
+  'lan:cancelPairing',
+  'lan:revoke',
+  'lan:link',
+  'lan:join',
+  'lan:leave',
   'updater:status',
   'updater:check',
   'updater:download',
@@ -336,7 +356,9 @@ export type AppEvent =
   /** The licence or the till's mode changed (re-read license:status). */
   | { type: 'license-changed' }
   /** A kitchen ticket printed or failed (feature F11; re-read kitchen:failed). */
-  | { type: 'kitchen-changed' };
+  | { type: 'kitchen-changed' }
+  /** Satellites, pairing or this satellite's line to its main till changed (F12; re-read lan:*). */
+  | { type: 'lan-changed' };
 
 export const APP_EVENT_TYPES = [
   'orders-changed',
@@ -349,6 +371,7 @@ export const APP_EVENT_TYPES = [
   'update-changed',
   'license-changed',
   'kitchen-changed',
+  'lan-changed',
 ] as const satisfies ReadonlyArray<AppEvent['type']>;
 
 /** What preload exposes as window.electronAPI. Results are raw IpcResult; renderer/api unwraps. */

@@ -13,6 +13,7 @@ import { sql as shiftCashUnlimited } from './0012_shift_cash_unlimited';
 import { sql as licenseAccount } from './0013_license_account';
 import { sql as preBillLayout } from './0014_pre_bill_layout';
 import { sql as kitchenPrinters } from './0015_kitchen_printers';
+import { sql as lanDevices } from './0016_lan_devices';
 
 export interface Migration {
   /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
@@ -43,4 +44,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 13, name: 'license_account', sql: licenseAccount },
   { version: 14, name: 'pre_bill_layout', sql: preBillLayout },
   { version: 15, name: 'kitchen_printers', sql: kitchenPrinters },
+  { version: 16, name: 'lan_devices', sql: lanDevices },
 ];

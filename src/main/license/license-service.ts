@@ -387,6 +387,11 @@ export class LicenseService {
   }
 
   /** As of the last `state()`: for checks that cannot wait (printing pictures). */
+  /** Feature F12: tills the licence allows (main + satellites); null = not limited. */
+  terminalLimit(): number | null {
+    return this.payload?.terminals ?? null;
+  }
+
   hasFeature(feature: LicenseFeature): boolean {
     return this.last ? this.last.features.includes(feature) : true;
   }

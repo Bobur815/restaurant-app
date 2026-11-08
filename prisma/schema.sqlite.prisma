@@ -673,3 +673,20 @@ model LicenseState {
 
   @@map("license_state")
 }
+
+// ==================== LAN: SATELLITE TILLS (feature F12) ====================
+
+/// A satellite till paired with this (main) till. The satellite sends its id and secret with every
+/// request; only a SHA-256 of the secret is kept. Revoked, never deleted.
+model LanDevice {
+  id         Int       @id @default(autoincrement())
+  /// The name the satellite gave at pairing (usually its computer name).
+  name       String
+  secretHash String
+  pairedAt   DateTime  @default(now())
+  lastSeenAt DateTime?
+  lastIp     String?
+  revokedAt  DateTime?
+
+  @@map("lan_devices")
+}

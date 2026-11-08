@@ -26,6 +26,8 @@ export const READ_ONLY_CHANNELS = [
   'printing:testPrinter',
   'printers:list',
   'kitchen:failed',
+  'lan:status',
+  'lan:link',
   'updater:status',
   'license:status',
   'license:plans',
@@ -71,6 +73,7 @@ const HALLS: AppEvent = { type: 'halls-changed' };
 const DEBTS: AppEvent = { type: 'debts-changed' };
 const LICENSE: AppEvent = { type: 'license-changed' };
 const KITCHEN: AppEvent = { type: 'kitchen-changed' };
+const LAN: AppEvent = { type: 'lan-changed' };
 
 /**
  * What each successful change announces to every window (replaces legacy's `session-updated` /
@@ -97,6 +100,12 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'printers:update': () => [SETTINGS, MENU],
   'printers:setMain': () => [SETTINGS],
   'kitchen:reprint': () => [KITCHEN],
+  'lan:update': () => [LAN],
+  'lan:pairingCode': () => [LAN],
+  'lan:cancelPairing': () => [LAN],
+  'lan:revoke': () => [LAN],
+  'lan:join': () => [LAN],
+  'lan:leave': () => [LAN],
   'halls:create': () => [HALLS],
   'halls:update': () => [HALLS],
   'halls:reorder': () => [HALLS],

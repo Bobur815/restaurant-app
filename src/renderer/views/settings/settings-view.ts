@@ -6,6 +6,7 @@ import { icon, type IconName } from '../../ui/icons';
 import type { View, ViewInstance } from '../types';
 import { usersView } from '../users/users-view';
 import { hallsSection } from './halls-section';
+import { lanSection } from './lan-section';
 import { ordersSection } from './orders-section';
 import { paymentsSection } from './payments-section';
 import { printerSection } from './printer-section';
@@ -68,6 +69,8 @@ export const SETTINGS_SECTIONS: readonly Section[] = [
     needs: 'settings',
   },
   { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView, needs: 'users' },
+  // Feature F12: satellites (main till) or the main till (satellite).
+  { id: 'lan', label: 'settings.sectionLan', icon: 'tables', view: lanSection, needs: 'settings' },
   {
     id: 'subscription',
     label: 'settings.sectionSubscription',

@@ -280,6 +280,21 @@ export const updatePrinterInput = z.object({
   isActive: z.boolean().optional(),
 });
 export const printerIdInput = z.object({ printerId: id });
+
+// ── LAN: satellite tills (feature F12) ───────────────────────────────────────────────────────
+
+export const lanUpdateInput = z
+  .object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535) })
+  .partial();
+export const lanDeviceInput = z.object({ deviceId: id });
+/** The main till's address as typed (`192.168.1.10` or with `:port`) and its pairing code. */
+export const lanJoinInput = z.object({
+  mainAddress: z.string().trim().min(7, { message: 'Manzilni kiriting' }).max(60),
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, { message: '6 xonali kod' }),
+});
 export const ticketIdInput = z.object({ ticketId: id });
 
 export const setupInput = z.object({

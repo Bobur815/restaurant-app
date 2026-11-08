@@ -2,6 +2,7 @@ import { hasPermission, type Permission } from '@shared/permissions';
 import type {
   AppSettings,
   CurrentUser,
+  LanLinkDto,
   Language,
   ReceiptSettingsDto,
   SessionDto,
@@ -27,6 +28,8 @@ export interface AppState {
   update: UpdateStatusDto | null;
   /** The licence (feature F5): mode, plan, days left. Public, so known before login too. */
   license: LicenseStatusDto | null;
+  /** Feature F12: this till's role and, on a satellite, its line to the main till. */
+  lan: LanLinkDto | null;
 }
 
 export const appStore = createStore<AppState>({
@@ -39,6 +42,7 @@ export const appStore = createStore<AppState>({
   theme: 'system',
   update: null,
   license: null,
+  lan: null,
 });
 
 /** A newer version is known (found, downloading or ready to install): Settings shows a dot. */
