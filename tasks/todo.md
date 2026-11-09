@@ -1058,3 +1058,8 @@ Q5.
 - Version: 0.9.1 (patch, compatible with 0.9.0 main tills). Satellites already on 0.8/0.9 need one manual install to get the button.
 - Security review (electron-security-reviewer) fixes: the satellite now checks who answers (`/hello`, its credential, lineage) BEFORE believing the main till's version, so a stranger at the address claiming a newer version cannot open the update (test: another restaurant's till at the port -> `unpaired`, version not taken, no unattended update); version strings from the network must look like a release (`VERSION_RE`) or the answer counts as `superseded`; a main version change while already in `version` re-renders the card; card: `.catch` on its first load, a press downloads only from the check it started; `MainLink.stop()` wakes a retry sleep (no 30 s timer left behind). 48 suites / 645 tests; harness re-run OK.
 - Follow-ups not done (outside F15): (1) the installer is not Authenticode-checked by the updater (no `publisherName` in electron-builder config): the feed host is the trust root; (2) pre-F12 behaviour: any till at the main till's address that answers 401 makes a satellite `unpaired`, which allows the sign-in-free "Alohida kassa bo'lish" (indistinguishable from a real revoke).
+
+## Release 0.9.1 (F15, 2026-11-09)
+
+- `npm run release -- patch`: check 48 suites / 645 tests, commit + tag `v0.9.1`, `release/v0.9.1/SavdoChef-Setup-0.9.1.exe` sha256 `760634c10aea0ef1564721cbea849e01654731d921a96236aac360e42f4f7bbc`. Not pushed, not uploaded.
+- Smoke test: silent install over 0.9.0 (exit 0, exe 0.9.1.0), packaged run on the scratch v17 copy: started, schema v17 (no migration), closed normally. This PC now has 0.9.1 installed. The update feed still serves 0.8.0.
