@@ -116,10 +116,10 @@ describe('LanService (F12)', () => {
     updater: unsupportedUpdater(),
     license: allowAllLicense(),
   };
-  const make = (db: TestDb, restarts: string[]) =>
+  const make = (db: TestDb, restarts: string[], version = '0.10.0') =>
     new LanService({
       getDb: () => db.db,
-      version: '0.10.0',
+      version,
       imageDir: '',
       machineName: 'KASSA-2',
       cipher: plainCipher,
@@ -189,6 +189,82 @@ describe('LanService (F12)', () => {
     await again.stop();
     await s.stop();
     await m.stop();
+  });
+
+  it('F15: a satellite updates itself unattended only while its main till is the newer one', async () => {
+    const until = async (check: () => boolean) => {
+      for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 25));
+    };
+    const pair = async (mainVersion: string, satVersion: string) => {
+      const m = make(main, [], mainVersion);
+      await m.init();
+      const port = 20_000 + Math.floor(Math.random() * 20_000);
+      await m.update({ port, enabled: true });
+      const code = (await m.issueCode()).pairing!.code;
+      const db = await createTestDb();
+      const first = make(db, [], satVersion);
+      await first.init();
+      await first.join({ mainAddress: `127.0.0.1:${port}`, code });
+      await first.stop();
+      // After its restart the satellite follows the main till and compares versions.
+      const s = make(db, [], satVersion);
+      await s.init();
+      await until(() => ['online', 'version'].includes(s.linkStatus().state ?? ''));
+      const result = {
+        state: s.linkStatus().state,
+        mainVersion: s.mainVersion,
+        mayUpdate: s.mayUpdateUnattended,
+      };
+      await s.stop();
+      await m.stop();
+      await db.close();
+      return result;
+    };
+    expect(await pair('0.11.0', '0.10.3')).toEqual({
+      state: 'version',
+      mainVersion: '0.11.0',
+      mayUpdate: true,
+    });
+    // The satellite is the newer one: the main till has to be updated, not this one.
+    expect(await pair('0.9.0', '0.10.0')).toMatchObject({ state: 'version', mayUpdate: false });
+    // Same series: working, nothing unattended.
+    expect(await pair('0.10.1', '0.10.0')).toMatchObject({ state: 'online', mayUpdate: false });
+  });
+
+  it('F15 review: a stranger at the main till address claiming a newer version unlocks nothing', async () => {
+    const until = async (check: () => boolean) => {
+      for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 25));
+    };
+    const m = make(main, [], '0.10.0');
+    await m.init();
+    const port = 20_000 + Math.floor(Math.random() * 20_000);
+    await m.update({ port, enabled: true });
+    const code = (await m.issueCode()).pairing!.code;
+    const db = await createTestDb();
+    const first = make(db, [], '0.10.0');
+    await first.init();
+    await first.join({ mainAddress: `127.0.0.1:${port}`, code });
+    await first.stop();
+    await m.stop();
+
+    // Another restaurant's till (another lineage) now answers at that address, "newer".
+    const strangerDb = await createTestDb();
+    const stranger = make(strangerDb, [], '0.11.0');
+    await stranger.init();
+    await stranger.update({ port, enabled: true });
+    await stranger.issueCode(); // serving
+    const s = make(db, [], '0.10.0');
+    await s.init();
+    await until(() => !['connecting', 'unreachable'].includes(s.linkStatus().state ?? ''));
+    // It does not know this satellite (401): "unpaired", as before F15, and its version is not
+    // believed, so the update stays closed.
+    expect(s.linkStatus().state).toBe('unpaired');
+    expect(s.linkStatus().mainVersion).not.toBe('0.11.0');
+    expect(s.mayUpdateUnattended).toBe(false);
+    await s.stop();
+    await stranger.stop();
+    await db.close();
+    await strangerDb.close();
   });
 
   it('an unattended re-pair reaches only the same restaurant', async () => {

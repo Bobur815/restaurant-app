@@ -1009,3 +1009,52 @@ Goes into the unreleased 0.9.0 (minor, already due to migration 0017). Release o
 
 - `npm run release -- minor`: check 47 suites / 641 tests, commit + tag `v0.9.0`, `release/v0.9.0/SavdoChef-Setup-0.9.0.exe` sha256 `707f2e74f74a44825899c11aed7fa1793d3c45b6911a832f6fb725dae901acce`. Not pushed, not uploaded.
 - Upgrade test on this PC: installed 0.8.0 -> silent 0.9.0 over it (exit 0, exe 0.9.0.0) -> ran packaged with `--user-data-dir` = scratch copy of the v16 profile from the 0.8.0 test (cafe data): backup `savdochef-v16-*` written, migrated v16 -> v17 (0017). Row counts of all 24 tables identical, orders total identical (50 000); the admin's permissions now end with `ordersOthers`. This PC now has 0.9.0 installed.
+
+## F15 update a satellite to the main till's version (approved 2026-11-09: all questions = R)
+
+Problem: when the main till is updated and a satellite is not (or a fresh satellite installed from an older installer joins), the versions differ in major.minor (`versionsCompatible`, serve-policy.ts). The satellite's link goes to `version`, `MainLink.rpc` refuses every call, and the waiting card (`components/lan-link.ts`) covers the app with only "Qayta tekshirish / Qayta ulash / Ajralish". The updater (Settings -> Dastur yangilanishi) is unreachable: the overlay covers it, and on a satellite `updater:*` needs a settings user asked of the main till (`register.ts` `remoteActor`), which the refused link cannot answer. So the satellite cannot be updated from the app at all. Pairing itself succeeds; the till then lands on this card.
+
+Copy from: the unattended link actions (`lanService.mayRejoinUnattended` / `mayLeaveUnattended` in `register.ts` `satelliteCall`), the updater service and its states (`main/updater/updater.ts`, `views/settings/update-section.ts`: check -> download with progress -> install).
+
+### Design (recommendations, see questions)
+
+- **Waiting card, state `version`:**
+  - Shows both versions: "Asosiy kassa: 0.9.0 · Bu kassa: 0.8.0".
+  - Main till newer: a "Yangilash" (update) button. It checks the update feed, then downloads with a progress bar, then shows "O'rnatish va qayta ishga tushirish" (install and restart) with a confirm.
+  - Satellite newer: "Asosiy kassani yangilang" (update the main till), no button.
+- **Main process (satellite):** `updater:check|download|install|status` are allowed without a sign-in only while the link is `version` and the main till's version is newer (`lanService.mayUpdateUnattended`), like the unattended re-pair. Otherwise the rules stay as they are: a settings user.
+- **Target version:**
+  - The feed serves the newest release. If its major.minor is not the main till's, the update is refused with "Asosiy kassani ham oxirgi versiyaga yangilang" (update the main till too). Otherwise the satellite would just end up on the other side of the gap.
+  - The check result gets compared before download is offered.
+- No IPC channel added (reuses `updater:*`); one field on the updater status if needed (`targetMatches`). No database change.
+
+### Files
+
+- [ ] `main/lan/serve-policy.ts`: `compareVersions(a, b)` (semver major.minor.patch) + tests.
+- [ ] `main/lan/lan-service.ts`: `mayUpdateUnattended` (satellite, state `version`, main newer).
+- [ ] `main/ipc/register.ts` `satelliteCall`: updater channels pass with no actor when `mayUpdateUnattended`; download/install refused when the checked version does not match the main till's major.minor.
+- [ ] `components/lan-link.ts`: versions line + update block (status, progress, buttons) on the `version` card; follows `update-changed` events.
+- [ ] uz + ru strings: `lan.versions`, `lan.updateHere`, `lan.updateMainFirst`, `lan.feedMismatch`, `lan.updating`.
+- [ ] Tests: `serve-policy` compare; `lan.test.ts` / register-level: unattended updater allowed only in `version` with main newer, refused otherwise (main reachable, satellite newer, state online).
+- [ ] Verify: two instances (main + satellite) where the satellite reports an older version (dev override of the reported version, as the F12 harness did with `version`), screenshot of the card with the button; dev build updater is `unsupported`, so the full install path is checked by a packaged run: install 0.9.x on a satellite profile against a main showing a newer version, if Q4 allows a real feed test.
+
+### Version
+
+Q5.
+
+### Open questions
+
+1. Where does the satellite get the update: from the internet feed like any till (R), or from the main till over the shop network? The second works without internet on the satellite, but the main till must keep and serve its own installer (bigger).
+2. Who can press "Yangilash" on the waiting screen: anyone at the satellite, without signing in (R)? Signing in is impossible while the versions differ, and it can only install the official signed release. Or should it need something else?
+3. Flow: one button that checks and downloads with progress, then a second press "O'rnatish" with a confirm (R)? Or download and install in one go?
+4. If the feed's newest version is not the main till's major.minor (the main till skipped updates): refuse with "update the main till first" (R), or install the newest anyway?
+5. Version: 0.9.1 (patch), so it stays compatible with 0.9.0 main tills (R)? Or 0.10.0 (minor; every 0.9 satellite then needs this very update)? Note: satellites already on 0.8/0.9 do not have the button yet; they need one manual install (or the Settings updater while still compatible).
+
+### F15 built (2026-11-09, not committed)
+
+- `shared/utils/version.ts` (`compareVersions`, `versionsCompatible`, moved from serve-policy which re-exports it); `LanService.mayUpdateUnattended` (satellite, link `version`, main newer) + `mainVersion`; `register.ts` `satelliteCall`: `updater:*` pass without a sign-in in that state, `download`/`install` refused unless the checked release is in the main till's major.minor (`UPDATE_MISMATCH`). Waiting card (`lan-link.ts`): both versions; main newer -> hint + "Bu kassani yangilash" (check, then download with progress, then "O'rnatish va qayta ishga tushirish" with confirm), feed release of another series or none -> message; satellite newer -> "update the main till". No IPC channel, no schema change.
+- Tests: version (2), lan.test F15 (real main + satellite over HTTP: main newer -> `version` + may update; satellite newer -> may not; same series -> online). 48 suites / 644 tests.
+- Real app (harness `f15-main.cjs` + `f15-sat.cjs`, `app.getVersion` patched, scratch F12 profiles): main 0.10.0 / satellite 0.9.0 -> card with versions and hint, `updater:status/check` answer with nobody signed in, `download` refused (no matching release), other channels still refused; main 0.8.0 / satellite 0.9.0 -> "update the main till", updater still needs a sign-in. Not exercised: a real download + install (a dev run's updater is `unsupported`); needs a packaged 0.9.1 satellite and a newer main release on the feed.
+- Version: 0.9.1 (patch, compatible with 0.9.0 main tills). Satellites already on 0.8/0.9 need one manual install to get the button.
+- Security review (electron-security-reviewer) fixes: the satellite now checks who answers (`/hello`, its credential, lineage) BEFORE believing the main till's version, so a stranger at the address claiming a newer version cannot open the update (test: another restaurant's till at the port -> `unpaired`, version not taken, no unattended update); version strings from the network must look like a release (`VERSION_RE`) or the answer counts as `superseded`; a main version change while already in `version` re-renders the card; card: `.catch` on its first load, a press downloads only from the check it started; `MainLink.stop()` wakes a retry sleep (no 30 s timer left behind). 48 suites / 645 tests; harness re-run OK.
+- Follow-ups not done (outside F15): (1) the installer is not Authenticode-checked by the updater (no `publisherName` in electron-builder config): the feed host is the trust root; (2) pre-F12 behaviour: any till at the main till's address that answers 401 makes a satellite `unpaired`, which allows the sign-in-free "Alohida kassa bo'lish" (indistinguishable from a real revoke).

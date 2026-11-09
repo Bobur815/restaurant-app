@@ -33,6 +33,9 @@ const MAX_EVENT_FRAME = 256 * 1024;
 const HEALTH_TIMEOUT_MS = 5_000;
 const DEFAULT_RETRY = [1_000, 2_000, 5_000, 10_000];
 
+/** `0.9.1`, `0.10.0-beta.2`: what a SavdoChef release reports. */
+const VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.]{1,32})?$/;
+
 const unreachableError = (): IpcResult<never> => ({
   ok: false,
   error: {
@@ -163,6 +166,8 @@ export class MainLink {
   stop(): void {
     this.stopped = true;
     this.stream?.abort();
+    // A loop waiting out its retry delay ends now instead of holding a timer for up to 30 s.
+    this.wake?.();
   }
 
   private reconnecting = false;
@@ -221,11 +226,16 @@ export class MainLink {
         this.setState('superseded');
         return false;
       }
-      this.mainVersion = body.version ?? null;
-      if (!body.version || !versionsCompatible(body.version, this.o.version)) {
-        this.setState('version');
+      // A version string as releases have it; anything else is not a till of ours.
+      const version =
+        typeof body.version === 'string' && VERSION_RE.test(body.version) ? body.version : null;
+      if (!version) {
+        this.setState('superseded');
         return false;
       }
+      // Who answers first (this till's credential, /hello works across versions): only our own
+      // main till's version is believed. A stranger at the address claiming a newer version must
+      // not open the sign-in-free actions of the waiting card (leave, update; F15 review).
       const hello = await this.f(`${this.o.link.mainUrl}/hello`, {
         headers: headers(this.o.link),
         signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
@@ -237,6 +247,14 @@ export class MainLink {
       const who = (await hello.json()) as { lineage?: string };
       if (who.lineage !== this.o.link.lineage) {
         this.setState('superseded');
+        return false;
+      }
+      const changed = version !== this.mainVersion;
+      this.mainVersion = version;
+      if (!versionsCompatible(version, this.o.version)) {
+        // Already waiting on the version: a new one (the main till updated again) still re-renders.
+        if (changed && this.state === 'version') this.o.onState(this.status());
+        this.setState('version');
         return false;
       }
       return true;

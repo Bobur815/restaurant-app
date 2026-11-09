@@ -25,6 +25,7 @@ import { MainLink, PairError, pairWithMain } from './main-link';
 import { PairingStore } from './pairing';
 import { LanServer } from './server';
 import { normaliseMainAddress, shouldServe } from './serve-policy';
+import { compareVersions } from '@shared/utils/version';
 
 /**
  * Feature F12: this till's part in a multi-till restaurant. A main till (every till by default)
@@ -277,6 +278,25 @@ export class LanService {
   get mayRejoinUnattended(): boolean {
     const s = this.state;
     return s === 'unpaired' || s === 'superseded' || s === 'version';
+  }
+
+  /**
+   * Feature F15: updating this satellite without a sign-in (nobody can sign in while the versions
+   * differ): only when the link refuses for the version and the main till is the newer one.
+   */
+  get mayUpdateUnattended(): boolean {
+    const link = this.linkStatus();
+    return (
+      link.role === 'satellite' &&
+      link.state === 'version' &&
+      !!link.mainVersion &&
+      compareVersions(link.mainVersion, this.o.version) > 0
+    );
+  }
+
+  /** The main till's version as last seen (null on a main till or before any contact). */
+  get mainVersion(): string | null {
+    return this.linkStatus().mainVersion;
   }
 
   /** Leaving without a sign-in: only when the main till itself refuses this satellite. */

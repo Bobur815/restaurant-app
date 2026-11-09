@@ -3,6 +3,7 @@ import { APP_EVENT_CHANNEL, IPC_CHANNELS, type AppEvent, type IpcChannel } from 
 import type { IpcResult } from '@shared/errors';
 import { hasPermission } from '@shared/permissions';
 import { lanJoinInput } from '@shared/schemas';
+import { versionsCompatible } from '@shared/utils/version';
 import type { CurrentUser } from '@shared/types';
 import type { Actor, Db } from '../domain/db';
 import { imageDataUrl, importImage } from '../images/image-store';
@@ -177,9 +178,27 @@ async function satelliteCall(
   if (SATELLITE_LOCAL.has(channel) || channel === 'lan:join' || channel === 'lan:leave') {
     // Leaving or re-pairing a satellite that cannot reach a working main till needs nobody: there
     // is nobody to ask. Otherwise a settings user, as on a main till.
+    // F15: a satellite behind its main till updates itself from the waiting card (no sign-in is
+    // possible there), and only to a release of the main till's series.
+    const unattendedUpdate = channel.startsWith('updater:') && lan!.mayUpdateUnattended;
+    if (unattendedUpdate && (channel === 'updater:download' || channel === 'updater:install')) {
+      const target = local.services.updater.status().version;
+      const main = lan!.mainVersion;
+      if (!target || !main || !versionsCompatible(target, main)) {
+        return {
+          ok: false,
+          error: {
+            code: 'CONFLICT',
+            message: `Internetdagi yangi versiya (${target ?? '?'}) asosiy kassanikiga (${main ?? '?'}) mos emas. Avval asosiy kassani ham oxirgi versiyaga yangilang`,
+            details: { reason: 'UPDATE_MISMATCH', target, main },
+          },
+        };
+      }
+    }
     const stuckLinkAction =
       (channel === 'lan:join' && lan!.mayRejoinUnattended) ||
-      (channel === 'lan:leave' && lan!.mayLeaveUnattended);
+      (channel === 'lan:leave' && lan!.mayLeaveUnattended) ||
+      unattendedUpdate;
     try {
       const actor = stuckLinkAction ? null : await remoteActor(sender);
       if (!stuckLinkAction && !(actor && hasPermission(actor, 'settings'))) {

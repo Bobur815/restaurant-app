@@ -911,6 +911,12 @@
     "revoked": "ajratilgan",
     "setupHint": "Restoranda asosiy kassa allaqachon bormi? Bu kompyuterni unga ikkinchi kassa sifatida ulang.",
     "setupChoice": "Yo'ldosh kassa sifatida ulash",
-    "setupSubtitle": "Bu kassa asosiy kassa bazasi bilan ishlaydi: menyu, stollar, smena va foydalanuvchilar o'sha yerdan."
+    "setupSubtitle": "Bu kassa asosiy kassa bazasi bilan ishlaydi: menyu, stollar, smena va foydalanuvchilar o'sha yerdan.",
+    "versions": "Asosiy kassa: {{main}} · Bu kassa: {{own}}",
+    "updateHint": "Bu kassa asosiy kassadan eskiroq. «Bu kassani yangilash» bosilsa, yangi versiya internetdan yuklab olinadi, keyin o'rnatib qayta ishga tushiriladi.",
+    "updateHere": "Bu kassani yangilash",
+    "updateMainFirst": "Bu kassa asosiy kassadan yangiroq. Asosiy kassani yangilang: Sozlamalar → Dastur yangilanishi.",
+    "feedMismatch": "Internetdagi yangi versiya ({{target}}) asosiy kassanikiga ({{main}}) mos emas. Avval asosiy kassani ham oxirgi versiyaga yangilang.",
+    "feedNotYet": "Internetda {{main}} versiyasi hali topilmadi. Keyinroq qayta urinib ko'ring yoki o'rnatish faylini shu kompyuterda ishga tushiring."
   }
 }

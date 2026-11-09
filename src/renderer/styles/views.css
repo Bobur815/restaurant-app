@@ -2068,6 +2068,33 @@
   color: var(--color-warning);
 }
 
+/* F15: a satellite behind its main till updates itself from the waiting card. */
+.link-update {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.link-versions {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.link-update .update-status:empty,
+.link-update p:empty {
+  display: none;
+}
+
+.link-update .update-progress {
+  width: 100%;
+}
+
 .join-main {
   display: flex;
   flex-direction: column;

@@ -64,8 +64,5 @@ export function normaliseMainAddress(
   return `http://${host}:${port}`;
 }
 
-/** Same major.minor: the IPC contract is the same on both sides. */
-export function versionsCompatible(a: string, b: string): boolean {
-  const mm = (v: string) => v.split('.').slice(0, 2).join('.');
-  return mm(a) === mm(b);
-}
+/** Same major.minor (shared/utils/version.ts, also used by the satellite's update card). */
+export { versionsCompatible } from '@shared/utils/version';
