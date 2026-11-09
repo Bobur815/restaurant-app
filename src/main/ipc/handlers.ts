@@ -41,6 +41,8 @@ import {
   getTableOrder,
   listBusyTables,
   listOpenOrders,
+  mayChangeTableOrder,
+  tableOfPendingOrder,
   moveTableOrder,
   saveOpenOrder,
   saveTableOrder,
@@ -179,22 +181,28 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   // ── auth & users (feature F2: PIN-only login) ─────────────────────────────────────────────
   'auth:pinLogin': pub(S.pinLoginInput, async (ctx, { pin }) => {
     const user = await pinLogin(ctx.db, pin);
+    // F13: someone else signing in at this till starts with no tables held (the same user back
+    // from the lock screen keeps what their open page holds).
+    if (ctx.actor?.id !== user.id) ctx.services.tableLocks.releaseTerminal(ctx.terminal);
     ctx.setActor(user);
     return user;
   }),
   'auth:logout': pub(S.empty, async (ctx) => {
+    ctx.services.tableLocks.releaseTerminal(ctx.terminal);
     ctx.setActor(null);
     return null;
   }),
   'auth:me': pub(S.empty, async (ctx) => ctx.actor),
   'auth:recover': pub(S.recoverInput, async (ctx, input) => {
     const result = await recoverWithCode(ctx.db, input);
+    ctx.services.tableLocks.releaseTerminal(ctx.terminal);
     ctx.setActor(result.user);
     return result;
   }),
   'auth:bootstrapStatus': pub(S.empty, (ctx) => bootstrapStatus(ctx.db)),
   'auth:bootstrapPin': pub(S.bootstrapPinInput, async (ctx, input) => {
     const result = await bootstrapPin(ctx.db, input);
+    ctx.services.tableLocks.releaseTerminal(ctx.terminal);
     ctx.setActor(result.user);
     return result;
   }),
@@ -437,6 +445,8 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   ),
   // Kitchen tickets (F11) are written with the order and printed once it is saved.
   'orders:save': need('orders', S.saveTableOrderInput, async (ctx, input) => {
+    // F13: not while another till has this table open.
+    ctx.services.tableLocks.assertFree(input.tableNumber, ctx.terminal);
     const tickets: number[] = [];
     try {
       return await saveTableOrder(ctx.db, ctx.actor, input, tickets);
@@ -446,6 +456,7 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     }
   }),
   'orders:cancel': need('orders', S.cancelTableOrderInput, async (ctx, input) => {
+    ctx.services.tableLocks.assertFree(input.tableNumber, ctx.terminal);
     const tickets: number[] = [];
     try {
       return await cancelTableOrder(ctx.db, input, { actor: ctx.actor, tickets });
@@ -455,14 +466,44 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     }
   }),
   'orders:moveTable': need('orders', S.moveTableInput, async (ctx, input) => {
+    const locks = ctx.services.tableLocks;
+    locks.assertFree(input.fromTable, ctx.terminal);
+    locks.assertFree(input.toTable, ctx.terminal);
     const tickets: number[] = [];
     try {
-      return await moveTableOrder(ctx.db, input, { actor: ctx.actor, tickets });
+      // Once committed, even if reading the order back then fails.
+      return await moveTableOrder(ctx.db, input, {
+        actor: ctx.actor,
+        tickets,
+        onCommit: () => locks.move(input.fromTable, input.toTable, ctx.terminal),
+      });
     } finally {
       // Committed tickets print even if reading the order back fails.
       ctx.services.printKitchen?.(tickets);
     }
   }),
+  // F13: the order page holds its table while open. Refused when another till holds it (an
+  // administrator may take it over); not taken for someone else's order the user may not change
+  // (the page opens read-only, so the owner can still open it elsewhere).
+  'orders:lockTable': need('orders', S.lockTableInput, async (ctx, { tableNumber, force }) => {
+    if (force && ctx.actor.role !== 'ADMIN')
+      throw forbidden('Stolni faqat administrator majburan ocha oladi');
+    const locks = ctx.services.tableLocks;
+    if (!force) locks.assertFree(tableNumber, ctx.terminal);
+    if (!(await mayChangeTableOrder(ctx.db, tableNumber, ctx.actor))) return { held: false };
+    if (force) ctx.log(`[orders] table ${tableNumber} taken over by user ${ctx.actor.id}`);
+    locks.take(
+      tableNumber,
+      { terminal: ctx.terminal, userId: ctx.actor.id, userName: ctx.actor.fullName },
+      force === true,
+    );
+    return { held: true };
+  }),
+  'orders:unlockTable': need('orders', S.tableInput, async (ctx, { tableNumber }) => {
+    ctx.services.tableLocks.release(tableNumber, ctx.terminal);
+    return null;
+  }),
+  'orders:tableLocks': user(S.empty, async (ctx) => ctx.services.tableLocks.list(ctx.terminal)),
   'orders:get': need('orders', S.idInput, (ctx, { id }) => getOrder(ctx.db, id)),
   'orders:openList': need('orders', S.empty, (ctx) => listOpenOrders(ctx.db)),
   'orders:saveOpen': need('orders', S.saveOpenOrderInput, async (ctx, input) => {
@@ -484,12 +525,15 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     }
   }),
   'orders:setDeliveryStatus': need('orders', S.deliveryStatusInput, (ctx, input) =>
-    setDeliveryStatus(ctx.db, input),
+    setDeliveryStatus(ctx.db, input, ctx.actor),
   ),
   'customers:findByPhone': need('orders', S.phoneLookupInput, (ctx, { phone }) =>
     findCustomerByPhone(ctx.db, phone),
   ),
-  'payments:pay': need('payments', S.payOrderInput, (ctx, input) => {
+  'payments:pay': need('payments', S.payOrderInput, async (ctx, input) => {
+    // F13: not while another till has the table open (its next save would find no order).
+    const table = await tableOfPendingOrder(ctx.db, input.orderId);
+    if (table !== null) ctx.services.tableLocks.assertFree(table, ctx.terminal);
     // Selling on debt is its own permission (a cashier may take payments but not give credit).
     const debt = input.method === 'debt' || (input.tenders ?? []).some((t) => t.method === 'debt');
     if (debt && !hasPermission(ctx.actor, 'debt')) throw forbidden("Nasiyaga sotishga ruxsat yo'q");

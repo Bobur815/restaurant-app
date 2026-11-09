@@ -156,7 +156,11 @@ describe('tables', () => {
       await updateTable(t.db, updateDiningTableInput.parse({ id, label: 'Deraza' })),
     ).toMatchObject({ number: 2, label: 'Deraza' });
 
-    await cancelTableOrder(t.db, { tableNumber: 2, expectedVersion: o.version });
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: 2, expectedVersion: o.version },
+      { actor: cashier },
+    );
     expect(await updateTable(t.db, updateDiningTableInput.parse({ id, number: 30 }))).toMatchObject(
       { number: 30 },
     );
@@ -185,7 +189,11 @@ describe('tables', () => {
     expect(await t.db.order.count({ where: { tableNumber: 30 } })).toBe(0);
 
     const o = await order(3);
-    await cancelTableOrder(t.db, { tableNumber: 3, expectedVersion: o.version });
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: 3, expectedVersion: o.version },
+      { actor: cashier },
+    );
     const used = await tableId(3);
     await expect(deleteTable(t.db, used)).rejects.toMatchObject({
       code: 'CONFLICT',
@@ -237,7 +245,11 @@ describe('orders and tables', () => {
       }),
     );
     expect(saved.totalAmount).toBe('10000');
-    await cancelTableOrder(t.db, { tableNumber: 40, expectedVersion: saved.version });
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: 40, expectedVersion: saved.version },
+      { actor: cashier },
+    );
   });
 });
 

@@ -152,6 +152,10 @@ export interface IpcChannels {
   'orders:save': Channel<In<typeof S.saveTableOrderInput>, T.OrderDto>;
   'orders:cancel': Channel<In<typeof S.cancelTableOrderInput>, T.OrderDto>;
   'orders:moveTable': Channel<In<typeof S.moveTableInput>, T.OrderDto>;
+  /** F13: one till edits a table at a time (lease on the main till, renewed by the order page). */
+  'orders:lockTable': Channel<In<typeof S.lockTableInput>, T.TableLockResultDto>;
+  'orders:unlockTable': Channel<In<typeof S.tableInput>, null>;
+  'orders:tableLocks': Channel<undefined, T.TableLockDto[]>;
   'orders:get': Channel<In<typeof S.idInput>, T.OrderDto>;
   /** Unpaid takeaway and delivery orders. */
   'orders:openList': Channel<undefined, T.OpenOrderSummaryDto[]>;
@@ -283,6 +287,9 @@ export const IPC_CHANNELS = [
   'orders:save',
   'orders:cancel',
   'orders:moveTable',
+  'orders:lockTable',
+  'orders:unlockTable',
+  'orders:tableLocks',
   'orders:get',
   'orders:openList',
   'orders:saveOpen',

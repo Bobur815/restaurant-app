@@ -185,6 +185,7 @@ export class LanServer {
 
   /** A revoked satellite loses its sessions and its event stream at once. */
   dropDevice(deviceId: number): void {
+    this.deps.services.tableLocks.releaseTerminal(lanTerminal(deviceId));
     for (const [token, s] of this.sessions)
       if (s.deviceId === deviceId) this.sessions.delete(token);
     for (const [res, id] of this.streams) if (id === deviceId) res.end();
@@ -288,6 +289,7 @@ export class LanServer {
         actor = a;
         changed = true;
       },
+      terminal: lanTerminal(deviceId),
       services: this.deps.services,
       log: (message, error) => this.deps.log(`${message} (satellite ${deviceId})`, error),
     };
@@ -378,7 +380,12 @@ export class LanServer {
     });
     res.write(': connected\n\n');
     this.streams.set(res, deviceId);
-    res.on('close', () => this.streams.delete(res));
+    res.on('close', () => {
+      this.streams.delete(res);
+      // F13: a satellite whose line dropped holds no table (it takes it again when it renews).
+      if (![...this.streams.values()].includes(deviceId))
+        this.deps.services.tableLocks.releaseTerminal(lanTerminal(deviceId));
+    });
   }
 
   private async image(res: ServerResponse, fileName: string): Promise<void> {
@@ -391,6 +398,9 @@ export class LanServer {
     res.end(data);
   }
 }
+
+/** F13: a satellite, as a table-lock holder. */
+const lanTerminal = (deviceId: number) => `lan:${deviceId}`;
 
 function credentialOf(req: IncomingMessage): string {
   const h = req.headers.authorization ?? '';

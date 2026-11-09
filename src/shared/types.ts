@@ -485,6 +485,8 @@ export interface OrderDto {
   updatedAt: string;
   completedAt: string | null;
   createdBy: string | null;
+  /** Who opened it (F13: only they, or a user with `ordersOthers`, may change it). */
+  createdById: number | null;
   /** Takeaway/delivery: the customer as saved with the order (phone 998XXXXXXXXX). */
   customerId: number | null;
   customerName: string | null;
@@ -527,12 +529,30 @@ export interface CustomerLookupDto {
 export interface TableSummaryDto {
   tableNumber: number;
   orderId: number;
+  createdById: number | null;
+  createdBy: string | null;
   /** For a change straight from the grid (moving to another table). */
   version: number;
   orderNumber: string;
   totalAmount: DecimalString;
   lineCount: number;
   updatedAt: string;
+}
+
+/**
+ * Feature F13: a table whose order page is open on some till (a lease on the main till). Other
+ * tills cannot open that table until it is released or runs out.
+ */
+export interface TableLockDto {
+  tableNumber: number;
+  userName: string;
+  /** Held by the asking till (window or satellite). */
+  mine: boolean;
+}
+
+/** What orders:lockTable answers: `held` false = the page opens read-only (someone else's order). */
+export interface TableLockResultDto {
+  held: boolean;
 }
 
 /** Stock shortfall reported in CONFLICT details when an order asks for more than remains. */

@@ -55,8 +55,16 @@ export function moveTableModal(
 
   const render = async () => {
     try {
-      const [halls, busy] = await Promise.all([api.halls.list({}), api.orders.busyTables()]);
-      const taken = new Set(busy.map((b) => b.tableNumber));
+      const [halls, busy, held] = await Promise.all([
+        api.halls.list({}),
+        api.orders.busyTables(),
+        api.orders.tableLocks(),
+      ]);
+      // Busy, or open on another till (F13: someone is starting an order there).
+      const taken = new Set([
+        ...busy.map((b) => b.tableNumber),
+        ...held.filter((l) => !l.mine).map((l) => l.tableNumber),
+      ]);
       const groups = halls
         .map((h) => ({ hall: h, free: h.tables.filter((x) => !taken.has(x.number)) }))
         .filter((g) => g.free.length > 0);

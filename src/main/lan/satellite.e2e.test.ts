@@ -16,6 +16,7 @@ import { MainLink, pairWithMain } from './main-link';
 import { PairingStore } from './pairing';
 import { LanServer } from './server';
 import type { SatelliteLink } from './config';
+import { TableLocks } from '../orders/table-locks';
 
 /**
  * Feature F12 end to end: a real main till (LanServer over HTTP on a temporary database) and
@@ -44,6 +45,16 @@ const services: HandlerServices = {
   },
   pickImage: async () => null,
   receiptImage: () => null,
+  // As register.ts: lock changes reach the main till's windows and every satellite.
+  tableLocks: new TableLocks({
+    onChange: (tables) => {
+      const events = tables.map(
+        (tableNumber): AppEvent => ({ type: 'orders-changed', tableNumber }),
+      );
+      mainWindowEvents.push(...events);
+      server.push(events);
+    },
+  }),
   printKitchen: (ids) => {
     if (ids.length) kitchenBatches.push(ids);
   },
@@ -218,6 +229,44 @@ describe('a satellite at work', () => {
     expect(oks).toHaveLength(1);
     expect([r1, r2].find((r) => !r.ok)).toMatchObject({
       error: { code: 'CONFLICT', details: { reason: 'STALE' } },
+    });
+  });
+
+  it('F13: a table open on one till is closed to the others; a satellite gone frees it', async () => {
+    const c = satellite(await pairNew('C'));
+    c.client.start();
+    await until(() => c.client.status().state === 'online');
+    expect(await c.call('auth:pinLogin', { pin: '1111' })).toMatchObject({ ok: true });
+    expect(await c.call('orders:lockTable', { tableNumber: 4 })).toEqual({
+      ok: true,
+      data: { held: true },
+    });
+    a.events.length = 0;
+    expect(await a.call('orders:lockTable', { tableNumber: 4 })).toMatchObject({
+      ok: false,
+      error: { code: 'CONFLICT', details: { reason: 'TABLE_IN_USE', userName: 'Boss' } },
+    });
+    expect(
+      await a.call('orders:save', { tableNumber: 4, lines: [{ menuItemId: dish, quantity: 1 }] }),
+    ).toMatchObject({
+      ok: false,
+      error: { details: { reason: 'TABLE_IN_USE' } },
+    });
+    expect(await a.call('orders:tableLocks')).toEqual({
+      ok: true,
+      data: [{ tableNumber: 4, userName: 'Boss', mine: false }],
+    });
+    // C's line drops: the main till frees what it held and tells the others.
+    c.client.stop();
+    await until(() => a.events.some((e) => e.type === 'orders-changed' && e.tableNumber === 4));
+    expect(await a.call('orders:tableLocks')).toEqual({ ok: true, data: [] });
+    expect(await a.call('orders:lockTable', { tableNumber: 4 })).toEqual({
+      ok: true,
+      data: { held: true },
+    });
+    expect(await a.call('orders:unlockTable', { tableNumber: 4 })).toEqual({
+      ok: true,
+      data: null,
     });
   });
 

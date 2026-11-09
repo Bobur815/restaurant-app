@@ -45,6 +45,7 @@ export const READ_ONLY_CHANNELS = [
   'sessions:lastUnlimited',
   'sessions:cashSummary',
   'orders:busyTables',
+  'orders:tableLocks',
   'orders:getTable',
   'orders:getByNumber',
   'orders:get',
@@ -134,6 +135,10 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
     orders(order),
     { type: 'orders-changed', orderId: order.id, tableNumber: input.fromTable },
   ],
+  // F13: the lock service broadcasts orders-changed itself whenever a table's holder changes
+  // (taken, released, run out, logout); a renewal announces nothing.
+  'orders:lockTable': () => [],
+  'orders:unlockTable': () => [],
   'orders:saveOpen': (_input, order) => [orders(order), SESSION],
   'orders:cancelOpen': (_input, order) => [orders(order), SESSION],
   'orders:setDeliveryStatus': (_input, order) => [orders(order)],

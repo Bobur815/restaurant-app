@@ -111,6 +111,32 @@
   font-size: var(--font-size-xs);
 }
 
+/* F13: open on another till (dashed: nobody else can go in until it is closed). */
+.table-card.is-locked {
+  border-style: dashed;
+  border-color: var(--color-warning);
+  cursor: not-allowed;
+}
+
+.table-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+/* Someone else's order, or a table another till took over: nothing here can be changed. */
+.order-page.is-readonly .order-lines,
+.order-page.is-readonly .menu-panel {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+
 /* ── Order screen ────────────────────────────────────────────────────────────────────────── */
 .order-page {
   display: grid;

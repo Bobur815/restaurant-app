@@ -1,3 +1,4 @@
+import { PERMISSIONS } from '@shared/permissions';
 import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
@@ -334,7 +335,8 @@ describe('migration 9 (PIN login, permissions) on a database with users', () => 
         u.phone,
       ]),
     ).toEqual([
-      ['admin', 'ADMIN', 11, '$2a$10$oldpin', null, null],
+      // 0009 gives an admin the whole current catalogue (0017's permission included, once).
+      ['admin', 'ADMIN', PERMISSIONS.length, '$2a$10$oldpin', null, null],
       ['Zohid', 'STAFF', 1, null, null, null],
     ]);
     const cols = await v9.prisma.$queryRawUnsafe<Array<{ name: string }>>(
@@ -344,6 +346,36 @@ describe('migration 9 (PIN login, permissions) on a database with users', () => 
     expect(cols.map((c) => c.name)).not.toContain('passwordHash');
     expect((await v9.prisma.order.findUniqueOrThrow({ where: { id: 1 } })).createdById).toBe(2);
     expect((await v9.prisma.session.findUniqueOrThrow({ where: { id: 1 } })).openedById).toBe(1);
+  });
+});
+
+describe('migration 17 (ordersOthers) on a v16 database', () => {
+  it('ticks ordersOthers for admins and cashiers once, never for staff', async () => {
+    const dbFile = newDbFile();
+    const v16 = await openAt(dbFile, { migrations: MIGRATIONS.slice(0, 16) });
+    const insert = (id: number, role: string, perms: string) =>
+      v16.prisma.$executeRawUnsafe(
+        `INSERT INTO "users" ("id", "fullName", "role", "permissions", "updatedAt") VALUES (${id}, 'u${id}', '${role}', '${perms}', CURRENT_TIMESTAMP)`,
+      );
+    await insert(1, 'ADMIN', JSON.stringify(['orders', 'payments', 'users']));
+    await insert(2, 'CASHIER', JSON.stringify(['orders', 'payments']));
+    await insert(3, 'STAFF', JSON.stringify(['orders']));
+    await insert(4, 'CASHIER', JSON.stringify(['ordersOthers', 'orders']));
+    await insert(5, 'ADMIN', 'not json');
+    await v16.prisma.$disconnect();
+
+    const v17 = await openAt(dbFile);
+    expect(v17.migration.applied).toContain('17_orders_others_permission');
+    const rows = await v17.prisma.$queryRawUnsafe<Array<{ id: number; permissions: string }>>(
+      'SELECT "id", "permissions" FROM "users" ORDER BY "id"',
+    );
+    expect(rows.map((r) => r.permissions)).toEqual([
+      JSON.stringify(['orders', 'payments', 'users', 'ordersOthers']),
+      JSON.stringify(['orders', 'payments', 'ordersOthers']),
+      JSON.stringify(['orders']),
+      JSON.stringify(['ordersOthers', 'orders']),
+      'not json',
+    ]);
   });
 });
 

@@ -13,7 +13,13 @@ import { menuImageNames } from './menu/menu-items';
 import { receiptImageNames } from './printing/layouts';
 import { removeLeftoverReceiptFiles } from './printing/printer';
 import { handleImageScheme, registerImageScheme } from './images/images-protocol';
-import { broadcast, broadcastWindows, registerIpcHandlers, servicesFor } from './ipc/register';
+import {
+  broadcast,
+  broadcastWindows,
+  registerIpcHandlers,
+  servicesFor,
+  tableLocks,
+} from './ipc/register';
 import { plainCipher, type Cipher } from './lan/config';
 import { LanService } from './lan/lan-service';
 import { initLogger, logger } from './logger';
@@ -196,6 +202,8 @@ if (!app.requestSingleInstanceLock()) {
       license.start();
     }
     registerIpcHandlers(getPrisma, imageDir, updater, license, lanService);
+    // F13: leases of tills that went quiet run out and the grids see the table free.
+    if (!lanService.isSatellite) tableLocks.start();
     setTimeout(() => void updater.check({ quiet: true }), STARTUP_UPDATE_CHECK_MS).unref();
 
     mainWindow = createWindow();
@@ -213,6 +221,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('will-quit', () => {
+    tableLocks.stop();
     // The clock mark first (it writes to the database), then the database.
     void Promise.allSettled([license?.stop(), lan?.stop()]).finally(() => closeDatabase());
   });

@@ -6,6 +6,7 @@ import { unsupportedUpdater } from '../test-utils/updater';
 import { allowAllLicense } from '../test-utils/license';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
+import { TableLocks } from '../orders/table-locks';
 
 jest.setTimeout(60_000);
 
@@ -24,8 +25,13 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
+/** One main till's table locks, shared by every fake window (F13). */
+const tableLocks = new TableLocks();
+let terminals = 0;
+
 /** A fake window: holds its own login like register.ts does per webContents. */
 function caller(initial: Actor | null = null) {
+  const terminal = `local:${++terminals}`;
   let actor = initial;
   const ctx = (): HandlerContext => ({
     db: t.db,
@@ -33,6 +39,7 @@ function caller(initial: Actor | null = null) {
     setActor: (a) => {
       actor = a;
     },
+    terminal,
     services: {
       appInfo: () => ({ name: 'savdochef', version: '0.0.0-test', isPackaged: false }),
       printer: {
@@ -42,6 +49,7 @@ function caller(initial: Actor | null = null) {
       },
       pickImage: async () => null,
       receiptImage: () => null,
+      tableLocks,
       updater: unsupportedUpdater(),
       license: allowAllLicense(),
     },
@@ -101,6 +109,7 @@ describe('access levels', () => {
         'sessions:lastUnlimited',
         'orders:busyTables',
         'orders:getTable',
+        'orders:tableLocks',
         'residuals:list',
       ],
       users: [
@@ -168,6 +177,8 @@ describe('access levels', () => {
         'orders:save',
         'orders:cancel',
         'orders:moveTable',
+        'orders:lockTable',
+        'orders:unlockTable',
         'orders:get',
         'orders:openList',
         'orders:saveOpen',
@@ -267,6 +278,7 @@ describe('invokeHandler', () => {
         db: broken as never,
         actor: admin,
         setActor: () => undefined,
+        terminal: 'test',
         services: {
           appInfo: () => ({ name: '', version: '', isPackaged: false }),
           printer: {
@@ -276,6 +288,7 @@ describe('invokeHandler', () => {
           },
           pickImage: async () => null,
           receiptImage: () => null,
+          tableLocks: new TableLocks(),
           updater: unsupportedUpdater(),
           license: allowAllLicense(),
         },
@@ -310,6 +323,7 @@ describe('invokeHandler', () => {
         db: broken as never,
         actor: admin,
         setActor: () => undefined,
+        terminal: 'test',
         services: {
           appInfo: () => ({ name: '', version: '', isPackaged: false }),
           printer: {
@@ -319,6 +333,7 @@ describe('invokeHandler', () => {
           },
           pickImage: async () => null,
           receiptImage: () => null,
+          tableLocks: new TableLocks(),
           updater: unsupportedUpdater(),
           license: allowAllLicense(),
         },
@@ -344,6 +359,7 @@ describe('invokeHandler', () => {
               db: t2.db,
               actor: null,
               setActor: () => undefined,
+              terminal: 'test',
               services: {
                 appInfo: () => ({ name: '', version: '', isPackaged: false }),
                 printer: {
@@ -353,6 +369,7 @@ describe('invokeHandler', () => {
                 },
                 pickImage: async () => null,
                 receiptImage: () => null,
+                tableLocks: new TableLocks(),
                 updater: unsupportedUpdater(),
                 license: allowAllLicense(),
               },
@@ -459,7 +476,7 @@ describe('users, PINs and permissions', () => {
     });
     expect(cashier).toMatchObject({
       ok: true,
-      data: { permissions: ['orders', 'payments', 'debt', 'checks', 'shifts'] },
+      data: { permissions: ['orders', 'ordersOthers', 'payments', 'debt', 'checks', 'shifts'] },
     });
     const cashierId = cashier.ok ? cashier.data.id : 0;
 
@@ -508,6 +525,7 @@ describe('kitchen tickets (feature F11)', () => {
       db: t.db,
       actor: admin,
       setActor: () => undefined,
+      terminal: 'test',
       services: {
         appInfo: () => ({ name: 'savdochef', version: '0.0.0-test', isPackaged: false }),
         printer: {
@@ -517,6 +535,7 @@ describe('kitchen tickets (feature F11)', () => {
         },
         pickImage: async () => null,
         receiptImage: () => null,
+        tableLocks: new TableLocks(),
         // Handlers hand over every outcome (empty on a refusal); only real batches count.
         printKitchen: (ids) => {
           if (ids.length) printedBatches.push(ids);
@@ -568,5 +587,204 @@ describe('kitchen tickets (feature F11)', () => {
     });
     expect(refused.ok).toBe(false);
     expect(printedBatches).toHaveLength(1);
+  });
+});
+
+describe('one till per table, own orders only (feature F13)', () => {
+  it('locks across tills, owner rule, admin take-over, logout; the pre-bill stays open to all', async () => {
+    const waiter = caller(staff);
+    const waiter2 = caller(await createUser(t.db, { username: 'staff2', role: 'STAFF' }));
+    const boss = caller(admin);
+    const ok = <T>(r: { ok: true; data: T } | { ok: false; error: { message: string } }): T => {
+      if (!r.ok) throw new Error(r.error.message);
+      return r.data;
+    };
+    const categoryId = (await t.db.category.findFirstOrThrow()).id;
+    const dish = ok(
+      await boss.call('menu:create', { nameUz: 'Lagmon F13', price: '30000', categoryId }),
+    );
+    const open = await t.db.session.findFirst({ where: { status: 'open' } });
+    if (open) {
+      await t.db.sessionItem.create({
+        data: { sessionId: open.id, menuItemId: dish.id, initialQuantity: '10' },
+      });
+    } else {
+      ok(
+        await boss.call('sessions:open', {
+          items: [{ menuItemId: dish.id, initialQuantity: '10' }],
+        }),
+      );
+    }
+    const busy = new Set(ok(await boss.call('orders:busyTables')).map((b) => b.tableNumber));
+    const [table, other] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((n) => !busy.has(n)) as [
+      number,
+      number,
+    ];
+    const lines = [{ menuItemId: dish.id, quantity: 1 }];
+    const inUse = { ok: false, error: { code: 'CONFLICT', details: { reason: 'TABLE_IN_USE' } } };
+
+    // The waiter's till opens the table; every other till is kept out of it.
+    expect(await waiter.call('orders:lockTable', { tableNumber: table })).toEqual({
+      ok: true,
+      data: { held: true },
+    });
+    expect(await waiter2.call('orders:lockTable', { tableNumber: table })).toMatchObject({
+      ok: false,
+      error: { code: 'CONFLICT', details: { reason: 'TABLE_IN_USE', userName: 'staff' } },
+    });
+    expect(await waiter2.call('orders:save', { tableNumber: table, lines })).toMatchObject(inUse);
+    const order = ok(await waiter.call('orders:save', { tableNumber: table, lines }));
+    expect(
+      await waiter2.call('orders:cancel', { tableNumber: table, expectedVersion: order.version }),
+    ).toMatchObject(inUse);
+    expect(ok(await waiter2.call('orders:tableLocks'))).toContainEqual({
+      tableNumber: table,
+      userName: 'staff',
+      mine: false,
+    });
+    // Only an administrator takes a table over.
+    expect(
+      await waiter2.call('orders:lockTable', { tableNumber: table, force: true }),
+    ).toMatchObject({ ok: false, error: { code: 'FORBIDDEN' } });
+
+    // Released: another waiter may look (read-only, no lock) but not change it.
+    ok(await waiter.call('orders:unlockTable', { tableNumber: table }));
+    expect(await waiter2.call('orders:lockTable', { tableNumber: table })).toEqual({
+      ok: true,
+      data: { held: false },
+    });
+    const notOwner = { ok: false, error: { code: 'FORBIDDEN', details: { reason: 'NOT_OWNER' } } };
+    expect(
+      await waiter2.call('orders:save', {
+        tableNumber: table,
+        lines: [{ menuItemId: dish.id, quantity: 4 }],
+        expectedVersion: order.version,
+      }),
+    ).toMatchObject(notOwner);
+    expect(
+      await waiter2.call('orders:cancel', { tableNumber: table, expectedVersion: order.version }),
+    ).toMatchObject(notOwner);
+    expect(
+      await waiter2.call('orders:moveTable', {
+        fromTable: table,
+        toTable: other,
+        expectedVersion: order.version,
+      }),
+    ).toMatchObject(notOwner);
+    await t.db.receiptSettings.upsert({
+      where: { id: 1 },
+      create: { id: 1, restaurantName: 'Cafe' },
+      update: {},
+    });
+    const preBill = await waiter2.call('printing:printPreBill', { orderId: order.id });
+    expect(preBill.ok ? null : preBill.error).toBeNull();
+
+    // The administrator takes over the waiter's open table; the waiter's till is then refused.
+    ok(await waiter.call('orders:lockTable', { tableNumber: table }));
+    expect(await boss.call('orders:lockTable', { tableNumber: table })).toMatchObject(inUse);
+    expect(await boss.call('orders:lockTable', { tableNumber: table, force: true })).toEqual({
+      ok: true,
+      data: { held: true },
+    });
+    expect(
+      await waiter.call('orders:save', {
+        tableNumber: table,
+        lines: [{ menuItemId: dish.id, quantity: 2 }],
+        expectedVersion: order.version,
+      }),
+    ).toMatchObject(inUse);
+    // A move frees the mover's lease; a logout frees everything the till held.
+    const moved = ok(
+      await boss.call('orders:moveTable', {
+        fromTable: table,
+        toTable: other,
+        expectedVersion: order.version,
+      }),
+    );
+    const held = ok(await waiter.call('orders:tableLocks')).map((l) => l.tableNumber);
+    expect(held).not.toContain(table);
+    expect(held).not.toContain(other);
+    ok(await boss.call('orders:lockTable', { tableNumber: other }));
+    expect(await waiter.call('orders:lockTable', { tableNumber: other })).toMatchObject(inUse);
+    ok(await boss.call('auth:logout'));
+    expect(ok(await waiter.call('orders:lockTable', { tableNumber: other }))).toEqual({
+      held: true,
+    });
+    ok(await waiter.call('orders:cancel', { tableNumber: other, expectedVersion: moved.version }));
+    ok(await waiter.call('orders:unlockTable', { tableNumber: other }));
+  });
+});
+
+describe('F13 review: payment and takeaway/delivery through the handlers', () => {
+  it('no payment while another till has the table open; open orders keep to their creator', async () => {
+    const waiter = caller(staff);
+    const waiter2 = caller(await createUser(t.db, { username: 'staff3', role: 'STAFF' }));
+    const boss = caller(admin);
+    const ok = <T>(r: { ok: true; data: T } | { ok: false; error: { message: string } }): T => {
+      if (!r.ok) throw new Error(r.error.message);
+      return r.data;
+    };
+    const categoryId = (await t.db.category.findFirstOrThrow()).id;
+    const dish = ok(
+      await boss.call('menu:create', { nameUz: 'Manti F13', price: '20000', categoryId }),
+    );
+    const open = await t.db.session.findFirstOrThrow({ where: { status: 'open' } });
+    await t.db.sessionItem.create({
+      data: { sessionId: open.id, menuItemId: dish.id, initialQuantity: '10' },
+    });
+    const lines = [{ menuItemId: dish.id, quantity: 1 }];
+    const busy = new Set(ok(await boss.call('orders:busyTables')).map((b) => b.tableNumber));
+    const table = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].find((n) => !busy.has(n))!;
+
+    ok(await waiter.call('orders:lockTable', { tableNumber: table }));
+    const order = ok(await waiter.call('orders:save', { tableNumber: table, lines }));
+    expect(
+      await boss.call('payments:pay', {
+        orderId: order.id,
+        method: 'cash',
+        expectedVersion: order.version,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: 'CONFLICT', details: { reason: 'TABLE_IN_USE' } },
+    });
+    ok(await waiter.call('orders:unlockTable', { tableNumber: table }));
+    expect(
+      await boss.call('payments:pay', {
+        orderId: order.id,
+        method: 'cash',
+        expectedVersion: order.version,
+      }),
+    ).toMatchObject({ ok: true, data: { status: 'completed' } });
+
+    const notOwner = { ok: false, error: { code: 'FORBIDDEN', details: { reason: 'NOT_OWNER' } } };
+    const takeaway = ok(await waiter.call('orders:saveOpen', { orderType: 'TAKEAWAY', lines }));
+    expect(
+      await waiter2.call('orders:saveOpen', {
+        orderId: takeaway.id,
+        orderType: 'TAKEAWAY',
+        lines: [{ menuItemId: dish.id, quantity: 3 }],
+        expectedVersion: takeaway.version,
+      }),
+    ).toMatchObject(notOwner);
+    expect(
+      await waiter2.call('orders:setDeliveryStatus', {
+        orderId: takeaway.id,
+        status: 'ON_THE_WAY',
+        expectedVersion: takeaway.version,
+      }),
+    ).toMatchObject(notOwner);
+    expect(
+      await waiter2.call('orders:cancelOpen', {
+        orderId: takeaway.id,
+        expectedVersion: takeaway.version,
+      }),
+    ).toMatchObject(notOwner);
+    ok(
+      await waiter.call('orders:cancelOpen', {
+        orderId: takeaway.id,
+        expectedVersion: takeaway.version,
+      }),
+    );
   });
 });

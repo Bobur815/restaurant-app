@@ -803,3 +803,94 @@ F10 + F11: 0.8.0 → **0.9.0** (minor, migration 0015). F12: → **0.10.0** (min
 - `npm run release -- minor`: check 44 suites / 603 tests, commit + tag `v0.8.0`, `release/v0.8.0/SavdoChef-Setup-0.8.0.exe` sha256 `f21af54aea4be183a0584599b6eb6254c834d3a074592e85437a82213988b05f`. Not pushed, not uploaded.
 - Upgrade test on this PC: installed 0.6.0 -> silent 0.7.0 -> ran (packaged, `--user-data-dir` = scratch copy of the v13 backup of the cafe data): schema v13, licence check-in OK -> silent 0.8.0 over it -> ran on the same copy: backup `savdochef-v13-*` written, migrated v13 -> v16 (0014, 0015, 0016). Row counts of every existing table identical before/after, orders total identical (50 000); new: printers 1 (main, auto pick as before), kitchen_tickets 0, lan_devices 0, pre_bill_layout 0, settings +2 (picture switches, on). Desktop + Start menu shortcuts point to the 0.8.0 install. This PC now has 0.8.0 installed.
 - Note: the real `%APPDATA%\SavdoChef` database was migrated to v16 by `npm run dev` runs on 2026-11-08 (21:18 v14->v15, 22:55 v15->v16, backups in its backups/ folder); a dev run also switched yo'ldosh tills on there (lan_enabled).
+
+## F13 table lock between tills + waiters keep to their own orders (approved 2026-11-09: all questions = R)
+
+Two parts:
+
+- **A. Table in use.** While a till has a table's order page open, every other till shows the table as "in use by <name>" and cannot open its page. Main also refuses that table's save, cancel and move from any other till, so it is not only the UI.
+- **B. Own orders only.** A waiter cannot edit, cancel or move an order another user opened. The pre-bill ("Hisob") stays allowed for any signed-in user, on any order.
+
+Copy from: F12 (`src/main/lan/server.ts` + `ipc/register.ts`: every call, local or from a satellite, already runs on the main till through `invokeHandler`, so one in-memory lock table on the main till sees every till); `orders:busyTables` + `orders-changed` (grid refresh); the `staleOrder` / `TABLE_BUSY` conflicts (refusal shape); F2 permissions (part B, if Q2 picks a permission).
+
+### Design (recommendations, see questions)
+
+- **Lock = a lease held in memory on the main till** (`src/main/orders/table-locks.ts`, Electron-free class, no database). Key: table number. Value: `{ terminal, userId, userName, expiresAt }`. `terminal` = who holds it: `local:<webContents.id>` for a main-till window, `lan:<deviceId>` for a satellite. Lease 45 s, renewed every 15 s by the open order page. A crashed till, a pulled network cable or a closed window frees the table within 45 s. A main-till restart frees all of them (nothing to clean up in the database).
+- Released at once on: leaving the order page (`destroy`), logout / lock screen (all of that terminal's locks), window closed (`register.ts` already drops the actor there), satellite revoked or its event stream ending (`server.ts` `dropDevice` / stream close).
+- Taking a lock on a table someone else holds -> `CONFLICT` `{ reason: 'TABLE_IN_USE', tableNumber, userName }`, message "5-stol hozir <ism> tomonidan ochilgan". The same terminal re-entering just renews it.
+- `orders:save` / `orders:cancel` / `orders:moveTable` on a table are refused with `TABLE_IN_USE` when another terminal holds it. This main-side guard covers stale screens and the move button on the tables grid. Move also refuses a target table someone else holds, and after a move the lock follows the order to its new table.
+- **Ownership (B)**: an order belongs to its `createdById`, which is already stored (the DTO only carries the name today, so add `createdById`). `orders:save` (existing order), `orders:cancel`, `orders:moveTable`, `orders:saveOpen` (existing), `orders:cancelOpen` and `orders:setDeliveryStatus` refuse with `FORBIDDEN` `{ reason: 'NOT_OWNER' }` ("Bu buyurtmani <ism> ochgan. Uni faqat o'zi o'zgartira oladi") unless the actor is the creator or may handle others' orders (Q2). An order with no creator (legacy import, deleted user) can be changed by anyone with `orders`.
+- Not affected: `printing:printPreBill` (any user, any order, as now), reading orders, kitchen reprint. `payments:pay` depends on Q3.
+
+### Files
+
+shared
+- [ ] `shared/schemas.ts`: `tableLockInput` (`{ tableNumber }`), used by take and release.
+- [ ] `shared/ipc.ts`: channels `orders:lockTable` (take or renew; out `{ expiresAt, changed }`), `orders:unlockTable`, `orders:tableLocks` (read; out `TableLockDto[]`). Access: `orders` permission for all three.
+- [ ] `shared/types.ts`: `TableLockDto` = `{ tableNumber, userName, mine }`; `OrderDto.createdById`; `TableSummaryDto.createdById` + `createdBy` (the grid shows whose order it is).
+- [ ] `shared/permissions.ts` (only if Q2 = permission): `ordersOthers` "Boshqalarning buyurtmalari", ticked by default for ADMIN + CASHIER.
+
+main
+- [ ] `main/orders/table-locks.ts` (new): `TableLocks` class (take / renew / release / releaseTerminal / holderOf / list / move), with an injectable clock for tests.
+- [ ] `main/orders/orders.ts`: `assertCanChange(order, actor)` (owner rule) used by save/cancel/move/saveOpen/cancelOpen/setDeliveryStatus, inside the existing transactions before any write; `createdById` in the DTOs. No change to pricing, stock or totals.
+- [ ] `main/ipc/ipc-safe.ts`: `HandlerContext.terminal: string`; `HandlerServices.tableLocks`.
+- [ ] `main/ipc/register.ts`: `terminal = local:<sender.id>`; release on window close and logout.
+- [ ] `main/lan/server.ts`: `terminal = lan:<deviceId>`; release on revoke, stream close and logout over RPC.
+- [ ] `main/ipc/handlers.ts`: the three channels; lock guard in `orders:save|cancel|moveTable`; `auth:logout` releases the terminal's locks.
+- [ ] `main/ipc/events.ts`: lock and unlock emit `orders-changed { tableNumber }` (the grids already listen). A renewal that changes nothing emits nothing (`changed: false` in the output).
+- [ ] `main/index.ts` / `lan-service.ts`: one `TableLocks` per main till, passed in services. Nothing changes on a satellite (its calls are forwarded).
+
+renderer
+- [ ] `views/order/order-view.ts`: on loading a table page, call `orders.lockTable`. On `TABLE_IN_USE`, show a toast and go back to `/tables`. Renew every 15 s (timer dropped in `destroy`) and release in `destroy`. If a renewal fails (lease lost, e.g. the main till restarted and someone else took the table), show the stale banner and disable save. Owner rule: when `order.createdById` is someone else and the user may not handle others' orders, the page opens read-only (lines, total, pre-bill, and pay per Q3), or is refused (Q4).
+- [ ] `views/tables.ts`: load `orders.tableLocks` with `busyTables`. A table locked by another till shows "Band: <ism> ochgan" with a lock icon; clicking it shows a toast instead of navigating, and its move tool is hidden. The pre-bill tool stays. Others' orders: move tool hidden, creator's name on the card (`table-meta`).
+- [ ] `views/order/move-table-modal.ts`: target tables locked by others are disabled.
+- [ ] Takeaway/delivery strip (`tables.ts`) and `/orders/:id`: owner rule only (locks per Q5).
+- [ ] `styles/`: `.table-card.is-locked` (tokens, light + dark).
+
+### Schema / migration
+
+- None if Q1 = in memory and Q2 = by role. If Q2 = new permission: migration `0017_orders_others_permission.ts`, data only and additive: append `ordersOthers` to the stored list of every ADMIN and CASHIER user (`json_insert`), STAFF unchanged. On installed tills, waiters are restricted right after the update and admins/cashiers keep doing everything. Skill `prisma-migration` + agent `migration-reviewer`.
+
+### Money / stock
+
+- No change to how totals, stock reservations, the stock given back on cancel, or moves are computed. Before: any `orders` user could save/cancel/move any pending order from any till. After: only its creator (or Q2 users) can, and only from the till holding the table. A refused call writes nothing (the checks run before any write in the same transaction). Agent `prisma-reviewer` on `orders.ts`.
+
+### Strings (uz + ru)
+
+`tables.inUse` ("Band: {{name}}" / "Занят: {{name}}"), `tables.inUseToast`, `tables.openedBy`, `order.inUse`, `order.lockLost`, `order.notOwner` ("Bu buyurtmani {{name}} ochgan" / "Этот заказ открыл(а) {{name}}"), `order.readOnly`. Main errors in Uzbek (`TABLE_IN_USE`, `NOT_OWNER`). Permission label if Q2 = permission.
+
+### Tests
+
+- [ ] `table-locks.test.ts`: take / renew / refuse / expire (fake clock) / releaseTerminal / move.
+- [ ] `orders.test.ts`: owner rule for save/cancel/move/saveOpen/cancelOpen/deliveryStatus; legacy order with no creator; a refused call leaves stock and version unchanged.
+- [ ] `ipc.test.ts`: access snapshot for the 3 new channels; lock guard on save/cancel/move with two terminals; pre-bill by a non-owner still prints.
+- [ ] `satellite.e2e.test.ts`: main window holds table 5 -> satellite `lockTable(5)` gets `TABLE_IN_USE`; the satellite's stream closes -> its locks drop; logout drops locks.
+- [ ] `events.test.ts` passes with the new channels.
+
+### Verify in the real app
+
+- `npm run build`, then two instances (main + satellite, separate scratch `userData`, copy of the cafe data, pattern in lessons F12). User A opens table 5 on the main till -> screenshot of the satellite grid shows "Band: A", and clicking it there is refused. A leaves -> the satellite grid frees the table within a second. Kill A's window -> freed in <= 45 s.
+- Waiter B (STAFF) on the satellite: A's order opens read-only (or is refused, Q4), the pre-bill prints (fake printer), and cancel/move are hidden, and refused if forced through `api`.
+- `npm run check`, agents `prisma-reviewer` + `electron-security-reviewer` (+ `migration-reviewer` if Q2 = permission).
+
+### Version
+
+0.8.0 -> **0.9.0** (minor: new feature, and a migration if Q2 = permission). Release only when asked.
+
+### Open questions
+
+1. Lock storage: in memory on the main till with a 45 s lease (R), or a database row (survives a main-till restart, needs a migration)?
+2. Who may still edit/cancel/move anyone's order: a new permission "Boshqalarning buyurtmalari" ticked for ADMIN + CASHIER by default (R), simply role ADMIN/CASHIER, or only ADMIN?
+3. Can anyone with `payments` (a cashier) take payment for another waiter's order (R: yes), or only its creator?
+4. Another waiter's busy table: open read-only (see lines, print pre-bill, pay if allowed) (R), or not open at all (pre-bill only from the grid)?
+5. Should takeaway/delivery orders also be locked while open on a till (R: no, owner rule only), or tables only?
+6. Should an admin be able to take over a table another till holds ("Majburan ochish", frees that till's lock) (R: yes, ADMIN only), or always wait for the lease?
+7. Same user signed in on two tills at once: refuse the second till like anyone else (R), or let the same user in?
+
+### F13 built (2026-11-09, not committed)
+
+- Migration 0017 (data only: `ordersOthers` for ADMIN + CASHIER, once). Lock = `main/orders/table-locks.ts` (in memory on the main till, 45 s lease renewed every 15 s, swept every 5 s, broadcasts `orders-changed` itself). Owner rule `assertMayChange` in `orders.ts`, first check in each change's transaction. Channels `orders:lockTable` / `orders:unlockTable` (`orders`), `orders:tableLocks` (`user`).
+- Changed from the plan: a move frees the mover's lease instead of carrying it (both screens leave the order after a move, so a carried lease only blocked the new table for 45 s).
+- Review fixes: actor required on cancel/move/cancelOpen/setDeliveryStatus (a missing actor no longer skips the rule); owner check before the version check; a PIN login by the same user keeps the till's table; recover/bootstrapPin release the till's tables; the move lease is dropped on commit (`onCommit`); `payments:pay` refused while another till has the table open; a till holds one table at most (taking one lets go of the other); renderer gives back a lock that resolves after the page was left. Satellites are one window each (`lan:<deviceId>`), documented in table-locks.ts.
+- Verified 2026-11-09: `npm run check` parts (typecheck, lint, 45 suites / 623 tests; format clean except the untouched `sessions-view.ts` / `users-view.ts`), `npm run build`. Harness `f13-main.cjs` + `f13-sat.cjs` (scratch copies of the F12 main = cafe data, and of its paired satellite): v16 -> v17 with a `savdochef-v16-*` backup; admin on table 2 -> satellite grid "Band: Bobur ochgan", click and direct URL refused, `lockTable` TABLE_IN_USE; admin leaves -> lock gone, waiter opens table 2 read-only (notice, only Hisob, lines inert + dimmed), Hisob printed on the main XP-80C, forced cancel NOT_OWNER; waiter on table 3 -> admin grid shows it, take-over dialog -> "Majburan ochish" -> waiter's page "Stol boshqa kassada ochildi", save disabled; satellite quit -> its leases gone. Not done: two physical PCs; lease run-out after a crash (45 s) only in unit tests; ru screens not looked at (strings present in both files).
+- Note: released migration 0009 grants admins the whole current `PERMISSIONS` list, so a pre-v9 admin gets `ordersOthers` from 0009 and 0017 skips them (migration-reviewer: acceptable).

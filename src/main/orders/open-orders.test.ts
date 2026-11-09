@@ -234,16 +234,19 @@ describe('takeaway and delivery', () => {
         .minus(before)
         .toFixed(),
     ).toBe('2');
-    const cancelled = await cancelOpenOrder(t.db, {
-      orderId: order.id,
-      expectedVersion: order.version,
-    });
+    const cancelled = await cancelOpenOrder(
+      t.db,
+      { orderId: order.id, expectedVersion: order.version },
+      { actor: cashier },
+    );
     expect(cancelled.status).toBe('cancelled');
     expect(await sold(osh)).toBe(before);
     expect((await listOpenOrders(t.db)).map((o) => o.orderId)).not.toContain(order.id);
 
     const table = (await listBusyTables(t.db))[0]!;
-    await expect(cancelOpenOrder(t.db, { orderId: table.orderId })).rejects.toMatchObject({
+    await expect(
+      cancelOpenOrder(t.db, { orderId: table.orderId }, { actor: cashier }),
+    ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
   });
@@ -255,21 +258,29 @@ describe('takeaway and delivery', () => {
       deliveryAddress: 'Olmazor',
       lines: [{ menuItemId: choy, quantity: 1 }],
     });
-    const onTheWay = await setDeliveryStatus(t.db, {
-      orderId: order.id,
-      status: 'ON_THE_WAY',
-      courierName: 'Bekzod',
-      expectedVersion: order.version,
-    });
+    const onTheWay = await setDeliveryStatus(
+      t.db,
+      {
+        orderId: order.id,
+        status: 'ON_THE_WAY',
+        courierName: 'Bekzod',
+        expectedVersion: order.version,
+      },
+      cashier,
+    );
     expect(onTheWay).toMatchObject({ deliveryStatus: 'ON_THE_WAY', courierName: 'Bekzod' });
     await expect(
-      setDeliveryStatus(t.db, { orderId: order.id, status: 'PREPARING', expectedVersion: 0 }),
+      setDeliveryStatus(
+        t.db,
+        { orderId: order.id, status: 'PREPARING', expectedVersion: 0 },
+        cashier,
+      ),
     ).rejects.toMatchObject({ details: { reason: 'STALE' } });
 
     const paid = await payOrder(t.db, cashier, { orderId: order.id, method: 'cash' });
     expect(paid).toMatchObject({ status: 'completed', deliveryStatus: 'DELIVERED' });
     await expect(
-      setDeliveryStatus(t.db, { orderId: order.id, status: 'ON_THE_WAY' }),
+      setDeliveryStatus(t.db, { orderId: order.id, status: 'ON_THE_WAY' }, cashier),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 
@@ -375,7 +386,11 @@ describe('review fixes (F1-B)', () => {
     });
     expect(changed).toMatchObject({ deliveryFee: '7500.5', totalAmount: '42500.5' });
     expect(dec(changed.totalAmount).minus(changed.deliveryFee).toFixed()).toBe('35000');
-    await cancelOpenOrder(t.db, { orderId: changed.id, expectedVersion: changed.version });
+    await cancelOpenOrder(
+      t.db,
+      { orderId: changed.id, expectedVersion: changed.version },
+      { actor: cashier },
+    );
     await updateSettings(t.db, { deliveryFeeDefault: '0' });
   });
 
@@ -404,7 +419,11 @@ describe('review fixes (F1-B)', () => {
       }),
     ).rejects.toMatchObject({ details: { reason: 'TYPE_DISABLED' } });
     await updateSettings(t.db, { deliveryEnabled: true });
-    await cancelOpenOrder(t.db, { orderId: order.id, expectedVersion: order.version });
+    await cancelOpenOrder(
+      t.db,
+      { orderId: order.id, expectedVersion: order.version },
+      { actor: cashier },
+    );
   });
 
   it('the phone lookup gives only name, address and landmark', async () => {
@@ -430,6 +449,77 @@ describe('review fixes (F1-B)', () => {
     });
     expect(html).toContain('<b>Izoh:</b>');
     expect(html).not.toContain("Mo'ljal");
-    await cancelOpenOrder(t.db, { orderId: order.id, expectedVersion: order.version });
+    await cancelOpenOrder(
+      t.db,
+      { orderId: order.id, expectedVersion: order.version },
+      { actor: cashier },
+    );
+  });
+});
+
+describe('only its creator changes a takeaway or delivery order (F13)', () => {
+  it('another waiter cannot edit, cancel or move its delivery status; a cashier can', async () => {
+    const waiter = await createUser(t.db, { username: 'ofitsiant1' });
+    const other = await createUser(t.db, { username: 'ofitsiant2' });
+    const boss = await createUser(t.db, { username: 'kassir2', role: 'CASHIER' });
+    const notOwner = { code: 'FORBIDDEN', details: { reason: 'NOT_OWNER' } };
+    const before = await sold(choy);
+    const order = await saveOpenOrder(
+      t.db,
+      waiter,
+      saveOpenOrderInput.parse({
+        orderType: 'DELIVERY',
+        customerPhone: '+998 97 222 33 44',
+        deliveryAddress: 'Yunusobod',
+        lines: [{ menuItemId: choy, quantity: 1 }],
+      }),
+    );
+    const edit = (actor: Actor, quantity: number, expectedVersion: number) =>
+      saveOpenOrder(
+        t.db,
+        actor,
+        saveOpenOrderInput.parse({
+          orderId: order.id,
+          orderType: 'DELIVERY',
+          customerPhone: '+998 97 222 33 44',
+          deliveryAddress: 'Yunusobod',
+          lines: [{ menuItemId: choy, quantity }],
+          expectedVersion,
+        }),
+      );
+    await expect(edit(other, 5, order.version)).rejects.toMatchObject(notOwner);
+    await expect(
+      cancelOpenOrder(
+        t.db,
+        { orderId: order.id, expectedVersion: order.version },
+        { actor: other },
+      ),
+    ).rejects.toMatchObject(notOwner);
+    await expect(
+      setDeliveryStatus(
+        t.db,
+        { orderId: order.id, status: 'ON_THE_WAY', expectedVersion: order.version },
+        other,
+      ),
+    ).rejects.toMatchObject(notOwner);
+    expect(await getOrder(t.db, order.id)).toMatchObject({ version: order.version });
+    expect(
+      dec(await sold(choy))
+        .minus(before)
+        .toFixed(),
+    ).toBe('1');
+
+    const edited = await edit(boss, 2, order.version);
+    const sent = await setDeliveryStatus(
+      t.db,
+      { orderId: order.id, status: 'ON_THE_WAY', expectedVersion: edited.version },
+      waiter,
+    );
+    await cancelOpenOrder(
+      t.db,
+      { orderId: order.id, expectedVersion: sent.version },
+      { actor: waiter },
+    );
+    expect(await sold(choy)).toBe(before);
   });
 });

@@ -5,6 +5,7 @@ import type {
   OrderDto,
   StockShortage,
 } from '@shared/types';
+import { TABLE_LOCK_RENEW_MS } from '@shared/table-lock';
 import { dec, sum } from '@shared/utils/decimal';
 import { PORTION_FACTORS, type PortionFactor } from '@shared/utils/order-line';
 import { api, isApiError } from '../../api';
@@ -106,6 +107,21 @@ export const orderView: View = ({ params, navigate }) => {
   let saving = false;
   let stale = false;
   let invalidLine: number | null = null;
+  // Feature F13: this till holds the table while the page is open (renewed by a timer). Someone
+  // else's order the user may not change opens read-only; a table another till took over shows
+  // why nothing can be saved any more.
+  let held = false;
+  let lockLost = false;
+  let readOnly = false;
+  /** Left while a lock call was still on its way: whatever it took is given back at once. */
+  let destroyed = false;
+  const locked = () => readOnly || lockLost;
+  const lockTable = async (force: boolean) => {
+    const got = (await api.orders.lockTable({ tableNumber, ...(force ? { force: true } : {}) }))
+      .held;
+    if (destroyed && got) void api.orders.unlockTable({ tableNumber }).catch(() => undefined);
+    return got;
+  };
 
   const el = document.createElement('section');
   el.className = 'page order-page';
@@ -156,6 +172,7 @@ export const orderView: View = ({ params, navigate }) => {
     chips: HTMLElement;
     dishes: HTMLElement;
   }>(el);
+  const menuPanel = el.querySelector<HTMLElement>('.menu-panel')!;
 
   const saveButton = button(t('order.save'), 'primary');
   const payButton = button(t('order.pay'), 'success');
@@ -220,6 +237,23 @@ export const orderView: View = ({ params, navigate }) => {
           </div>
           ${reload}`,
       );
+    } else if (lockLost) {
+      const back = button(t('app.back'), 'primary');
+      back.addEventListener('click', () => navigate('/tables'));
+      r.notice.className = 'notice notice-warning';
+      r.notice.append(
+        html`${icon('lock')}
+          <div>
+            <strong>${t('order.lockLostTitle')}</strong>
+            <p>${t('order.lockLostBody')}</p>
+          </div>
+          ${back}`,
+      );
+    } else if (readOnly) {
+      r.notice.className = 'notice notice-info';
+      r.notice.append(
+        html`${icon('lock')}<span>${t('order.readOnly', { name: order?.createdBy ?? '—' })}</span>`,
+      );
     } else if (appStore.get().openSession === null) {
       r.notice.className = 'notice notice-warning';
       r.notice.append(html`${icon('warning')}<span>${t('tables.noShift')}</span>`);
@@ -262,11 +296,23 @@ export const orderView: View = ({ params, navigate }) => {
     r.title.textContent = title();
     const unsaved = dirty();
     saveButton.disabled =
-      saving || lines.length === 0 || !unsaved || stale || appStore.get().openSession === null;
+      saving ||
+      lines.length === 0 ||
+      !unsaved ||
+      stale ||
+      locked() ||
+      appStore.get().openSession === null;
     payButton.disabled = saving || !order || unsaved || stale;
-    cancelButton.disabled = saving || !order || stale;
+    cancelButton.disabled = saving || !order || stale || locked();
+    // Someone else's order: only what reads it (pre-bill) and, for a cashier, the payment.
+    saveButton.hidden = readOnly;
+    cancelButton.hidden = readOnly;
+    moveButton.hidden = readOnly;
+    el.classList.toggle('is-readonly', locked());
+    r.lines.inert = locked();
+    menuPanel.inert = locked();
     payButton.title = order && unsaved ? t('order.unsaved') : '';
-    moveButton.disabled = saving || !order || unsaved || stale;
+    moveButton.disabled = saving || !order || unsaved || stale || locked();
     moveButton.title = order && unsaved ? t('order.unsaved') : '';
     // It prints what is saved: unsaved lines would be missing from the guest's total.
     preBillButton.disabled = saving || !order || unsaved || stale;
@@ -631,7 +677,64 @@ export const orderView: View = ({ params, navigate }) => {
     return api.orders.get({ id: target.orderId });
   }
 
+  /**
+   * Takes (or renews) this till's hold on the table. Another till has it: an administrator may
+   * take it over, anyone else goes back to the tables. False = the page must not open.
+   */
+  async function acquire(force = false): Promise<boolean> {
+    try {
+      held = await lockTable(force);
+      lockLost = false;
+      return !destroyed;
+    } catch (error) {
+      if (destroyed) return false;
+      const details = isApiError(error)
+        ? (error.details as Record<string, unknown> | undefined)
+        : undefined;
+      if (isApiError(error, 'CONFLICT') && details?.['reason'] === 'TABLE_IN_USE') {
+        const name = String(details['userName'] ?? '');
+        if (!force && appStore.get().user?.role === 'ADMIN') {
+          const takeOver = await confirmDialog({
+            title: t('order.inUseTitle', { n: tableNumber }),
+            message: t('order.takeOverConfirm', { n: tableNumber, name }),
+            confirmLabel: t('order.takeOver'),
+            danger: true,
+          });
+          if (takeOver && !destroyed) return acquire(true);
+          if (destroyed) return false;
+        } else {
+          toast(t('order.inUse', { n: tableNumber, name }), 'error');
+        }
+      } else {
+        toastError(error);
+      }
+      navigate('/tables');
+      return false;
+    }
+  }
+
+  /** Keeps the hold alive; told the table is someone else's now, the page stops editing. */
+  async function renew() {
+    if (target.kind !== 'table' || !held || lockLost) return;
+    try {
+      held = await lockTable(false);
+    } catch (error) {
+      if (destroyed) return;
+      if (
+        isApiError(error, 'CONFLICT') &&
+        (error.details as Record<string, unknown> | undefined)?.['reason'] === 'TABLE_IN_USE'
+      ) {
+        held = false;
+        lockLost = true;
+        renderHeader();
+        renderLines();
+      }
+      // Anything else (main till briefly unreachable): the next renewal tries again.
+    }
+  }
+
   async function load() {
+    if (target.kind === 'table' && !lockLost && !(await acquire())) return;
     try {
       const [m, c, o, s] = await Promise.all([
         api.menu.list({}),
@@ -645,6 +748,10 @@ export const orderView: View = ({ params, navigate }) => {
       lines = o ? fromOrder(o, m) : [];
       panel?.setOrder(o);
       stale = false;
+      const me = appStore.get().user?.id;
+      readOnly =
+        (target.kind === 'table' && !held && !lockLost) ||
+        (o !== null && o.createdById !== null && o.createdById !== me && !can('ordersOthers'));
       // A paid or cancelled takeaway/delivery order has nothing left to do here.
       if (o && o.status !== 'pending') {
         toast(t('order.closed'), 'info');
@@ -663,6 +770,7 @@ export const orderView: View = ({ params, navigate }) => {
   renderHeader();
   renderLines();
   void load().then(() => r.search.focus());
+  const renewTimer = setInterval(() => void renew(), TABLE_LOCK_RENEW_MS);
 
   const stopEvents = api.events.subscribe(async (e) => {
     const mine =
@@ -670,6 +778,8 @@ export const orderView: View = ({ params, navigate }) => {
       (target.kind === 'table'
         ? e.tableNumber === undefined || e.tableNumber === tableNumber
         : e.orderId === undefined || (order !== null && e.orderId === order.id));
+    // Another till may have taken the table over: the next renewal would say so, ask now.
+    if (mine && target.kind === 'table') void renew();
     if (mine && !saving) {
       // Our own save also announces; only a different version means someone else changed it.
       const fresh = await fetchOrder().catch(() => undefined);
@@ -714,8 +824,11 @@ export const orderView: View = ({ params, navigate }) => {
   return {
     el,
     destroy() {
+      destroyed = true;
       stopEvents();
       stopStore();
+      clearInterval(renewTimer);
+      if (held) void api.orders.unlockTable({ tableNumber }).catch(() => undefined);
     },
     async canLeave() {
       if (!dirty() || lines.length === 0) return true;

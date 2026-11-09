@@ -10,6 +10,7 @@ import type { PrinterService } from '../printing/printer';
 import type { UpdaterService } from '../updater/updater';
 import { ServerError, type LicenseService } from '../license/license-service';
 import type { LanService } from '../lan/lan-service';
+import type { TableLocks } from '../orders/table-locks';
 
 /**
  * Who may call a handler: `public` (setup, login, settings for the login screen), `user` (any
@@ -31,6 +32,8 @@ export interface HandlerServices {
    * awaited: a printer problem must not hold up the order). Absent in tests that do not print.
    */
   printKitchen?(ticketIds: number[]): void;
+  /** Feature F13: who has which table open, across all tills (lives on the main till). */
+  tableLocks: TableLocks;
   /** Feature F12: satellites (main till) and this till's role. Absent in tests without LAN. */
   lan?: LanService;
   updater: UpdaterService;
@@ -55,6 +58,8 @@ export interface HandlerContext {
   /** The caller's logged-in user (per window over IPC, per device token over LAN later). */
   actor: Actor | null;
   setActor(actor: Actor | null): void;
+  /** Which till is calling (F13 table locks): `local:<webContents id>` or `lan:<device id>`. */
+  terminal: string;
   services: HandlerServices;
   log(message: string, error?: unknown): void;
 }

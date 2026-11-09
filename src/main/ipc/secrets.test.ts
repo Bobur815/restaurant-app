@@ -12,6 +12,7 @@ import { invokeHandler, type HandlerContext } from './ipc-safe';
 import { plainCipher } from '../lan/config';
 import { hashSecret } from '../lan/pairing';
 import { LanService } from '../lan/lan-service';
+import { TableLocks } from '../orders/table-locks';
 
 jest.setTimeout(60_000);
 
@@ -182,6 +183,7 @@ function ctx(actor: Actor | null): HandlerContext {
     db: t.db,
     actor,
     setActor: () => undefined,
+    terminal: 'test',
     services: {
       appInfo: () => ({ name: 'x', version: '0', isPackaged: false }),
       printer: {
@@ -191,6 +193,7 @@ function ctx(actor: Actor | null): HandlerContext {
       },
       pickImage: async () => null,
       receiptImage: () => null,
+      tableLocks: new TableLocks(),
       updater: unsupportedUpdater(),
       license: allowAllLicense(),
       lan,

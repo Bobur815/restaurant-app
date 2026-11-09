@@ -162,7 +162,11 @@ describe('a trading day', () => {
   });
 
   it('cancel gives the stock back, frees the table and keeps the order as cancelled', async () => {
-    const cancelled = await cancelTableOrder(t.db, { tableNumber: 1, expectedVersion: 1 });
+    const cancelled = await cancelTableOrder(
+      t.db,
+      { tableNumber: 1, expectedVersion: 1 },
+      { actor: cashier },
+    );
     expect(cancelled.status).toBe('cancelled');
     expect(await getTableOrder(t.db, 1)).toBeNull();
     expect(await sold()).toEqual({ Non: '0', Osh: '0', Shashlik: '0' });
@@ -237,7 +241,11 @@ describe('a trading day', () => {
     await expect(cancelPaidOrder(t.db, unpaid.orderNumber)).rejects.toMatchObject({
       code: 'CONFLICT',
     });
-    await cancelTableOrder(t.db, { tableNumber: 5, expectedVersion: unpaid.version });
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: 5, expectedVersion: unpaid.version },
+      { actor: cashier },
+    );
   });
 
   it('shift edits cannot go below what is sold', async () => {
@@ -273,7 +281,11 @@ describe('a trading day', () => {
     ).rejects.toMatchObject({
       code: 'CONFLICT',
     });
-    await cancelTableOrder(t.db, { tableNumber: 3, expectedVersion: pending.version });
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: 3, expectedVersion: pending.version },
+      { actor: cashier },
+    );
 
     // Over-assigning is refused.
     await expect(
@@ -366,7 +378,9 @@ describe('two devices, same table', () => {
 
 describe('moving an order to another table', () => {
   const move = (fromTable: number, toTable: number, expectedVersion: number) =>
-    moveTableOrder(t.db, moveTableInput.parse({ fromTable, toTable, expectedVersion }));
+    moveTableOrder(t.db, moveTableInput.parse({ fromTable, toTable, expectedVersion }), {
+      actor: cashier,
+    });
 
   it('moves to a free table: same order, lines and stock; the old table is free', async () => {
     const order = await save(2, [{ menuItemId: non, quantity: 2 }]);
@@ -448,7 +462,11 @@ describe('moving an order to another table', () => {
       }),
     ).rejects.toMatchObject({ details: { reason: 'STALE' } });
     await expect(
-      cancelTableOrder(t.db, { tableNumber: 4, expectedVersion: order.version }),
+      cancelTableOrder(
+        t.db,
+        { tableNumber: 4, expectedVersion: order.version },
+        { actor: cashier },
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     const after = (await getTableOrder(t.db, 5))!;
     expect(after).toMatchObject({
@@ -457,5 +475,86 @@ describe('moving an order to another table', () => {
       status: 'pending',
     });
     expect(after.lines).toHaveLength(1);
+  });
+});
+
+describe('only its creator changes an order (F13)', () => {
+  let waiter: Actor;
+  let other: Actor;
+  let boss: Actor; // a cashier: ordersOthers by default
+  beforeAll(async () => {
+    waiter = await createUser(t.db, { username: 'ofitsiant1' });
+    other = await createUser(t.db, { username: 'ofitsiant2' });
+    boss = await createUser(t.db, { username: 'kassir2', role: 'CASHIER' });
+  });
+  const freeTables = async () => {
+    const busy = new Set((await listBusyTables(t.db)).map((b) => b.tableNumber));
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((n) => !busy.has(n));
+  };
+  const saveAs = (actor: Actor, tableNumber: number, quantity: number, expectedVersion?: number) =>
+    saveTableOrder(
+      t.db,
+      actor,
+      saveTableOrderInput.parse({
+        tableNumber,
+        lines: [{ menuItemId: non, quantity }],
+        expectedVersion,
+      }),
+    );
+  const notOwner = { code: 'FORBIDDEN', details: { reason: 'NOT_OWNER', createdBy: 'ofitsiant1' } };
+
+  it('another waiter cannot save, move or cancel it, and nothing changes', async () => {
+    const [a, b] = (await freeTables()) as [number, number];
+    const before = await sold();
+    const order = await saveAs(waiter, a, 1);
+    expect(order.createdById).toBe(waiter.id);
+    const afterSave = await sold();
+
+    await expect(saveAs(other, a, 3, order.version)).rejects.toMatchObject(notOwner);
+    await expect(
+      moveTableOrder(
+        t.db,
+        moveTableInput.parse({ fromTable: a, toTable: b, expectedVersion: order.version }),
+        { actor: other },
+      ),
+    ).rejects.toMatchObject(notOwner);
+    await expect(
+      cancelTableOrder(t.db, { tableNumber: a, expectedVersion: order.version }, { actor: other }),
+    ).rejects.toMatchObject(notOwner);
+    expect(await sold()).toEqual(afterSave);
+    expect(await getTableOrder(t.db, a)).toMatchObject({
+      id: order.id,
+      version: order.version,
+      totalAmount: '5000',
+      createdById: waiter.id,
+    });
+    expect((await listBusyTables(t.db)).find((x) => x.tableNumber === a)).toMatchObject({
+      createdById: waiter.id,
+      createdBy: 'ofitsiant1',
+    });
+
+    // A cashier (ordersOthers) may; the creator may.
+    const edited = await saveAs(boss, a, 2, order.version);
+    expect(edited.totalAmount).toBe('10000');
+    expect(edited.createdById).toBe(waiter.id);
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: a, expectedVersion: edited.version },
+      { actor: waiter },
+    );
+    expect(await sold()).toEqual(before);
+  });
+
+  it('an order without a creator (legacy, removed user) is anyone’s', async () => {
+    const [a] = (await freeTables()) as [number];
+    const order = await saveAs(waiter, a, 1);
+    await t.db.order.update({ where: { id: order.id }, data: { createdById: null } });
+    const edited = await saveAs(other, a, 2, order.version);
+    expect(edited.totalAmount).toBe('10000');
+    await cancelTableOrder(
+      t.db,
+      { tableNumber: a, expectedVersion: edited.version },
+      { actor: other },
+    );
   });
 });

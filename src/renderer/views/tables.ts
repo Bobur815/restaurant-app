@@ -1,7 +1,13 @@
-import type { DiningTableDto, HallDto, OpenOrderSummaryDto, TableSummaryDto } from '@shared/types';
+import type {
+  DiningTableDto,
+  HallDto,
+  OpenOrderSummaryDto,
+  TableLockDto,
+  TableSummaryDto,
+} from '@shared/types';
 import { formatPhone } from '@shared/utils/phone';
 import { api } from '../api';
-import { toastError } from '../components/toast';
+import { toast, toastError } from '../components/toast';
 import { t } from '../i18n';
 import { appStore, can, licensed } from '../store/app';
 import { html } from '../ui/html';
@@ -67,15 +73,23 @@ export const tablesView: View = ({ navigate }) => {
   let busy: TableSummaryDto[] = [];
   let openOrders: OpenOrderSummaryDto[] = [];
   let halls: HallDto[] = [];
+  /** F13: tables another till has open (this till's own holds are not shown). */
+  let locks = new Map<number, TableLockDto>();
   let selected = savedHall();
 
   const card = (n: number, table: DiningTableDto | null, order: TableSummaryDto | undefined) => {
-    const { openSession, language } = appStore.get();
+    const { openSession, language, user } = appStore.get();
+    const lock = locks.get(n);
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = `table-card ${order ? 'is-busy' : 'is-free'}`;
+    b.className = `table-card ${order ? 'is-busy' : 'is-free'}${lock ? ' is-locked' : ''}`;
     b.disabled = !order && openSession === null;
     const label = table?.label ? html`<span class="table-label">${table.label}</span>` : '';
+    const inUse = lock
+      ? html`<span class="table-lock"
+          >${icon('lock', 14)}${t('tables.inUse', { name: lock.userName })}</span
+        >`
+      : '';
     b.append(
       order
         ? html`<span class="table-number">${n}</span>${label}
@@ -83,16 +97,28 @@ export const tablesView: View = ({ navigate }) => {
             <span class="table-total">${formatMoney(order.totalAmount, language)}</span>
             <span class="table-meta"
               >№ ${order.orderNumber} · ${t('tables.lines', { count: order.lineCount })}</span
-            >`
+            >
+            ${order.createdBy
+              ? html`<span class="table-meta"
+                  >${t('tables.openedBy', { name: order.createdBy })}</span
+                >`
+              : ''}
+            ${inUse}`
         : html`<span class="table-number">${n}</span>${label}
-            <span class="table-status">${t('tables.free')}</span>`,
+            <span class="table-status">${t('tables.free')}</span>
+            ${inUse}`,
     );
     b.setAttribute(
       'aria-label',
-      `${t('tables.table', { n })}${table?.label ? ` (${table.label})` : ''}: ${order ? t('tables.busy') : t('tables.free')}`,
+      `${t('tables.table', { n })}${table?.label ? ` (${table.label})` : ''}: ${order ? t('tables.busy') : t('tables.free')}${lock ? `, ${t('tables.inUse', { name: lock.userName })}` : ''}`,
     );
     b.addEventListener('click', () => {
       playClick();
+      // Open on another till: only an administrator goes on (the order page offers a take-over).
+      if (lock && user?.role !== 'ADMIN') {
+        toast(t('order.inUse', { n, name: lock.userName }), 'error');
+        return;
+      }
       navigate(`/tables/${n}`);
     });
     // A busy table gets its tools beside the card (a button cannot hold another button): the
@@ -114,7 +140,11 @@ export const tablesView: View = ({ navigate }) => {
     const tools = document.createElement('div');
     tools.className = 'table-tools';
     tools.append(tool('printer', t('preBill.title'), () => printPreBill(order.orderId)));
-    if (can('orders'))
+    // Moving changes the order: not while another till has it open, and only the creator's own
+    // unless the user may handle others' orders (main checks both again).
+    const mayChange =
+      order.createdById === null || order.createdById === user?.id || can('ordersOthers');
+    if (can('orders') && !lock && mayChange)
       tools.append(
         tool('move', t('moveTable.button'), () => void moveTableModal(n, order.version)),
       );
@@ -279,11 +309,14 @@ export const tablesView: View = ({ navigate }) => {
 
   const load = async () => {
     try {
-      [busy, halls, openOrders] = await Promise.all([
+      let held: TableLockDto[];
+      [busy, halls, openOrders, held] = await Promise.all([
         api.orders.busyTables(),
         api.halls.list(),
         api.orders.openList(),
+        api.orders.tableLocks(),
       ]);
+      locks = new Map(held.filter((l) => !l.mine).map((l) => [l.tableNumber, l]));
       render();
     } catch (error) {
       toastError(error);

@@ -6,6 +6,8 @@
 export const PERMISSIONS = [
   /** Take and edit orders (tables, takeaway, delivery), cancel unpaid ones. */
   'orders',
+  /** Edit, cancel or move an order another user opened (F13; otherwise only the pre-bill). */
+  'ordersOthers',
   /** Close an order: take the payment. */
   'payments',
   /** Sell on debt (nasiya) and take repayments. */
@@ -35,7 +37,7 @@ export const ROLES: readonly Role[] = ['ADMIN', 'CASHIER', 'STAFF'];
 /** The boxes ticked for a new user of each role (decided 2026-10-20). */
 export const ROLE_DEFAULTS: Record<Role, readonly Permission[]> = {
   ADMIN: PERMISSIONS,
-  CASHIER: ['orders', 'payments', 'debt', 'checks', 'shifts'],
+  CASHIER: ['orders', 'ordersOthers', 'payments', 'debt', 'checks', 'shifts'],
   STAFF: ['orders'],
 };
 

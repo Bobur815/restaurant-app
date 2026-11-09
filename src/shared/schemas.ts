@@ -555,6 +555,8 @@ export const deliveryStatusInput = z.object({
 export const phoneLookupInput = z.object({ phone: z.string().trim().max(32) });
 
 export const tableInput = z.object({ tableNumber });
+/** F13: take or renew this till's lease on a table; `force` (administrator) takes it over. */
+export const lockTableInput = z.object({ tableNumber, force: z.boolean().optional() });
 export const cancelTableOrderInput = z.object({
   tableNumber,
   expectedVersion: z.number().int().min(0).optional(),

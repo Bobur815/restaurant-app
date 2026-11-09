@@ -12,6 +12,7 @@ import type { UpdaterService } from '../updater/updater';
 import type { LicenseService } from '../license/license-service';
 import type { LanService } from '../lan/lan-service';
 import { printKitchenTickets } from '../printing/kitchen';
+import { TableLocks } from '../orders/table-locks';
 import { eventsFor } from './events';
 import { HANDLERS } from './handlers';
 import { invokeHandler, toIpcError, type HandlerContext, type HandlerServices } from './ipc-safe';
@@ -27,10 +28,22 @@ const tracked = new WeakSet<WebContents>();
 const sessions = new Map<number, string>();
 let lan: LanService | null = null;
 
+/**
+ * Feature F13: which till has which table open. Used on a main till only (a satellite forwards
+ * every call); its changes reach every window and satellite as orders-changed for that table.
+ */
+export const tableLocks = new TableLocks({
+  onChange: (tables) =>
+    broadcast(tables.map((tableNumber) => ({ type: 'orders-changed', tableNumber }))),
+});
+const localTerminal = (sender: WebContents) => `local:${sender.id}`;
+
 function track(sender: WebContents) {
   if (tracked.has(sender)) return;
   tracked.add(sender);
+  const terminal = localTerminal(sender);
   sender.once('destroyed', () => {
+    tableLocks.releaseTerminal(terminal);
     actors.delete(sender.id);
     sessions.delete(sender.id);
   });
@@ -93,6 +106,7 @@ export function servicesFor(
     receiptImage: (fileName) =>
       license.hasFeature('receiptLogos') ? imageDataUrl(imageDir, fileName) : null,
     printKitchen: (ticketIds) => printKitchenInBackground(getDb, ticketIds),
+    tableLocks,
     updater,
     license,
     ...(lan ? { lan } : {}),
@@ -225,6 +239,7 @@ export function registerIpcHandlers(
       const ctx: HandlerContext = {
         db: getDb(),
         ...store,
+        terminal: localTerminal(event.sender),
         services: servicesFor(event.sender, getDb, imageDir, updater, license),
         log: (message, error) => logger.error(message, error),
       };

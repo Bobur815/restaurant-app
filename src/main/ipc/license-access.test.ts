@@ -4,6 +4,7 @@ import { unsupportedUpdater } from '../test-utils/updater';
 import type { Actor } from '../domain/db';
 import { HANDLERS } from './handlers';
 import { invokeHandler, type HandlerContext } from './ipc-safe';
+import { TableLocks } from '../orders/table-locks';
 
 jest.setTimeout(60_000);
 
@@ -28,6 +29,7 @@ function ctx(
     db: t.db,
     actor,
     setActor: () => undefined,
+    terminal: 'test',
     services: {
       appInfo: () => ({ name: 'x', version: '0', isPackaged: false }),
       printer: {
@@ -37,6 +39,7 @@ function ctx(
       },
       pickImage: async () => null,
       receiptImage: () => null,
+      tableLocks: new TableLocks(),
       updater: unsupportedUpdater(),
       license,
     },

@@ -11,6 +11,7 @@ import {
   shouldServe,
   versionsCompatible,
 } from './serve-policy';
+import { TableLocks } from '../orders/table-locks';
 
 jest.setTimeout(60_000);
 
@@ -111,6 +112,7 @@ describe('LanService (F12)', () => {
     },
     pickImage: async () => null,
     receiptImage: () => null,
+    tableLocks: new TableLocks(),
     updater: unsupportedUpdater(),
     license: allowAllLicense(),
   };

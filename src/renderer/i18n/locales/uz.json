@@ -87,7 +87,9 @@
     "otherTables": "Boshqa stollar",
     "emptyHall": "Bu zalda faol stol yo'q",
     "openOrders": "Olib ketish va yetkazib berish",
-    "noCustomer": "Mijoz ko'rsatilmagan"
+    "noCustomer": "Mijoz ko'rsatilmagan",
+    "inUse": "Band: {{name}} ochgan",
+    "openedBy": "Ochgan: {{name}}"
   },
   "bill": {
     "title": "Hisob va to'lov",
@@ -174,7 +176,14 @@
     "cancelConfirmOpen": "№ {{number}} buyurtmani bekor qilasizmi? Taomlar qoldiqqa qaytariladi.",
     "saveFirst": "Avval o'zgarishlarni saqlang",
     "closed": "Bu buyurtma allaqachon yopilgan",
-    "unlimited": "Cheksiz"
+    "unlimited": "Cheksiz",
+    "inUse": "{{n}}-stol hozir {{name}} tomonidan ochilgan. U yopguncha kuting",
+    "inUseTitle": "{{n}}-stol band",
+    "takeOverConfirm": "{{n}}-stol hozir {{name}} tomonidan boshqa kassada ochilgan. Majburan ochsangiz, u yerda saqlanmagan o'zgarishlar saqlanmaydi. Ochilsinmi?",
+    "takeOver": "Majburan ochish",
+    "lockLostTitle": "Stol boshqa kassada ochildi",
+    "lockLostBody": "Bu buyurtmani endi bu yerda saqlab bo'lmaydi. Stollarga qayting.",
+    "readOnly": "Bu buyurtmani {{name}} ochgan: faqat ko'rish va hisob chiqarish mumkin"
   },
   "payment": {
     "title": "To'lov — Stol {{n}}",
@@ -589,6 +598,7 @@
   },
   "permissions": {
     "orders": "Buyurtma olish",
+    "ordersOthers": "Boshqalarning buyurtmalarini o'zgartirish",
     "payments": "Buyurtmani yopish (to'lov)",
     "debt": "Nasiyaga sotish",
     "checks": "Cheklarni ko'rish",

@@ -329,6 +329,7 @@ export function sampleOrder(lang: Language, type: OrderType = 'DINE_IN'): OrderD
     updatedAt: now,
     completedAt: now,
     createdBy: LABELS[lang]['sample'] ?? null,
+    createdById: null,
     lines: [
       line(1, 'Osh', 'Плов', '2', '28000', '56000', { hasPortions: true, portion: '1' }),
       line(2, 'Osh', 'Плов', '1', '19600', '19600', { hasPortions: true, portion: '0.7' }),

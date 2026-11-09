@@ -10,8 +10,9 @@ import type {
 import type { OpenOrderSummaryDto, OrderDto, PaymentMethod, TableSummaryDto } from '@shared/types';
 import { dec, roundMoney, sum, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
 import { LineError, priceLine } from '@shared/utils/order-line';
+import { hasPermission } from '@shared/permissions';
 import { decStr, iso, isoOrNull, type Actor, type Db, type DbOrTx, type Tx } from '../domain/db';
-import { conflict, invalid, isUniqueViolation, notFound } from '../domain/errors';
+import { AppError, conflict, invalid, isUniqueViolation, notFound } from '../domain/errors';
 import { upsertCustomer } from '../customers/customers';
 import { requireOpenSessionId } from '../sessions/sessions';
 import { getSettings } from '../settings/settings';
@@ -53,6 +54,7 @@ export function toOrderDto(o: OrderRow): OrderDto {
     updatedAt: iso(o.updatedAt),
     completedAt: isoOrNull(o.completedAt),
     createdBy: o.createdBy?.fullName ?? null,
+    createdById: o.createdById,
     customerId: o.customerId,
     customerName: o.customerName,
     customerPhone: o.customerPhone,
@@ -113,16 +115,42 @@ export async function getTableOrder(db: DbOrTx, tableNumber: number): Promise<Or
   return o ? toOrderDto(o) : null;
 }
 
+/** F13: whether the actor may change the table's unpaid order (true when the table is free). */
+export async function mayChangeTableOrder(
+  db: DbOrTx,
+  tableNumber: number,
+  actor: Actor,
+): Promise<boolean> {
+  const order = await db.order.findUnique({
+    where: { pendingTable: tableNumber },
+    select: { createdById: true },
+  });
+  return !order || mayChange(order, actor);
+}
+
+/** F13: the table of an unpaid dine-in order, or null (any other order, or none). */
+export async function tableOfPendingOrder(db: DbOrTx, orderId: number): Promise<number | null> {
+  const o = await db.order.findUnique({
+    where: { id: orderId },
+    select: { status: true, orderType: true, tableNumber: true },
+  });
+  return o && o.status === 'pending' && o.orderType === 'DINE_IN' && o.tableNumber > 0
+    ? o.tableNumber
+    : null;
+}
+
 /** Busy tables (one unpaid order each) for the table grid. */
 export async function listBusyTables(db: DbOrTx): Promise<TableSummaryDto[]> {
   const rows = await db.order.findMany({
     where: { status: 'pending', orderType: 'DINE_IN' },
-    include: { _count: { select: { items: true } } },
+    include: { _count: { select: { items: true } }, createdBy: { select: { fullName: true } } },
     orderBy: { tableNumber: 'asc' },
   });
   return rows.map((o) => ({
     tableNumber: o.tableNumber,
     orderId: o.id,
+    createdById: o.createdById,
+    createdBy: o.createdBy?.fullName ?? null,
     version: o.version,
     orderNumber: o.orderNumber,
     totalAmount: decStr(o.totalAmount),
@@ -149,8 +177,38 @@ export type TicketSink = number[];
 
 /** Who made a cancel or move (named on the kitchen ticket) and where its tickets go. */
 export interface ChangeContext {
-  actor?: Actor | null;
+  actor: Actor;
   tickets?: TicketSink;
+  /** Called once the change has committed (F13: the handler moves the table lock). */
+  onCommit?: () => void;
+}
+
+/** Who opened an order, as the owner rule needs it. */
+const creator = { createdBy: { select: { fullName: true } } } as const;
+
+type Owned = { createdById: number | null; createdBy?: { fullName: string | null } | null };
+
+/**
+ * Feature F13: an order is changed (lines, cancel, move, delivery status) only by the user who
+ * opened it, or by one allowed to handle others' orders (`ordersOthers`). An order without a
+ * creator (legacy import, removed user) is anyone's. Reading and the pre-bill are not changes.
+ */
+export function mayChange(order: Owned, actor: Actor): boolean {
+  return (
+    order.createdById === null ||
+    order.createdById === actor.id ||
+    hasPermission(actor, 'ordersOthers')
+  );
+}
+
+/** Refuses a change by someone else (mayChange): inside the change's transaction, first. */
+export function assertMayChange(order: Owned, actor: Actor): void {
+  if (mayChange(order, actor)) return;
+  const name = order.createdBy?.fullName ?? 'boshqa foydalanuvchi';
+  throw new AppError('FORBIDDEN', `Bu buyurtmani ${name} ochgan. Uni faqat o'zi o'zgartira oladi`, {
+    reason: 'NOT_OWNER',
+    createdBy: order.createdBy?.fullName ?? null,
+  });
 }
 
 function staleOrder(currentVersion: number | null) {
@@ -248,10 +306,12 @@ export async function saveTableOrder(
       const sessionId = await requireOpenSessionId(tx);
       const existing = await tx.order.findUnique({
         where: { pendingTable: input.tableNumber },
-        include: { items: true },
+        include: { items: true, ...creator },
       });
 
       if (existing) {
+        // Someone else's order is refused first: reloading it would not help.
+        assertMayChange(existing, actor);
         if (input.expectedVersion !== existing.version) throw staleOrder(existing.version);
         if (existing.sessionId !== sessionId) throw conflict('Buyurtma oldingi smenaga tegishli');
       } else if (input.expectedVersion !== undefined) {
@@ -366,19 +426,20 @@ async function cancelPending(
 export async function cancelTableOrder(
   db: Db,
   input: z.infer<typeof tableInput> & { expectedVersion?: number },
-  change: ChangeContext = {},
+  change: ChangeContext,
 ): Promise<OrderDto> {
   const { id, ticketIds } = await db.$transaction(async (tx) => {
     const order = await tx.order.findUnique({
       where: { pendingTable: input.tableNumber },
-      include: { items: true, _count: { select: { payments: true } } },
+      include: { items: true, _count: { select: { payments: true } }, ...creator },
     });
     if (!order) throw notFound('Bekor qilinadigan buyurtma');
+    assertMayChange(order, change.actor);
     await cancelPending(tx, order, input.expectedVersion);
     const ticketIds = await writeKitchenTickets(tx, {
       orderId: order.id,
       kind: 'CANCEL',
-      actor: change.actor ?? null,
+      actor: change.actor,
       oldItems: order.items,
       newItems: [],
     });
@@ -397,7 +458,7 @@ export async function cancelTableOrder(
 export async function moveTableOrder(
   db: Db,
   input: MoveTableInput,
-  change: ChangeContext = {},
+  change: ChangeContext,
 ): Promise<OrderDto> {
   const busy = () =>
     conflict(`${input.toTable}-stol band. Bo'sh stolni tanlang`, {
@@ -408,10 +469,11 @@ export async function moveTableOrder(
     const { id, ticketIds } = await db.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { pendingTable: input.fromTable },
-        include: { items: true },
+        include: { items: true, ...creator },
       });
       // Paid, cancelled or moved elsewhere since it was loaded.
       if (!order) throw staleOrder(null);
+      assertMayChange(order, change.actor);
       if (order.version !== input.expectedVersion) throw staleOrder(order.version);
 
       const table = await tx.diningTable.findFirst({
@@ -434,13 +496,14 @@ export async function moveTableOrder(
       const ticketIds = await writeKitchenTickets(tx, {
         orderId: order.id,
         kind: 'MOVE',
-        actor: change.actor ?? null,
+        actor: change.actor,
         oldItems: [],
         newItems: order.items,
         fromTable: input.fromTable,
       });
       return { id: order.id, ticketIds };
     });
+    change.onCommit?.();
     change.tickets?.push(...ticketIds);
     return getOrder(db, id);
   } catch (error) {
@@ -453,13 +516,19 @@ export async function moveTableOrder(
 // ── Takeaway and delivery (feature F1-B) ─────────────────────────────────────────────────────
 
 /** Loads a pending takeaway/delivery order for a change, checking type, state and version. */
-async function openOrderForChange(tx: Tx, orderId: number, expectedVersion: number | undefined) {
+async function openOrderForChange(
+  tx: Tx,
+  orderId: number,
+  expectedVersion: number | undefined,
+  actor: Actor,
+) {
   const order = await tx.order.findUnique({
     where: { id: orderId },
-    include: { items: true, _count: { select: { payments: true } } },
+    include: { items: true, _count: { select: { payments: true } }, ...creator },
   });
   if (!order) throw notFound('Buyurtma');
   if (order.orderType === 'DINE_IN') throw conflict('Bu stol buyurtmasi');
+  assertMayChange(order, actor);
   // Paid or cancelled on another device since it was loaded.
   if (order.status !== 'pending') throw staleOrder(order.version);
   if (expectedVersion !== undefined && expectedVersion !== order.version)
@@ -484,7 +553,7 @@ export async function saveOpenOrder(
     const existing =
       input.orderId === undefined
         ? null
-        : await openOrderForChange(tx, input.orderId, input.expectedVersion);
+        : await openOrderForChange(tx, input.orderId, input.expectedVersion, actor);
 
     if (existing) {
       if (input.expectedVersion === undefined) throw staleOrder(existing.version);
@@ -604,15 +673,15 @@ export async function listOpenOrders(db: DbOrTx): Promise<OpenOrderSummaryDto[]>
 export async function cancelOpenOrder(
   db: Db,
   input: z.infer<typeof orderIdInput>,
-  change: ChangeContext = {},
+  change: ChangeContext,
 ): Promise<OrderDto> {
   const ticketIds = await db.$transaction(async (tx) => {
-    const order = await openOrderForChange(tx, input.orderId, input.expectedVersion);
+    const order = await openOrderForChange(tx, input.orderId, input.expectedVersion, change.actor);
     await cancelPending(tx, order, input.expectedVersion);
     return writeKitchenTickets(tx, {
       orderId: order.id,
       kind: 'CANCEL',
-      actor: change.actor ?? null,
+      actor: change.actor,
       oldItems: order.items,
       newItems: [],
     });
@@ -621,13 +690,17 @@ export async function cancelOpenOrder(
   return getOrder(db, input.orderId);
 }
 
-/** Preparing -> on the way -> delivered, with the courier's name (any user; no money moves). */
+/**
+ * Preparing -> on the way -> delivered, with the courier's name (no money moves). Its creator or
+ * a user with `ordersOthers` (F13).
+ */
 export async function setDeliveryStatus(
   db: Db,
   input: z.infer<typeof deliveryStatusInput>,
+  actor: Actor,
 ): Promise<OrderDto> {
   await db.$transaction(async (tx) => {
-    const order = await openOrderForChange(tx, input.orderId, input.expectedVersion);
+    const order = await openOrderForChange(tx, input.orderId, input.expectedVersion, actor);
     if (order.orderType !== 'DELIVERY') throw conflict('Bu yetkazib berish buyurtmasi emas');
     const res = await tx.order.updateMany({
       where: { id: order.id, version: order.version, status: 'pending' },
