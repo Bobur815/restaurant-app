@@ -41,9 +41,17 @@ export function payOrderModal(order: OrderDto): Promise<PaidResult | null> {
       onChange: () => {
         if (confirm) confirm.disabled = !editor.canSubmit();
       },
+      // Guest cards sit two per row: the window widens for them (F14).
+      onMode: (mode) => {
+        const box = modal?.dialog.querySelector('.modal');
+        box?.classList.toggle('modal-lg', mode === 'guests');
+        box?.classList.toggle('modal-md', mode !== 'guests');
+      },
     });
+    // Set right below; the editor refers to it when the mode changes.
+    let modal: ReturnType<typeof openModal> | null = null;
 
-    const modal = openModal({
+    modal = openModal({
       title:
         order.tableNumber !== null
           ? t('payment.title', { n: order.tableNumber })
@@ -68,20 +76,22 @@ export function payOrderModal(order: OrderDto): Promise<PaidResult | null> {
           onClick: async () => {
             editor.clearErrors();
             if (!editor.canSubmit()) return false;
-            const { change } = editor.state();
+            const guests = editor.guests();
+            const change = guests ? guests.change : editor.state().change;
             try {
               paid = await api.payments.pay({
                 orderId: order.id,
                 expectedVersion: order.version,
                 ...editor.result(),
               });
+              const done = dec(change).gt(0)
+                ? t('payment.doneChange', {
+                    amount: formatMoney(order.totalAmount, lang),
+                    change: formatMoney(change, lang),
+                  })
+                : t('payment.done', { amount: formatMoney(order.totalAmount, lang) });
               toast(
-                dec(change).gt(0)
-                  ? t('payment.doneChange', {
-                      amount: formatMoney(order.totalAmount, lang),
-                      change: formatMoney(change, lang),
-                    })
-                  : t('payment.done', { amount: formatMoney(order.totalAmount, lang) }),
+                guests ? `${done} ${t('payment.doneGuests', { count: guests.count })}` : done,
                 'success',
               );
             } catch (e) {

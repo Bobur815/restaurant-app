@@ -117,9 +117,8 @@ const setupDetails: View = ({ navigate }) => {
             required: true,
             autocomplete: 'name',
           })}
-          ${adminPhone.el} ${pinField('admin.pin', t('setup.pin'))}
+          ${adminPhone.el} ${pinField('admin.pin', t('setup.pin'), t('setup.pinHint'))}
           ${pinField('pinRepeat', t('setup.pinRepeat'))}
-          <p class="muted small">${t('setup.pinHint')}</p>
         </fieldset>
         <fieldset>
           <legend>${t('setup.restaurantSection')}</legend>

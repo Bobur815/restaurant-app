@@ -894,3 +894,113 @@ renderer
 - Review fixes: actor required on cancel/move/cancelOpen/setDeliveryStatus (a missing actor no longer skips the rule); owner check before the version check; a PIN login by the same user keeps the till's table; recover/bootstrapPin release the till's tables; the move lease is dropped on commit (`onCommit`); `payments:pay` refused while another till has the table open; a till holds one table at most (taking one lets go of the other); renderer gives back a lock that resolves after the page was left. Satellites are one window each (`lan:<deviceId>`), documented in table-locks.ts.
 - Verified 2026-11-09: `npm run check` parts (typecheck, lint, 45 suites / 623 tests; format clean except the untouched `sessions-view.ts` / `users-view.ts`), `npm run build`. Harness `f13-main.cjs` + `f13-sat.cjs` (scratch copies of the F12 main = cafe data, and of its paired satellite): v16 -> v17 with a `savdochef-v16-*` backup; admin on table 2 -> satellite grid "Band: Bobur ochgan", click and direct URL refused, `lockTable` TABLE_IN_USE; admin leaves -> lock gone, waiter opens table 2 read-only (notice, only Hisob, lines inert + dimmed), Hisob printed on the main XP-80C, forced cancel NOT_OWNER; waiter on table 3 -> admin grid shows it, take-over dialog -> "Majburan ochish" -> waiter's page "Stol boshqa kassada ochildi", save disabled; satellite quit -> its leases gone. Not done: two physical PCs; lease run-out after a crash (45 s) only in unit tests; ru screens not looked at (strings present in both files).
 - Note: released migration 0009 grants admins the whole current `PERMISSIONS` list, so a pre-v9 admin gets `ordersOthers` from 0009 and 0017 skips them (migration-reviewer: acceptable).
+- Committed `103b6bb` (2026-11-09).
+
+## F14 pay per guest, payment window layout, info hints (approved 2026-11-09: 1-6 = R; 7 = every grey hint paragraph in forms becomes an (i) hint)
+
+Three parts:
+
+- **A. Pay per guest ("Kishilar bo'yicha").** The bill is divided between N guests; each guest pays a share with their own method (cash with their own change, card, Click). All in the one payment window, confirmed once.
+- **B. Payment window layout** (user screenshot 2026-11-09 12:44): method buttons leave an empty 4th column when debt is off; "Olingan summa" sits on the buttons with no gap; "Qaytim" is lower than "Olingan summa" (the grid aligns bottoms and the amount hint pushes the input up); "Bo'lib to'lash" floats alone above the print box.
+- **C. Info hints in the dish form.** An (i) button next to "Tannarx (ixtiyoriy)" and "Printer"; `menu.costHint` / `printers.dishPrinterHint` move from the paragraphs under the fields into a tooltip shown on hover, keyboard focus, and tap (the till is a touch screen).
+
+Copy from: the tender editor (`views/order/tender-editor.ts`: method buttons, received + change, split rows with "Qolgan", debt box) and its rules `shared/utils/split-payment.ts` (`settleTenders`, the same code main runs); `components/forms.ts` `wrapField` (label) for the hint.
+
+### Design (recommendations, see questions)
+
+- **Main and database untouched (if Q4/Q5 = R):** the guests are a way of entering tenders. On confirm, every guest's share is added up per method and sent as today's `tenders` (one payment row per method). Cash is sent as the cash shares; each guest's change is shown on their card only. `settleTenders` checks the result as now. No new IPC channel, no migration.
+- **Modes:** a segmented control at the top replaces the "Bo'lib to'lash" button: "Bitta usul" (one method) · "Usullar bo'yicha" (today's split by method) · "Kishilar bo'yicha" (per guest). The last two only when split payment is on in settings.
+- **Per guest:**
+  - A − / N / + stepper (2…20).
+  - Equal shares in whole so'm; the remainder of the division goes to the first guests (25 000 / 3 = 8 334 · 8 333 · 8 333). Shares always add up to the total exactly (Decimal, `shared/utils/guest-split.ts`).
+  - Each guest is a card: "1-mehmon", the share, method chips (Naqd / Karta / Click), and for cash "Berdi" (received, optional) and "Qaytim" (change).
+  - A share can be typed over: the guest is then "fixed" (pin icon), and the rest is divided again among the guests not fixed. Over the total is refused ("Ulushlar jami summadan oshib ketdi").
+  - A footer shows "Jami ulushlar / Qolgan" and per-method totals ("Naqd 16 667 · Karta 8 333"), which are what is stored.
+- **Debt per guest (Q3):** at most one guest pays on debt, using the existing debt customer form.
+- **Layout fixes (B):**
+  - Method grid columns = the number of methods shown.
+  - The single-method box gets the editor's gap.
+  - "Olingan summa" and "Qaytim" are aligned at the top, with "Qaytim" styled like a field label.
+  - The print checkbox sits under a divider.
+  - The modal goes to `lg` only in per-guest mode, so cards sit 2 per row.
+- **Info hint (C):**
+  - `components/info-hint.ts`: `<button class="info-hint" aria-label="…" aria-describedby>` with an `info` icon and a `<span role="tooltip">`.
+  - Shown by CSS on `:hover` / `:focus-visible`; a tap toggles `.is-open`, and Esc or a tap outside closes it.
+  - Placed above the button, kept inside the modal. No inline style (CSP).
+  - `field` / `selectField` get an optional `info` text that puts the button in the label.
+
+### Files
+
+shared
+- [ ] `shared/utils/guest-split.ts` (new): `equalShares(total, n)`, `rebalance(total, guests)` (fixed shares kept, the rest divided again), `guestTenders(guests)` -> `TenderLine[]` (per method, summed). Pure Decimal, no float.
+
+main
+- [ ] Nothing (if Q4/Q5 = R).
+
+renderer
+- [ ] `views/order/tender-editor.ts`: mode control (3 modes), per-guest box built from a new `views/order/guest-split.ts` (cards, stepper, rebalance), `lines()` from `guestTenders` in that mode; debt limited to one guest.
+- [ ] `views/order/payment-modal.ts`: modal size follows the mode; the done toast mentions "3 kishiga bo'lindi".
+- [ ] `components/info-hint.ts` (new) + `components/forms.ts` (`info` option on `field`/`selectField`/`wrapField`).
+- [ ] `views/menu/menu-modals.ts`: `info: t('menu.costHint')` on costPrice, `info: t('printers.dishPrinterHint')` on printerId; drop the two `<p class="muted small">`.
+- [ ] `styles/views.css`: payment fixes, `.pay-modes`, `.guest-grid`, `.guest-card`; `styles/components.css`: `.info-hint`, tooltip (tokens, light + dark).
+
+### Schema / migration
+
+- None (if Q4 = R). If the receipt should say "N kishiga bo'lindi": a nullable `orders.guestCount` (additive migration 0018) plus a receipt line.
+
+### Money / stock
+
+- Stock: unchanged.
+- Money: what is stored is unchanged in kind, still one payment row per method for the whole check.
+  - Before: per-method amounts were typed by hand.
+  - After: they can also come from guest shares that always add up to the total exactly.
+  - Example: 25 000 split between 3 guests, guest 1 paying cash with 10 000 and the others card: stored cash 8 334 and card 16 666. The change shown is 1 666 for guest 1.
+- `settleTenders` is not changed.
+
+### Strings (uz + ru)
+
+`payment.modeSingle` ("Bitta usul" / "Одним способом"), `payment.modeMethods` ("Usullar bo'yicha" / "По способам"), `payment.modeGuests` ("Kishilar bo'yicha" / "По гостям"), `payment.guests` ("Mehmonlar soni" / "Количество гостей"), `payment.guest` ("{{n}}-mehmon" / "Гость {{n}}"), `payment.share` ("Ulushi" / "Доля"), `payment.gave` ("Berdi" / "Дал"), `payment.sharesOver`, `payment.sharesLeft`, `payment.fixedShare`, `payment.resetShares` ("Teng bo'lish" / "Поровну"), `payment.doneGuests`, `app.moreInfo` ("Batafsil" / "Подробнее"). The existing `splitOn`/`splitOff` are dropped if unused.
+
+### Tests
+
+- [ ] `shared/utils/guest-split.test.ts`:
+  - equal shares (25 000 / 3, 100 000 / 7, a free check, 2 decimals);
+  - rebalance with fixed shares;
+  - over-total refused;
+  - per-method sums;
+  - `settleTenders(guestTenders(...))` = none for every case.
+- [ ] Tender editor DOM tests if the existing setup has them (`modal.test.ts` pattern), else covered by the harness.
+- [ ] `info-hint` DOM test: aria wiring, tap toggles, Esc closes.
+
+### Verify in the real app
+
+- `npm run build`, harness on a scratch copy of the cafe data:
+  - payment window: single mode, with and without debt (3 and 4 buttons);
+  - split by method;
+  - per guest: 3 guests, cash with change, card, one share typed over, then pay; check the stored payment rows and the receipt (fake printer);
+  - dish form: the hint on hover and on tap.
+- Screenshots in uz + ru, light + dark, looked at.
+- `npm run check`; agent `electron-security-reviewer` (new component, no `innerHTML`).
+
+### Version
+
+Goes into the unreleased 0.9.0 (minor, already due to migration 0017). Release only when asked.
+
+### Open questions
+
+1. How shares are set: equal shares, each one editable, with the rest re-divided among the others (R), or also "by dishes" (tap order lines to give them to a guest)?
+2. Rounding of equal shares: whole so'm with the remainder on the first guests (R), or round up to 1 000 so'm with the last guest paying the difference?
+3. Debt in per-guest mode: at most one guest on debt (R), no debt at all in this mode, or any guest on debt (each with their own customer, needs a change in main)?
+4. Receipt: one receipt as today, with payment methods summed (R), add a line "3 kishiga bo'lindi, har biri ~8 334" (needs a migration), or also a small slip per guest?
+5. Flow: all guests settled in one window and confirmed once (R), or guest by guest, with the order staying open until the last guest pays (partial payments on an unpaid order: a bigger change in main and the shift cash)?
+6. Modes as a segmented control at the top, "Bitta usul · Usullar bo'yicha · Kishilar bo'yicha", replacing the "Bo'lib to'lash" button (R)? Or keep the button and add "Kishilarga bo'lish" next to it?
+7. Should the info hint also replace the other muted hint paragraphs in forms (e.g. settings pages) (R: no, only these two now), or everywhere with the same pattern?
+
+### F14 built (2026-11-09, not committed)
+
+- A: `shared/utils/guest-split.ts` (equal shares in whole so'm, remainder on the first guests; typed shares fixed, the rest divided again; per-method sums; per-guest change) + `views/order/guest-split.ts` (stepper 2-20, guest cards with share, method chips, "Berdi"/"Qaytim" for cash, "Teng bo'lish", footer with per-method totals). The tender editor has three modes in a segmented control (Bitta usul · Usullar bo'yicha · Kishilar bo'yicha), replacing the "Bo'lib to'lash" button; the window widens to `lg` in per-guest mode; the check edit keeps two modes (`guests: false`). Main, IPC and database unchanged: shares go as `tenders`, cash = the shares (each guest's change only shown). At most one guest on debt (debt chip disabled for the others).
+- B: method buttons as many columns as methods; gap between buttons and "Olingan summa"; "Qaytim" aligned with it; print choice under a full-width line.
+- C: `components/info-hint.ts` (button + role=tooltip; hover, keyboard focus, tap; Esc / tap outside / blur close; one open at a time; opens left when there is no room on the right) + `info` option on `field`/`selectField`/`textareaField`, `pinField(name, label, info)`, `pageHeader(withInfo(...))`. Converted: dish form cost price and printer; cash in/out amount; halls page; LAN main/satellite card titles; order types page + pictures subtitle; payments page; main/extra printer titles; receipt shared + pre-bill titles; system language field; update page; relink button; setup PIN; profile account title; users PIN legend. Kept visible on purpose (instructions to read while doing it, or status): LAN join steps and pairing steps, setup "join a main till" offer, privacy notice and activation-code help in restaurant linking, move-table instruction, plan notes, empty states, "checked at" lines.
+- Tests: guest-split (13), info-hint DOM (4); `npm run check` parts green (47 suites / 640 tests; format clean except the untouched `sessions-view.ts`).
+- Real app (harness `f14.cjs`, scratch copy of the cafe data; `npx electron-vite build` because a dev run of the app held the Prisma engine DLL): payment window single (3 equal buttons, labels aligned), by method, per guest 3 guests 8 000 -> 2 667/2 667/2 666, guest 3 typed 5 000 -> others 1 500, guest 1 cash gave 20 000 -> change shown, over the total refused, paid -> stored cash/card/Click per method, receipt printed with the methods; dish form hint on hover and tap, no horizontal overflow; settings printer and order types hints; uz light + ru dark screenshots looked at.
+- Security review (electron-security-reviewer): no high findings; fixed: Esc on an open hint now `preventDefault`s so the native `<dialog>` around it stays open (verified in the app: first Esc closes the hint only, the second closes the form); a hint removed while open drops its document listeners; the "gave less" guest index comes from one helper. 47 suites / 641 tests.

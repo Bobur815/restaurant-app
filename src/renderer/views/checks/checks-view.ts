@@ -318,6 +318,8 @@ export const checksView: View = () => {
     const editor = createTenderEditor({
       total: order.totalAmount,
       orderCustomer: null,
+      // Correcting a check: per method only (who paid what is not kept).
+      guests: false,
       initial: {
         tenders: order.payments.map((p) => ({
           method: p.method as TenderMethod,

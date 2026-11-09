@@ -4,8 +4,15 @@ import { field, setFieldError, value } from './forms';
 export const PIN_LENGTH = 4;
 
 /** A 4-digit PIN input for the forms (recovery, first PIN, users). */
-export function pinField(name: string, label: string): HTMLElement {
-  const el = field({ name, label, type: 'password', inputmode: 'numeric', autocomplete: 'off' });
+export function pinField(name: string, label: string, info?: string): HTMLElement {
+  const el = field({
+    name,
+    label,
+    type: 'password',
+    inputmode: 'numeric',
+    autocomplete: 'off',
+    ...(info ? { info } : {}),
+  });
   const input = el.querySelector('input')!;
   input.maxLength = PIN_LENGTH;
   input.classList.add('pin-input');

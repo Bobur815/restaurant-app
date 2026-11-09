@@ -7,6 +7,7 @@ import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
 import type { View } from '../types';
+import { withInfo } from '../../components/info-hint';
 
 /**
  * Everyone's own account: name and phone. The PIN is set by whoever manages users (so nobody
@@ -27,16 +28,14 @@ export const profileView: View = () => {
   account.className = 'card form-card';
   account.noValidate = true;
   account.append(
-    html`<h2 class="card-title">${t('profile.account')}</h2>
+    html`<h2 class="card-title">${withInfo(t('profile.account'), t('profile.pinHint'))}</h2>
       ${field({
         name: 'fullName',
         label: t('users.fullName'),
         value: me.fullName,
         autocomplete: 'name',
       })}
-      ${phone.el}
-      <p class="muted small">${t('profile.pinHint')}</p>
-      ${formError()}${submit}`,
+      ${phone.el} ${formError()}${submit}`,
   );
   account.addEventListener('submit', async (e) => {
     e.preventDefault();

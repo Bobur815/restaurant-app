@@ -24,6 +24,7 @@ import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
+import { withInfo } from '../../components/info-hint';
 
 type LayoutValues = Omit<ReceiptLayoutDto, 'orderType' | 'saved'>;
 /** A tab: one order type's receipt, or the pre-bill (feature F9), one for every type. */
@@ -153,8 +154,9 @@ export const receiptSection: View = () => {
     shared.className = 'card form-card';
     shared.noValidate = true;
     shared.append(
-      html`<h2 class="card-title">${t('settings.receiptContent')}</h2>
-        <p class="muted small">${t('receiptLayout.sharedHint')}</p>
+      html`<h2 class="card-title">
+          ${withInfo(t('settings.receiptContent'), t('receiptLayout.sharedHint'))}
+        </h2>
         ${field({
           name: 'restaurantName',
           label: t('settings.restaurantName'),
@@ -291,10 +293,9 @@ export const receiptSection: View = () => {
       layoutForm.replaceChildren(
         html`<h2 class="card-title">
             ${isPreBill
-              ? t('preBill.layoutTitle')
+              ? withInfo(t('preBill.layoutTitle'), t('preBill.hint'))
               : t('receiptLayout.title', { type: t(TYPE_LABEL[current]) })}
           </h2>
-          ${isPreBill ? html`<p class="muted small">${t('preBill.hint')}</p>` : ''}
           ${current !== 'DINE_IN' && !saved.saved
             ? html`<p class="notice notice-info">
                 ${icon('receipt')}<span

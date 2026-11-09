@@ -18,6 +18,7 @@ import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
+import { withInfo } from '../../components/info-hint';
 
 function printerOptions(printers: PrinterInfo[], saved: string | null, allowAuto: boolean) {
   return [
@@ -137,8 +138,7 @@ export const printerSection: View = () => {
     form.className = 'card form-card';
     form.noValidate = true;
     form.append(
-      html`<h2 class="card-title">${t('printers.mainTitle')}</h2>
-        <p class="muted small">${t('printers.mainHint')}</p>
+      html`<h2 class="card-title">${withInfo(t('printers.mainTitle'), t('printers.mainHint'))}</h2>
         ${field({ name: 'label', label: t('printers.label'), value: main.label ?? '' })}
         <div class="field-with-action">
           ${selectField({
@@ -268,10 +268,9 @@ export const printerSection: View = () => {
     });
     card.append(
       html`<div class="card-header">
-          <h2>${t('printers.extraTitle')}</h2>
+          <h2>${withInfo(t('printers.extraTitle'), t('printers.extraHint'))}</h2>
           ${add}
         </div>
-        <p class="muted small">${t('printers.extraHint')}</p>
         ${extras.length === 0
           ? html`<p class="muted empty-inline">${t('printers.none')}</p>`
           : html`<table class="lines-table">

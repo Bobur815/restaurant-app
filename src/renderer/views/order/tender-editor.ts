@@ -24,6 +24,7 @@ import { html } from '../../ui/html';
 import { icon, type IconName } from '../../ui/icons';
 import { playClick } from '../../ui/sound';
 import { formatMoney, toInputDecimal } from '../../utils/format';
+import { createGuestSplit } from './guest-split';
 
 const METHOD_ICON: Record<TenderMethod, IconName> = {
   cash: 'cash',
@@ -45,18 +46,26 @@ function amountOf(raw: string): DecimalString | null {
   return isDecimalString(v) && !v.startsWith('-') ? v : 'NaN';
 }
 
+/** How the amounts are entered (F14): one method, an amount per method, or a share per guest. */
+export type PayMode = 'single' | 'methods' | 'guests';
+
 /**
  * How a check is paid (payment modal and the admin's check edit). One method for the whole
- * total by default (cash with the amount received and the change); "Bo'lib to'lash" gives every
- * method its own amount, with a "qolgan" (remaining) button. Debt asks who owes it, unless the
- * order already has a customer. The rules are shared/utils/split-payment.ts, the same main uses.
+ * total by default (cash with the amount received and the change); "Usullar bo'yicha" gives every
+ * method its own amount, with a "qolgan" (remaining) button; "Kishilar bo'yicha" divides it between
+ * guests (guest-split.ts). Debt asks who owes it, unless the order already has a customer. The
+ * rules are shared/utils/split-payment.ts, the same main uses.
  */
 export function createTenderEditor(options: {
   total: DecimalString;
   /** The order's own customer (takeaway/delivery): debt goes on them without asking. */
   orderCustomer: { name: string | null; phone: string | null } | null;
   initial?: { tenders: TenderLine[]; debtCustomer?: DebtCustomerValue | null };
+  /** Offer "Kishilar bo'yicha" (the payment window; not the check edit). */
+  guests?: boolean;
   onChange: () => void;
+  /** The mode changed (the payment window widens for the guests). */
+  onMode?: (mode: PayMode) => void;
 }) {
   const { settings, language: lang } = appStore.get();
   // Debt needs the setting on, the plan to include it (F5) and the user's own permission.
@@ -66,7 +75,9 @@ export function createTenderEditor(options: {
   const canSplit = settings?.splitPaymentEnabled !== false;
 
   const initialLines = options.initial?.tenders ?? [];
-  let split = initialLines.length > 1;
+  let mode: PayMode = initialLines.length > 1 ? 'methods' : 'single';
+  const split = () => mode === 'methods';
+  let ready = false;
   let single: TenderMethod = initialLines.length === 1 ? initialLines[0]!.method : 'cash';
 
   const el = document.createElement('div');
@@ -104,6 +115,7 @@ export function createTenderEditor(options: {
     html`<div class="change"><span>${t('payment.change')}</span>${change}</div>`,
   );
   const singleBox = document.createElement('div');
+  singleBox.className = 'single-box';
   singleBox.append(
     html`<fieldset class="method-group">
       <legend>${t('payment.method')}</legend>
@@ -144,22 +156,58 @@ export function createTenderEditor(options: {
   splitBox.className = 'split-box';
   splitBox.append(...splitRows.map((r) => r.row), summary);
 
-  const splitToggle = document.createElement('button');
-  splitToggle.type = 'button';
-  splitToggle.className = 'btn btn-secondary';
-  splitToggle.hidden = !canSplit;
-  splitToggle.addEventListener('click', () => {
-    playClick();
-    split = !split;
-    if (split) {
+  // ── guests (F14) ───────────────────────────────────────────────────────────────────────────
+  const guest =
+    options.guests !== false && canSplit
+      ? createGuestSplit({
+          total: options.total,
+          // One debt customer per check: the guest on debt uses the debt box below.
+          methods,
+          onChange: () => {
+            if (ready) render();
+          },
+        })
+      : null;
+
+  // ── mode control ───────────────────────────────────────────────────────────────────────────
+  const modes: PayMode[] = guest ? ['single', 'methods', 'guests'] : ['single', 'methods'];
+  const MODE_LABEL: Record<PayMode, string> = {
+    single: 'payment.modeSingle',
+    methods: 'payment.modeMethods',
+    guests: 'payment.modeGuests',
+  };
+  const modeButtons = modes.map((m) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'pay-mode';
+    b.textContent = t(MODE_LABEL[m]);
+    b.addEventListener('click', () => {
+      playClick();
+      setMode(m);
+    });
+    return { m, b };
+  });
+  const modeBar = document.createElement('div');
+  modeBar.className = 'pay-modes';
+  modeBar.setAttribute('role', 'group');
+  modeBar.setAttribute('aria-label', t('payment.howToPay'));
+  modeBar.hidden = !canSplit;
+  modeBar.append(...modeButtons.map((x) => x.b));
+
+  function setMode(next: PayMode) {
+    if (next === mode) return;
+    if (next === 'methods') {
       // Start the split from what was chosen: that method gets the whole total.
       for (const r of splitRows) r.input.value = '';
       const row = splitRows.find((r) => r.m === single);
       if (row) row.input.value = toInputDecimal(options.total);
       for (const r of splitRows) refreshAmountHint(r.input);
     }
+    if (next === 'guests') guest?.start(single);
+    mode = next;
+    options.onMode?.(mode);
     render();
-  });
+  }
 
   // ── debt customer ──────────────────────────────────────────────────────────────────────────
   const debtBox = document.createElement('div');
@@ -221,16 +269,17 @@ export function createTenderEditor(options: {
     html`<div class="pay-total">
       <span>${t('payment.toPay')}</span><strong>${formatMoney(options.total, lang)}</strong>
     </div>`,
+    modeBar,
     singleBox,
     splitBox,
-    splitToggle,
+    ...(guest ? [guest.el] : []),
     debtBox,
     problem,
     formError(),
   );
 
   // Initial values (check edit).
-  if (split) {
+  if (split()) {
     for (const l of initialLines) {
       const row = splitRows.find((r) => r.m === l.method);
       if (row) row.input.value = toInputDecimal(l.amount);
@@ -240,7 +289,8 @@ export function createTenderEditor(options: {
 
   /** The lines as typed now (invalid amounts as 'NaN', so the state reports them). */
   function lines(): TenderLine[] {
-    if (split) {
+    if (mode === 'guests' && guest) return guest.tenders();
+    if (split()) {
       return splitRows.flatMap((r) => {
         const a = amountOf(r.input.value);
         return a === null ? [] : [{ method: r.m, amount: a }];
@@ -268,11 +318,12 @@ export function createTenderEditor(options: {
 
   function render() {
     for (const { m, b } of methodButtons)
-      b.setAttribute('aria-pressed', String(!split && m === single));
-    singleBox.hidden = split;
-    cashBox.hidden = split || single !== 'cash';
-    splitBox.hidden = !split;
-    splitToggle.textContent = split ? t('payment.splitOff') : t('payment.splitOn');
+      b.setAttribute('aria-pressed', String(mode === 'single' && m === single));
+    for (const { m, b } of modeButtons) b.setAttribute('aria-pressed', String(m === mode));
+    singleBox.hidden = mode !== 'single';
+    cashBox.hidden = mode !== 'single' || single !== 'cash';
+    splitBox.hidden = mode !== 'methods';
+    if (guest) guest.el.hidden = mode !== 'guests';
 
     const s = state();
     change.textContent = dec(s.change).gt(0) ? formatMoney(s.change, lang) : '—';
@@ -283,22 +334,31 @@ export function createTenderEditor(options: {
         >
         <span>${t('payment.change')}: <strong>${formatMoney(s.change, lang)}</strong></span>`,
     );
-    problem.textContent = badAmount()
-      ? t('payment.badAmount')
-      : split && s.problem !== 'none'
-        ? t(`payment.problem_${s.problem}`)
-        : '';
+    problem.textContent =
+      mode === 'guests' && guest
+        ? guest.problem()
+        : badAmount()
+          ? t('payment.badAmount')
+          : split() && s.problem !== 'none'
+            ? t(`payment.problem_${s.problem}`)
+            : '';
     debtBox.hidden = !hasDebt();
     options.onChange();
   }
 
+  ready = true;
   render();
 
   return {
     el,
     state,
+    mode: () => mode,
+    /** Guests mode: how many, and the change handed back to them altogether. */
+    guests: () =>
+      mode === 'guests' && guest ? { count: guest.count(), change: guest.totalChange() } : null,
     /** Ready to send: amounts valid, lines cover the total, debt has its customer details. */
     canSubmit(): boolean {
+      if (mode === 'guests' && guest && guest.problem() !== '') return false;
       if (badAmount() || state().problem !== 'none') return false;
       if (hasDebt() && !(oc && (oc.name || oc.phone))) return phone.digits().length === 9;
       return true;

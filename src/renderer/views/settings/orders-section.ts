@@ -16,6 +16,7 @@ import { html } from '../../ui/html';
 import { toInputDecimal } from '../../utils/format';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
+import { withInfo } from '../../components/info-hint';
 
 /**
  * Which order types the till offers besides tables, the usual delivery fee, and whether the order
@@ -25,7 +26,7 @@ export const ordersSection: View = () => {
   const el = document.createElement('section');
   el.className = 'page';
   const body = document.createElement('div');
-  el.append(pageHeader(t('settings.sectionOrders')), body);
+  el.append(pageHeader(withInfo(t('settings.sectionOrders'), t('settings.ordersHint'))), body);
 
   const load = async () => {
     try {
@@ -34,8 +35,7 @@ export const ordersSection: View = () => {
       form.className = 'card form-card';
       form.noValidate = true;
       form.append(
-        html`<p class="muted small">${t('settings.ordersHint')}</p>
-          ${licensed('takeaway') && licensed('delivery')
+        html`${licensed('takeaway') && licensed('delivery')
             ? ''
             : html`<p class="notice notice-info">${t('settings.ordersNotInPlan')}</p>`}
           ${checkboxField({
@@ -55,8 +55,9 @@ export const ordersSection: View = () => {
             amount: true,
             value: toInputDecimal(settings.deliveryFeeDefault),
           })}
-          <h3 class="form-subtitle">${t('settings.picturesTitle')}</h3>
-          <p class="muted small">${t('settings.picturesHint')}</p>
+          <h3 class="form-subtitle">
+            ${withInfo(t('settings.picturesTitle'), t('settings.picturesHint'))}
+          </h3>
           ${checkboxField({
             name: 'showCategoryImages',
             label: t('settings.showCategoryImages'),

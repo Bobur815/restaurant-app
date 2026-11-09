@@ -450,13 +450,16 @@
 
 .method-group {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  /* As many equal columns as methods shown (3 without debt, 4 with it): no empty slot. */
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
 }
 
 .method-group legend {
-  grid-column: 1 / -1;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
 }
 
 .method-button {
@@ -481,15 +484,18 @@
 .cash-box {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  align-items: end;
+  align-items: start;
   gap: var(--space-4);
+}
+
+.cash-box .field {
+  margin-bottom: 0;
 }
 
 .change {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  margin-bottom: var(--space-3);
 }
 
 .change span {
@@ -499,6 +505,9 @@
 }
 
 .change-amount {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-height);
   font-size: var(--font-size-xl);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1270,8 +1279,205 @@
   margin-bottom: 0;
 }
 
-.tender-editor > .btn {
-  align-self: flex-start;
+.single-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* How the check is paid (F14): one segmented control instead of a lone toggle button. */
+.pay-modes {
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.pay-modes[hidden] {
+  display: none;
+}
+
+.pay-mode {
+  min-height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pay-mode[aria-pressed='true'] {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* ── Per guest (F14) ── */
+.guest-split {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.guest-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.guest-toolbar-label {
+  font-weight: 600;
+}
+
+.guest-toolbar .btn {
+  margin-left: auto;
+}
+
+.guest-count {
+  min-width: 40px;
+  font-size: var(--font-size-xl);
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepper-button {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.guest-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+
+.guest-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+.guest-card.is-fixed {
+  border-color: var(--color-primary);
+}
+
+.guest-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.guest-title {
+  font-weight: 700;
+}
+
+.guest-share,
+.guest-cash-field,
+.guest-cash-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guest-share > span,
+.guest-cash-field > span,
+.guest-cash-change > span {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.guest-card .input {
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.guest-share-input {
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+.guest-card .input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+.guest-card .amount-hint:empty {
+  display: none;
+}
+
+.guest-methods {
+  display: flex;
+  gap: var(--space-1);
+}
+
+/* Sized by their label, sharing what is left: "Наличные" needs more than "Click". */
+.guest-method {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.guest-method[aria-pressed='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.guest-method:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.guest-cash {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2);
+}
+
+.guest-cash[hidden] {
+  display: none;
+}
+
+.guest-change {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-height);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.guest-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+  font-variant-numeric: tabular-nums;
 }
 
 .split-box {
@@ -1605,9 +1811,13 @@
   font-weight: 700;
 }
 
-/* Payment window: print-receipt choice under the tenders. */
+/* Payment window: print-receipt choice under the tenders, set apart by a line. */
 .payment-print {
+  display: flex;
+  width: 100%;
   margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 
 /* ── Moving an order to another table ────────────────────────────────────────────────────── */

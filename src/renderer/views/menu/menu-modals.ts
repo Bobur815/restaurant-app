@@ -172,16 +172,16 @@ export function dishModal(
             inputmode: 'decimal',
             amount: true,
             value: toInputDecimal(dish?.costPrice),
+            info: t('menu.costHint'),
           })}
         </div>
-        <p class="muted small">${t('menu.costHint')}</p>
         ${selectField({
           name: 'printerId',
           label: t('printers.dishPrinter'),
           value: dish?.printerId ? String(dish.printerId) : '',
           options: printerChoices(printers, dish?.printerId ?? null),
+          info: t('printers.dishPrinterHint'),
         })}
-        <p class="muted small">${t('printers.dishPrinterHint')}</p>
         ${textareaField({
           name: 'description',
           label: t('menu.description'),

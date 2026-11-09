@@ -1,15 +1,21 @@
 import { amountHint } from '@shared/utils/amount-words';
 import { isApiError } from '../api';
 import { appStore } from '../store/app';
+import { infoHint } from './info-hint';
 import { errorMessage } from './toast';
 
 let uid = 0;
 /** Unique per element: a modal's form can sit over a page form with the same field names. */
 const fieldId = (name: string) => `f-${name.replace(/\W/g, '-')}-${++uid}`;
 
+/**
+ * Label, control, error slot. `info` (F14) puts an (i) hint beside the label, outside it, so the
+ * control's accessible name stays the label text.
+ */
 function wrapField(
   id: string,
   labelText: string,
+  info: string | undefined,
   control: HTMLElement,
   ...extra: HTMLElement[]
 ): HTMLElement {
@@ -22,7 +28,14 @@ function wrapField(
   error.className = 'field-error';
   error.id = `${id}-error`;
   control.setAttribute('aria-describedby', error.id);
-  wrap.append(label, control, ...extra, error);
+  if (info) {
+    const row = document.createElement('div');
+    row.className = 'field-label-row';
+    row.append(label, infoHint(info));
+    wrap.append(row, control, ...extra, error);
+  } else {
+    wrap.append(label, control, ...extra, error);
+  }
   return wrap;
 }
 
@@ -63,6 +76,8 @@ export function field(options: {
   inputmode?: string;
   /** A money field: shows the amount in words under it (`amountHintFor`). */
   amount?: boolean;
+  /** Explanation behind an (i) next to the label. */
+  info?: string;
 }): HTMLElement {
   const id = fieldId(options.name);
   const input = document.createElement('input');
@@ -76,8 +91,8 @@ export function field(options: {
   if (options.max !== undefined) input.max = String(options.max);
   if (options.inputmode) input.inputMode = options.inputmode;
   return options.amount
-    ? wrapField(id, options.label, input, amountHintFor(input))
-    : wrapField(id, options.label, input);
+    ? wrapField(id, options.label, options.info, input, amountHintFor(input))
+    : wrapField(id, options.label, options.info, input);
 }
 
 export function selectField(options: {
@@ -85,6 +100,7 @@ export function selectField(options: {
   label: string;
   options: Array<{ value: string; label: string }>;
   value?: string;
+  info?: string;
 }): HTMLElement {
   const id = fieldId(options.name);
   const select = document.createElement('select');
@@ -97,7 +113,7 @@ export function selectField(options: {
     opt.selected = o.value === options.value;
     select.append(opt);
   }
-  return wrapField(id, options.label, select);
+  return wrapField(id, options.label, options.info, select);
 }
 
 export function textareaField(options: {
@@ -105,6 +121,7 @@ export function textareaField(options: {
   label: string;
   value?: string;
   rows?: number;
+  info?: string;
 }): HTMLElement {
   const id = fieldId(options.name);
   const area = document.createElement('textarea');
@@ -112,7 +129,7 @@ export function textareaField(options: {
   area.name = options.name;
   area.rows = options.rows ?? 3;
   area.value = options.value ?? '';
-  return wrapField(id, options.label, area);
+  return wrapField(id, options.label, options.info, area);
 }
 
 /** A checkbox with its label to the right. */

@@ -8,6 +8,7 @@ import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html, refs } from '../../ui/html';
 import type { View } from '../types';
+import { withInfo } from '../../components/info-hint';
 
 /**
  * Software update (feature F4): current version, check, download with progress, install. Main
@@ -27,7 +28,6 @@ export const updateSection: View = () => {
     <progress class="update-progress" data-ref="progress" max="100" hidden></progress>
     <p class="muted small" data-ref="checked"></p>
     <div class="form-actions" data-ref="actions"></div>
-    <p class="muted small">${t('update.hint')}</p>
   </div>`;
   const r = refs<{
     current: HTMLElement;
@@ -36,7 +36,7 @@ export const updateSection: View = () => {
     checked: HTMLElement;
     actions: HTMLElement;
   }>(card);
-  el.append(pageHeader(t('settings.sectionUpdate')), card);
+  el.append(pageHeader(withInfo(t('settings.sectionUpdate'), t('update.hint'))), card);
   const progress = r.progress;
 
   const run = async (action: () => Promise<unknown>) => {

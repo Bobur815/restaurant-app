@@ -13,6 +13,7 @@ import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { formatMoney } from '../../utils/format';
 import type { View } from '../types';
+import { infoHint } from '../../components/info-hint';
 
 /**
  * Settings → Obuna (feature F5): the restaurant this till belongs to, its plan and what it
@@ -183,11 +184,13 @@ export const subscriptionSection: View = () => {
       open();
     } else {
       card.append(
-        html`<p class="muted small">${t('license.relinkHint')}</p>`,
-        button(t('license.relink'), 'ghost', () => {
-          relinkOpen = true;
-          open();
-        }),
+        html`<div class="inline-actions">
+          ${button(t('license.relink'), 'ghost', () => {
+            relinkOpen = true;
+            open();
+          })}
+          ${infoHint(t('license.relinkHint'))}
+        </div>`,
       );
     }
     return card;

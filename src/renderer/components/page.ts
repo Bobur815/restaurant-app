@@ -1,7 +1,8 @@
 import { html } from '../ui/html';
 
 /** The common page header: title on the left, actions on the right. */
-export function pageHeader(title: string, ...actions: Node[]): DocumentFragment {
+/** `title` may be a node, e.g. `withInfo(text, hint)` (F14). */
+export function pageHeader(title: string | Node, ...actions: Node[]): DocumentFragment {
   return html`<header class="page-header">
     <h1>${title}</h1>
     <div class="page-actions">${actions}</div>

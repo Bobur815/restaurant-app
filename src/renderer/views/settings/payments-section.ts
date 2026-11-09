@@ -12,13 +12,14 @@ import { t } from '../../i18n';
 import { html } from '../../ui/html';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
+import { withInfo } from '../../components/info-hint';
 
 /** Payment options offered at the till: split payment and debt (nasiya). */
 export const paymentsSection: View = () => {
   const el = document.createElement('section');
   el.className = 'page';
   const body = document.createElement('div');
-  el.append(pageHeader(t('settings.sectionPayments')), body);
+  el.append(pageHeader(withInfo(t('settings.sectionPayments'), t('settings.paymentsHint'))), body);
 
   const load = async () => {
     try {
@@ -27,18 +28,17 @@ export const paymentsSection: View = () => {
       form.className = 'card form-card';
       form.noValidate = true;
       form.append(
-        html`<p class="muted small">${t('settings.paymentsHint')}</p>
-          ${checkboxField({
-            name: 'splitPaymentEnabled',
-            label: t('settings.splitPaymentEnabled'),
-            checked: settings.splitPaymentEnabled,
-          })}
-          ${checkboxField({
-            name: 'debtEnabled',
-            label: t('settings.debtEnabled'),
-            checked: settings.debtEnabled,
-          })}
-          ${formError()}${submitButton()}`,
+        html`${checkboxField({
+          name: 'splitPaymentEnabled',
+          label: t('settings.splitPaymentEnabled'),
+          checked: settings.splitPaymentEnabled,
+        })}
+        ${checkboxField({
+          name: 'debtEnabled',
+          label: t('settings.debtEnabled'),
+          checked: settings.debtEnabled,
+        })}
+        ${formError()}${submitButton()}`,
       );
       form.addEventListener('submit', async (e) => {
         e.preventDefault();

@@ -19,6 +19,7 @@ import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
+import { withInfo } from '../../components/info-hint';
 
 /**
  * Feature F12: the till network. On the main till: switch satellites on, the port, this
@@ -37,8 +38,7 @@ export const lanSection: View = () => {
     const leave = button(t('lan.leave'), 'danger', () => void leaveMain());
     body.replaceChildren(
       html`<div class="card form-card">
-        <h2 class="card-title">${t('lan.satelliteTitle')}</h2>
-        <p class="muted small">${t('lan.satelliteHint')}</p>
+        <h2 class="card-title">${withInfo(t('lan.satelliteTitle'), t('lan.satelliteHint'))}</h2>
         <dl class="kv">
           <dt>${t('lan.mainAddressShort')}</dt>
           <dd>${link.mainUrl ?? ''}</dd>
@@ -62,8 +62,7 @@ export const lanSection: View = () => {
     const port = String(s.port);
     const firewall = `New-NetFirewallRule -DisplayName "SavdoChef yoldosh kassalar" -Direction Inbound -Protocol TCP -LocalPort ${port} -Action Allow -Profile Private -RemoteAddress LocalSubnet`;
     form.append(
-      html`<h2 class="card-title">${t('lan.mainTitle')}</h2>
-        <p class="muted small">${t('lan.mainHint')}</p>
+      html`<h2 class="card-title">${withInfo(t('lan.mainTitle'), t('lan.mainHint'))}</h2>
         ${checkboxField({ name: 'enabled', label: t('lan.enabled'), checked: s.enabled })}
         ${field({
           name: 'port',

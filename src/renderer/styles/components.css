@@ -769,3 +769,89 @@ legend {
 .text-danger {
   color: var(--color-danger);
 }
+
+/* ── Info hint (F14): (i) beside a label or title; text on hover, focus or tap ────────────── */
+.field-label-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.info-hint {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 400;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.field-label-row .info-hint {
+  margin-left: 0;
+}
+
+.info-hint-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: help;
+}
+
+.info-hint-button:hover,
+.info-hint.is-open .info-hint-button {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.info-hint-button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.info-hint-tip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -8px;
+  z-index: 60;
+  width: max-content;
+  max-width: min(320px, 70vw);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-text);
+  color: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+  white-space: normal;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+
+/* Not enough room on the right (a field in the right column): the text opens to the left. */
+.info-hint.align-end .info-hint-tip {
+  left: auto;
+  right: -8px;
+}
+
+.info-hint:hover .info-hint-tip,
+.info-hint-button:focus-visible + .info-hint-tip,
+.info-hint.is-open .info-hint-tip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

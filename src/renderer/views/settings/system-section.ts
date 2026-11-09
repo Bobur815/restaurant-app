@@ -31,31 +31,31 @@ export const systemSection: View = () => {
       form.noValidate = true;
       form.append(
         html`${selectField({
-            name: 'language',
-            label: t('settings.language'),
-            value: settings.language,
-            options: [
-              { value: 'uz', label: t('settings.uzbek') },
-              { value: 'ru', label: t('settings.russian') },
-            ],
-          })}
-          ${selectField({
-            name: 'theme',
-            label: t('settings.theme'),
-            value: settings.theme,
-            options: [
-              { value: 'system', label: t('nav.themeSystem') },
-              { value: 'light', label: t('nav.themeLight') },
-              { value: 'dark', label: t('nav.themeDark') },
-            ],
-          })}
-          <p class="muted small">${t('settings.defaultsHint')}</p>
-          ${checkboxField({
-            name: 'clickSound',
-            label: t('settings.clickSound'),
-            checked: settings.clickSound,
-          })}
-          ${formError()}${submitButton()}`,
+          name: 'language',
+          label: t('settings.language'),
+          info: t('settings.defaultsHint'),
+          value: settings.language,
+          options: [
+            { value: 'uz', label: t('settings.uzbek') },
+            { value: 'ru', label: t('settings.russian') },
+          ],
+        })}
+        ${selectField({
+          name: 'theme',
+          label: t('settings.theme'),
+          value: settings.theme,
+          options: [
+            { value: 'system', label: t('nav.themeSystem') },
+            { value: 'light', label: t('nav.themeLight') },
+            { value: 'dark', label: t('nav.themeDark') },
+          ],
+        })}
+        ${checkboxField({
+          name: 'clickSound',
+          label: t('settings.clickSound'),
+          checked: settings.clickSound,
+        })}
+        ${formError()}${submitButton()}`,
       );
       form.addEventListener('submit', async (e) => {
         e.preventDefault();

@@ -12,7 +12,8 @@
     "no": "Yo'q",
     "retry": "Qayta urinish",
     "search": "Qidirish",
-    "all": "Hammasi"
+    "all": "Hammasi",
+    "moreInfo": "Batafsil"
   },
   "errors": {
     "NOT_AUTHENTICATED": "Avval tizimga kiring",
@@ -200,8 +201,6 @@
     "done": "To'lov qabul qilindi: {{amount}}",
     "titleOpen": "To'lov · {{type}} № {{number}}",
     "rest": "Qolgan",
-    "splitOn": "Bo'lib to'lash",
-    "splitOff": "Bitta usulda",
     "entered": "Kiritildi",
     "remaining": "Qolgan",
     "badAmount": "Summa noto'g'ri yozilgan",
@@ -210,7 +209,24 @@
     "problem_nonCashOver": "Karta, Click va nasiya chek summasidan oshmasligi kerak (qaytim faqat naqddan)",
     "dueDate": "Qaytarish muddati",
     "debtFor": "Nasiya kimga yoziladi",
-    "doneChange": "To'landi: {{amount}}. Qaytim: {{change}}"
+    "doneChange": "To'landi: {{amount}}. Qaytim: {{change}}",
+    "howToPay": "Qanday to'lanadi",
+    "modeSingle": "Bitta usul",
+    "modeMethods": "Usullar bo'yicha",
+    "modeGuests": "Kishilar bo'yicha",
+    "guests": "Mehmonlar soni",
+    "fewerGuests": "Bitta kamroq mehmon",
+    "moreGuests": "Yana bitta mehmon",
+    "guest": "{{n}}-mehmon",
+    "share": "Ulushi",
+    "gave": "Berdi",
+    "fixedShare": "Qo'lda",
+    "resetShares": "Teng bo'lish",
+    "sharesOver": "Ulushlar jami summadan oshib ketdi",
+    "sharesOverBy": "Ortiqcha",
+    "sharesLeft": "Ulushlar jami summaga teng emas. Qolganini bir mehmonga qo'shing yoki teng bo'ling",
+    "gaveLess": "{{n}}-mehmon ulushidan kam berdi",
+    "doneGuests": "{{count}} kishiga bo'lindi."
   },
   "sessions": {
     "title": "Smenalar",

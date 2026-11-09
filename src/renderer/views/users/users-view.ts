@@ -24,6 +24,7 @@ import { icon } from '../../ui/icons';
 import { formatDateTime } from '../../utils/format';
 import { formatPhone } from '@shared/utils/phone';
 import type { View } from '../types';
+import { withInfo } from '../../components/info-hint';
 
 const roleOptions = () => ROLES.map((r) => ({ value: r, label: t(`nav.role${r}`) }));
 
@@ -51,7 +52,10 @@ export const usersView: View = () => {
       async () => {
         if (
           hasCode &&
-          !(await confirmDialog({ title: t('recovery.renew'), message: t('recovery.renewConfirm') }))
+          !(await confirmDialog({
+            title: t('recovery.renew'),
+            message: t('recovery.renewConfirm'),
+          }))
         )
           return;
         try {
@@ -64,9 +68,9 @@ export const usersView: View = () => {
       },
     );
     recovery.replaceChildren(
-      html`${icon(hasCode ? 'lock' : 'warning')}<span
-          >${hasCode ? t('recovery.hasCode') : t('recovery.noCode')}</span
-        >${renew}`,
+      html`${icon(hasCode ? 'lock' : 'warning')}<span>${hasCode
+        ? t('recovery.hasCode')
+        : t('recovery.noCode')}</span>${renew}`,
     );
   };
   void api.auth
@@ -199,8 +203,9 @@ export const usersView: View = () => {
           ${boxes}
         </fieldset>
         <fieldset>
-          <legend>${t('users.pin')}</legend>
-          <p class="muted small">${user?.hasPin ? t('users.pinKeepHint') : t('users.pinHint')}</p>
+          <legend>
+            ${withInfo(t('users.pin'), user?.hasPin ? t('users.pinKeepHint') : t('users.pinHint'))}
+          </legend>
           ${pinFields}
           ${user?.hasPin ? checkboxField({ name: 'removePin', label: t('users.removePin') }) : ''}
         </fieldset>

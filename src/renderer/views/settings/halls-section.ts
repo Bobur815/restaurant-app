@@ -18,6 +18,7 @@ import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import type { View } from '../types';
 import { iconButton } from './settings-ui';
+import { withInfo } from '../../components/info-hint';
 
 /** Optional whole number from a form field: '' -> null. */
 const optionalInt = (form: ParentNode, name: string): number | null => {
@@ -256,8 +257,7 @@ export const hallsSection: View = () => {
   planNote.textContent = t('halls.oneHallOnly');
 
   el.append(
-    pageHeader(t('settings.sectionHalls'), showHidden, addHallButton),
-    html`<p class="muted small">${t('halls.hint')}</p>`,
+    pageHeader(withInfo(t('settings.sectionHalls'), t('halls.hint')), showHidden, addHallButton),
     planNote,
     list,
   );
