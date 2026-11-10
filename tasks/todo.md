@@ -1150,3 +1150,9 @@ Copies: the delivery fee (setting `deliveryFeeDefault` -> `orders.deliveryFee`, 
 - Tests: service-fee (shared 4, domain 6), license, routes, schemas, secrets. 51 suites / 666 tests.
 - Real app (harness `f17b.cjs`, fresh copy of the v17 cafe data -> migrated to v18 with a `savdochef-v17-*` backup): per-guest 5 000 x 4 guests on a 6 000 order -> 20 000 fee, 26 000 total, stored and reopened unchanged; percent 10 % on 9 000 -> 900; waiter 5 %; paid; pre-bill and receipt text show the fee rows; staff report 2 orders, 4 guests, sales 15 000, fees 20 900, earnings 750 (uz light + ru dark); shift summary fees 20 900; Start plan (licence answer patched in the window): no Debtors link, `/debtors` -> `/tables`, To'lov note. Screenshots looked at.
 - Version: 0.10.0 (minor) at release; repeat the install-over-0.9.1 upgrade test then.
+
+## Release 0.10.0 (F16 + F17, 2026-11-10)
+
+- Commit `1dfbca0` (F16 + F17), `npm run release -- minor`: check 51 suites / 666 tests, commit + tag `v0.10.0`, `release/v0.10.0/SavdoChef-Setup-0.10.0.exe` sha256 `718effff8253a6482e4f8e7fc26a8a9a1fddb23a14f7e7cd6d4e57ccf1dd3877`. Not pushed, not uploaded.
+- Upgrade test on this PC: silent install 0.10.0 over 0.9.1 (exit 0, exe 0.10.0) -> packaged run with `--user-data-dir` = scratch copy of the v17 cafe profile (`up10`): backup `savdochef-v17-*` written, migrated v17 -> v18 (0018); every table's row count identical except settings 18 -> 21 (the three service-fee keys, seeded `off`), orders total identical (50 000); closed normally. This PC now has 0.10.0 installed. The update feed serves 0.9.1.
+- 0.9 satellites are not compatible with a 0.10 main till: they need this update (F15 button on their waiting card, once 0.10.0 is on the feed).
