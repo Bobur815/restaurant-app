@@ -199,6 +199,17 @@ describe('licence', () => {
     expect(
       await refusal('reports:staff', { start: '2026-10-20', end: '2026-10-20' }, start, halls),
     ).toBeNull();
+    // Leftovers and expenses: one day too, and no dates at all means every day.
+    for (const ch of ['residuals:list', 'expenses:list'] as const) {
+      expect(await refusal(ch, { start: '2026-10-01', end: '2026-10-20' }, start, halls)).toMatch(
+        /hisobot/,
+      );
+      expect(await refusal(ch, {}, start, halls)).toMatch(/hisobot/);
+      expect(await refusal(ch, { start: '2026-10-20' }, start, halls)).toMatch(/hisobot/);
+      expect(
+        await refusal(ch, { start: '2026-10-20', end: '2026-10-20' }, start, halls),
+      ).toBeNull();
+    }
     for (const ch of [
       'debts:list',
       'debts:get',

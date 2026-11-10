@@ -220,6 +220,13 @@ export function featureNeeded(
     case 'reports:sales':
     case 'reports:staff':
       return input?.['start'] === input?.['end'] ? null : 'reports';
+    // Leftovers and expenses (Hisobotlar tabs) follow the same one-day rule. Their dates are
+    // optional, and a list without both is every day there is, so it needs the feature too.
+    case 'residuals:list':
+    case 'expenses:list':
+      return typeof input?.['start'] === 'string' && input['start'] === input['end']
+        ? null
+        : 'reports';
     case 'receipt:updateLayout':
     case 'receipt:updatePreBillLayout':
       return input?.['topImage'] || input?.['bottomImage'] ? 'receiptLogos' : null;
