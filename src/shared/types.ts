@@ -1,3 +1,4 @@
+import type { ServiceFeeType } from './utils/service-fee';
 import type { DecimalString } from './utils/decimal';
 
 /**
@@ -54,6 +55,8 @@ export interface UserDto extends CurrentUser {
   hasPin: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  /** Feature F17: share of their sales, percent ("0".."100"). */
+  earningsPercent: DecimalString;
 }
 
 // ── Setup & settings ─────────────────────────────────────────────────────────────────────────
@@ -82,6 +85,10 @@ export interface AppSettings {
   /** Feature F10: pictures on the order screen, for categories and for dishes. */
   showCategoryImages: boolean;
   showMenuImages: boolean;
+  /** Feature F17: service fee on table orders: off, percent of the dishes, or so'm per guest. */
+  serviceFeeType: ServiceFeeType;
+  serviceFeePercent: DecimalString;
+  serviceFeePerGuest: DecimalString;
   setupComplete: boolean;
 }
 
@@ -402,6 +409,8 @@ export interface ShiftCashSummaryDto {
   /** Paid checks of this shift, by method (debt = sold on credit). */
   sales: { cash: DecimalString; card: DecimalString; click: DecimalString; debt: DecimalString };
   salesTotal: DecimalString;
+  /** Feature F17: service fees inside salesTotal. */
+  serviceFees: DecimalString;
   checksCount: number;
   /** Debt repaid in cash while the shift was open (not voided). */
   debtRepaymentsCash: DecimalString;
@@ -495,6 +504,10 @@ export interface OrderDto {
   deliveryNote: string | null;
   /** Included in totalAmount; '0' unless delivery. */
   deliveryFee: DecimalString;
+  /** Feature F17: included in totalAmount; '0' when off and on takeaway/delivery. */
+  serviceFee: DecimalString;
+  /** Guests at the table; null when nobody entered it. */
+  guestCount: number | null;
   deliveryStatus: DeliveryStatus | null;
   courierName: string | null;
   lines: OrderLineDto[];
@@ -651,6 +664,8 @@ export interface DailyReportRow {
   delivery: DecimalString;
   /** Delivery fees inside `delivery`, each order counted once. */
   deliveryFees: DecimalString;
+  /** Feature F17: service fees inside `dineIn`, each order counted once. */
+  serviceFees: DecimalString;
   /** Debt repaid that day (money received for older checks), by method; and forgiven debt. */
   repayments: DecimalString;
   repaymentCash: DecimalString;
@@ -679,4 +694,26 @@ export interface ProductSalesRow {
 export interface SalesReport {
   daily: DailyReportRow[];
   productsByDate: Array<{ date: string; products: ProductSalesRow[] }>;
+}
+
+/**
+ * Feature F17, Xodimlar bo'yicha hisobot: one row per user who opened paid orders in the range.
+ * `sales` is the dishes total (no service or delivery fee), the base of the earnings.
+ */
+export interface StaffReportRow {
+  userId: number | null;
+  /** null: orders without an opener (imported from the legacy app). */
+  fullName: string | null;
+  orders: number;
+  guests: number;
+  sales: DecimalString;
+  serviceFees: DecimalString;
+  /** The user's percent now (the earnings use each order's percent at payment). */
+  currentPercent: DecimalString | null;
+  earnings: DecimalString;
+}
+
+export interface StaffReport {
+  rows: StaffReportRow[];
+  totals: Omit<StaffReportRow, 'userId' | 'fullName' | 'currentPercent'>;
 }

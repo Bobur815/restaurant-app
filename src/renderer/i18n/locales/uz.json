@@ -166,6 +166,9 @@
     "outOfStock": "Tugagan",
     "notInSession": "Smenada yo'q",
     "allCategories": "Barchasi",
+    "layout": "Menyu ko'rinishi",
+    "layoutHorizontal": "Kategoriyalar tepada",
+    "layoutVertical": "Kategoriyalar yon tomonda",
     "searchPlaceholder": "Taom qidirish… (Enter: qo'shish)",
     "noDishes": "Taom topilmadi",
     "weightTitle": "{{name}}: vaznni kiriting",
@@ -184,7 +187,12 @@
     "takeOver": "Majburan ochish",
     "lockLostTitle": "Stol boshqa kassada ochildi",
     "lockLostBody": "Bu buyurtmani endi bu yerda saqlab bo'lmaydi. Stollarga qayting.",
-    "readOnly": "Bu buyurtmani {{name}} ochgan: faqat ko'rish va hisob chiqarish mumkin"
+    "readOnly": "Bu buyurtmani {{name}} ochgan: faqat ko'rish va hisob chiqarish mumkin",
+    "guests": "Mehmonlar",
+    "guestsFewer": "Mehmon kamroq",
+    "guestsMore": "Mehmon ko'proq",
+    "serviceFee": "Xizmat haqi",
+    "serviceFeePercent": "Xizmat haqi ({{percent}}%)"
   },
   "payment": {
     "title": "To'lov — Stol {{n}}",
@@ -382,7 +390,10 @@
     "newPin": "Yangi PIN kod",
     "pinRepeat": "PIN kodni takrorlang",
     "pinKeepHint": "PIN kod o'rnatilgan. O'zgartirish uchun yangisini kiriting, bo'sh qoldirilsa o'zgarmaydi.",
-    "removePin": "PIN kodni o'chirish (xodim kira olmaydi)"
+    "removePin": "PIN kodni o'chirish (xodim kira olmaydi)",
+    "earningsPercent": "Ish haqi foizi, %",
+    "earningsPercentShort": "Foiz",
+    "earningsPercentHint": "Xodim ochgan va to'langan buyurtmalardagi taomlar summasidan ulushi (xizmat haqi va yetkazib berishsiz). To'lov paytidagi foiz saqlanadi: keyin o'zgartirish avvalgi hisobni o'zgartirmaydi."
   },
   "profile": {
     "title": "Profil",
@@ -435,7 +446,16 @@
     "sectionUpdate": "Dastur yangilanishi",
     "sectionSubscription": "Obuna",
     "ordersNotInPlan": "Olib ketish va yetkazib berish joriy tarifda yo'q (Pro tarifida bor), shuning uchun kassada ko'rinmaydi.",
-    "sectionLan": "Kassalar tarmog'i"
+    "sectionLan": "Kassalar tarmog'i",
+    "serviceFeeTitle": "Xizmat haqi",
+    "serviceFeeHint": "Faqat stol buyurtmalariga qo'shiladi (olib ketish va yetkazib berishga emas). Buyurtma saqlanganda hisoblanadi va chek, hisob va hisobotlarda alohida ko'rinadi.",
+    "serviceFeeType": "Xizmat haqi turi",
+    "serviceFee_off": "Yo'q",
+    "serviceFee_percent": "Taomlar summasidan foiz",
+    "serviceFee_perGuest": "Har bir mehmon uchun",
+    "serviceFeePercent": "Foiz, %",
+    "serviceFeePerGuest": "Bir mehmon uchun, so'm",
+    "debtNotInPlan": "Nasiya va Qarzdorlar sahifasi tarifingizda yo'q (Pro tarifida bor)."
   },
   "reports": {
     "title": "Hisobotlar",
@@ -494,7 +514,18 @@
     "receivedNote": "naqd + karta + Click + qarz to'lovlari",
     "debtSold": "Nasiyaga sotilgan",
     "repayments": "Qarz to'lovlari",
-    "writtenOff": "Kechirilgan qarz"
+    "writtenOff": "Kechirilgan qarz",
+    "staff": "Xodimlar bo'yicha hisobot",
+    "staffTitle": "Xodimlar bo'yicha hisobot",
+    "staffName": "Xodim",
+    "guests": "Mehmonlar",
+    "staffSales": "Taomlar savdosi",
+    "serviceFees": "Xizmat haqi",
+    "staffPercent": "Foiz (hozir)",
+    "staffEarnings": "Ish haqi",
+    "staffUnknown": "Noma'lum (eski dastur)",
+    "staffNote": "Xodim = buyurtmani ochgan kishi. Ish haqi har bir buyurtma to'langan paytdagi foiz bilan hisoblanadi; taomlar savdosiga xizmat haqi va yetkazib berish kirmaydi.",
+    "serviceFeesNote": "shundan xizmat haqi: {{amount}}"
   },
   "lock": {
     "unlock": "Kirish",
@@ -620,7 +651,7 @@
     "checks": "Cheklarni ko'rish",
     "shifts": "Smenani ochish va yopish",
     "menu": "Menyuni boshqarish",
-    "reports": "Hisobotlar",
+    "reports": "Hisobotlar (savdo, qoldiqlar, xodimlar ish haqi)",
     "corrections": "Chek va smenalarni tuzatish/o'chirish",
     "debtsAdmin": "Qarzlarni boshqarish (kechirish, bekor qilish)",
     "settings": "Sozlamalar",

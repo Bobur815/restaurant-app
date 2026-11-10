@@ -74,7 +74,10 @@ export function licensed(feature: LicenseFeature): boolean {
 
 const PREFS_KEY = 'savdochef.ui';
 
-export type Prefs = Pick<AppState, 'language' | 'theme'>;
+/** The order screen's menu: categories in a row above the dishes, or in a column beside them. */
+export type MenuLayout = 'horizontal' | 'vertical';
+
+export type Prefs = Pick<AppState, 'language' | 'theme'> & { menuLayout: MenuLayout };
 
 export function loadPrefs(): Partial<Prefs> {
   try {
@@ -86,10 +89,18 @@ export function loadPrefs(): Partial<Prefs> {
     if (parsed['theme'] === 'system' || parsed['theme'] === 'light' || parsed['theme'] === 'dark') {
       out.theme = parsed['theme'];
     }
+    if (parsed['menuLayout'] === 'horizontal' || parsed['menuLayout'] === 'vertical') {
+      out.menuLayout = parsed['menuLayout'];
+    }
     return out;
   } catch {
     return {};
   }
+}
+
+/** This machine's order-screen menu layout; `horizontal` until someone picks the other one. */
+export function menuLayout(): MenuLayout {
+  return loadPrefs().menuLayout ?? 'horizontal';
 }
 
 /** Merges `patch` into the stored preferences. */

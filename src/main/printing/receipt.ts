@@ -54,6 +54,8 @@ const LABELS: Record<Language, Record<string, string>> = {
     remark: 'Izoh',
     due: 'Qaytarish muddati',
     deliveryFee: 'Yetkazib berish xizmati',
+    serviceFee: 'Xizmat haqi',
+    guests: 'Mehmonlar',
     preBill: 'HISOB',
     preBillNote: "To'lov cheki emas",
   },
@@ -81,6 +83,8 @@ const LABELS: Record<Language, Record<string, string>> = {
     remark: 'Комментарий',
     due: 'Вернуть до',
     deliveryFee: 'Услуга доставки',
+    serviceFee: 'Обслуживание',
+    guests: 'Гостей',
     preBill: 'СЧЁТ',
     preBillNote: 'Не является чеком оплаты',
   },
@@ -195,9 +199,13 @@ export function buildReceiptHtml(
             ? `<div><b>${e(order.orderType === 'DELIVERY' ? L.note : L.remark)}:</b> ${e(order.deliveryNote)}</div>`
             : '',
         ].join('');
-  const fee = dec(order.deliveryFee).gt(0)
-    ? `<div class="row"><span>${e(L.deliveryFee)}</span><span class="amount">${e(formatMoney(order.deliveryFee, lang))}</span></div>`
-    : '';
+  const fee =
+    (dec(order.serviceFee).gt(0)
+      ? `<div class="row"><span>${e(L.serviceFee)}${order.guestCount ? ` (${e(L.guests)}: ${order.guestCount})` : ''}</span><span class="amount">${e(formatMoney(order.serviceFee, lang))}</span></div>`
+      : '') +
+    (dec(order.deliveryFee).gt(0)
+      ? `<div class="row"><span>${e(L.deliveryFee)}</span><span class="amount">${e(formatMoney(order.deliveryFee, lang))}</span></div>`
+      : '');
 
   // One row per payment method (split checks list each); the debt part names who owes it.
   const tenderRow = (p: OrderDto['payments'][number]) =>
@@ -318,6 +326,8 @@ export function sampleOrder(lang: Language, type: OrderType = 'DINE_IN'): OrderD
     deliveryAddress: null,
     deliveryNote: null,
     deliveryFee: '0',
+    serviceFee: '0',
+    guestCount: null,
     deliveryStatus: null,
     courierName: null,
     status: 'completed',

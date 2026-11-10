@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { SERVICE_FEE_TYPES, type ServiceFeeRule } from '@shared/utils/service-fee';
 import {
   nonNegativeDecimal,
+  percentAmount,
   type updateReceiptSettingsInput,
   type updateSettingsInput,
 } from '@shared/schemas';
@@ -27,6 +29,9 @@ const SETTING_KEYS = {
   lanEnabled: { key: 'lan_enabled', schema: z.boolean() },
   showCategoryImages: { key: 'show_category_images', schema: z.boolean() },
   showMenuImages: { key: 'show_menu_images', schema: z.boolean() },
+  serviceFeeType: { key: 'service_fee_type', schema: z.enum(SERVICE_FEE_TYPES) },
+  serviceFeePercent: { key: 'service_fee_percent', schema: percentAmount },
+  serviceFeePerGuest: { key: 'service_fee_per_guest', schema: nonNegativeDecimal },
   setupComplete: { key: 'setup_complete', schema: z.boolean() },
 } as const satisfies Record<keyof AppSettings, { key: string; schema: z.ZodType }>;
 
@@ -48,6 +53,11 @@ export async function getSettings(db: DbOrTx): Promise<AppSettings> {
     result[field] = parseStored(byKey.get(key), schema, DEFAULT_SETTINGS[key]);
   }
   return result as unknown as AppSettings;
+}
+
+/** Feature F17: the service fee settings as the shared formula takes them. */
+export function serviceFeeRule(s: AppSettings): ServiceFeeRule {
+  return { type: s.serviceFeeType, percent: s.serviceFeePercent, perGuest: s.serviceFeePerGuest };
 }
 
 export async function setSetting<K extends keyof AppSettings>(

@@ -25,6 +25,7 @@ const UZ = {
   closed: 'Yopildi',
   printed: 'Chop etildi',
   checks: 'Cheklar soni',
+  serviceFees: 'Shundan xizmat haqi',
   sales: 'Savdo',
   cash: 'Naqd',
   card: 'Karta',
@@ -58,6 +59,7 @@ const LABELS: Record<Language, Record<keyof typeof UZ, string>> = {
     closed: 'Закрыта',
     printed: 'Напечатано',
     checks: 'Чеков',
+    serviceFees: 'В т.ч. обслуживание',
     sales: 'Продажи',
     cash: 'Наличные',
     card: 'Карта',
@@ -116,6 +118,7 @@ export function buildShiftReportHtml(
     row(L.click, money(cash.sales.click)),
     row(L.debt, money(cash.sales.debt)),
     row(L.total, money(cash.salesTotal), 'strong'),
+    dec(cash.serviceFees).gt(0) ? row(L.serviceFees, money(cash.serviceFees)) : '',
   ].join('');
 
   const diff = cash.difference === null ? null : dec(cash.difference);

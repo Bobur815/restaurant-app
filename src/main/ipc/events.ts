@@ -57,6 +57,7 @@ export const READ_ONLY_CHANNELS = [
   'residuals:list',
   'expenses:list',
   'reports:sales',
+  'reports:staff',
 ] as const satisfies readonly IpcChannel[];
 
 type Emit<C extends IpcChannel> = (input: IpcInput<C>, data: IpcOutput<C>) => AppEvent[];

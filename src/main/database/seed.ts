@@ -29,6 +29,10 @@ export const DEFAULT_SETTINGS: Record<string, unknown> = {
   // Pictures on the order screen (feature F10): both shown, as before the switches existed.
   show_category_images: true,
   show_menu_images: true,
+  // Feature F17: no service fee until an admin turns it on.
+  service_fee_type: 'off',
+  service_fee_percent: '10',
+  service_fee_per_guest: '0',
 };
 
 /** Legacy defaults (backend/utils/category-add-init.js), with Russian names. Fresh databases only. */

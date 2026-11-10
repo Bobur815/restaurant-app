@@ -9,6 +9,7 @@ import {
 import { pageHeader } from '../../components/page';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
+import { licensed } from '../../store/app';
 import { html } from '../../ui/html';
 import type { View } from '../types';
 import { submitButton } from './settings-ui';
@@ -28,7 +29,10 @@ export const paymentsSection: View = () => {
       form.className = 'card form-card';
       form.noValidate = true;
       form.append(
-        html`${checkboxField({
+        html`${licensed('debt')
+          ? ''
+          : html`<p class="notice notice-info">${t('settings.debtNotInPlan')}</p>`}
+        ${checkboxField({
           name: 'splitPaymentEnabled',
           label: t('settings.splitPaymentEnabled'),
           checked: settings.splitPaymentEnabled,

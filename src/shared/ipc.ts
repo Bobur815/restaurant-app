@@ -184,6 +184,7 @@ export interface IpcChannels {
   'residuals:apply': Channel<In<typeof S.applyResidualsInput>, number>;
   'expenses:list': Channel<In<typeof S.listExpensesInput>, T.ExpenseList>;
   'reports:sales': Channel<In<typeof S.salesReportInput>, T.SalesReport>;
+  'reports:staff': Channel<In<typeof S.staffReportInput>, T.StaffReport>;
 }
 
 export type IpcChannel = keyof IpcChannels;
@@ -311,6 +312,7 @@ export const IPC_CHANNELS = [
   'residuals:apply',
   'expenses:list',
   'reports:sales',
+  'reports:staff',
 ] as const satisfies readonly IpcChannel[];
 
 // Compile-time: IPC_CHANNELS lists every channel in IpcChannels (an omission is a type error).

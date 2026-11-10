@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { dec, isDecimalString } from './utils/decimal';
 import { PORTION_FACTORS } from './utils/order-line';
 import { digitsOnly, isUzPhoneComplete, normalizeUzPhone } from './utils/phone';
+import { MAX_GUESTS_AT_TABLE, SERVICE_FEE_TYPES } from './utils/service-fee';
 import { TENDER_METHODS } from './utils/split-payment';
 import { cleanPermissions, PERMISSIONS } from './permissions';
 
@@ -46,6 +47,14 @@ export const feeAmount = nonNegativeDecimal
   .refine((s) => s.replace(/^0+(?=\d)/, '').split('.')[0]!.length <= 8 && Number(s) <= 10_000_000, {
     message: "Juda katta summa (ko'pi bilan 10 000 000)",
   });
+
+/** A percentage someone types (service fee, waiter earnings): 0..100, at most 2 decimals. */
+export const percentAmount = nonNegativeDecimal
+  .refine((s) => !/\.\d{3,}$/.test(s), { message: "Ko'pi bilan 2 ta kasr raqam" })
+  .refine((s) => dec(s).lte(100), { message: "Foiz 0 dan 100 gacha bo'lishi kerak" });
+
+/** Guests at a table (feature F17). */
+export const guestCount = z.number().int().min(1).max(MAX_GUESTS_AT_TABLE);
 
 const trimmed = (min: number, max: number, label: string) =>
   z
@@ -150,6 +159,8 @@ export const createUserInput = z.object({
   permissions: permissionList.optional(),
   /** Omitted or null: the user cannot log in until a PIN is set. */
   pin: pinCode.nullish(),
+  /** Feature F17: share of their sales, percent. */
+  earningsPercent: percentAmount.default('0'),
 });
 
 export const updateUserInput = z.object({
@@ -161,6 +172,7 @@ export const updateUserInput = z.object({
   isActive: z.boolean().optional(),
   /** A new PIN; null removes it; omitted keeps it. */
   pin: pinCode.nullable().optional(),
+  earningsPercent: percentAmount.optional(),
 });
 
 // ── Setup & settings ─────────────────────────────────────────────────────────────────────────
@@ -317,6 +329,9 @@ export const updateSettingsInput = z
     lanEnabled: z.boolean(),
     showCategoryImages: z.boolean(),
     showMenuImages: z.boolean(),
+    serviceFeeType: z.enum(SERVICE_FEE_TYPES),
+    serviceFeePercent: percentAmount,
+    serviceFeePerGuest: feeAmount,
   })
   .partial();
 
@@ -505,6 +520,8 @@ export const saveTableOrderInput = z.object({
   lines: orderLines,
   /** Version the client last saw; omit only when creating. */
   expectedVersion: z.number().int().min(0).optional(),
+  /** Feature F17: guests at the table; omitted keeps the saved count. */
+  guestCount: guestCount.optional(),
 });
 
 /**
@@ -733,6 +750,9 @@ export const salesReportInput = z.object({
   sortBy: z.enum(['date', 'total']).default('date'),
   direction: z.enum(['asc', 'desc']).default('asc'),
 });
+
+/** Feature F17: Xodimlar bo'yicha hisobot. */
+export const staffReportInput = z.object({ start: isoDate, end: isoDate });
 
 export type SetupInput = z.infer<typeof setupInput>;
 export type SaveTableOrderInput = z.infer<typeof saveTableOrderInput>;

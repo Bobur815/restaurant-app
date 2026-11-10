@@ -11,10 +11,15 @@ import { daysBetween, presetRange, type RangePreset } from '../../utils/dates';
 import { formatDate, formatDateTime, formatMoney, formatQty } from '../../utils/format';
 import type { View } from '../types';
 import { createSalesChart } from './sales-chart';
+import { staffReportCard } from './staff-report';
 
-type Tab = 'sales' | 'residuals' | 'expenses';
+type Tab = 'sales' | 'staff' | 'residuals' | 'expenses';
+const TABS: Tab[] = ['sales', 'staff', 'residuals', 'expenses'];
 
-/** Reports (admin; legacy hisobotlar): sales by day and method, dishes sold, leftovers, expenses. */
+/**
+ * Reports (admin; legacy hisobotlar): sales by day and method, dishes sold, staff earnings (F17),
+ * leftovers, expenses.
+ */
 export const reportsView: View = () => {
   const lang = () => appStore.get().language;
   let tab: Tab = 'sales';
@@ -71,7 +76,7 @@ export const reportsView: View = () => {
   const tabs = document.createElement('div');
   tabs.className = 'chips';
   tabs.setAttribute('role', 'tablist');
-  const tabButtons = (['sales', 'residuals', 'expenses'] as Tab[]).map((id) => {
+  const tabButtons = TABS.map((id) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'chip';
@@ -111,6 +116,7 @@ export const reportsView: View = () => {
         | 'takeaway'
         | 'delivery'
         | 'deliveryFees'
+        | 'serviceFees'
         | 'received'
         | 'repayments'
         | 'debt'
@@ -163,7 +169,13 @@ export const reportsView: View = () => {
           ${tile(t('reports.expenseTotal'), formatMoney(toMoneyString(expenses), l))}
         </div>
         <div class="stat-row">
-          ${tile(t('orderType.DINE_IN'), formatMoney(byType('dineIn'), l))}
+          ${tile(
+            t('orderType.DINE_IN'),
+            formatMoney(byType('dineIn'), l),
+            dec(byType('serviceFees')).gt(0)
+              ? t('reports.serviceFeesNote', { amount: formatMoney(byType('serviceFees'), l) })
+              : undefined,
+          )}
           ${tile(t('orderType.TAKEAWAY'), formatMoney(byType('takeaway'), l))}
           ${tile(
             t('orderType.DELIVERY'),
@@ -443,12 +455,16 @@ export const reportsView: View = () => {
 
   // ── loading ───────────────────────────────────────────────────────────────────────────────
   async function load() {
-    tabButtons.forEach((b, i) =>
-      b.setAttribute('aria-selected', String(['sales', 'residuals', 'expenses'][i] === tab)),
-    );
+    tabButtons.forEach((b, i) => b.setAttribute('aria-selected', String(TABS[i] === tab)));
     try {
       if (tab === 'sales') {
         renderSales(await api.reports.sales({ start: range.start, end: range.end }));
+      } else if (tab === 'staff') {
+        chart?.destroy();
+        chart = null;
+        content.replaceChildren(
+          staffReportCard(await api.reports.staff({ start: range.start, end: range.end }), lang()),
+        );
       } else if (tab === 'residuals') {
         chart?.destroy();
         chart = null;
@@ -492,7 +508,7 @@ export const reportsView: View = () => {
   void load();
   // Theme changes recolour the chart: rebuild it from the tokens.
   const rerender = () => {
-    if (tab === 'sales') void load();
+    if (tab === 'sales' || tab === 'staff') void load();
   };
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   media.addEventListener('change', rerender);

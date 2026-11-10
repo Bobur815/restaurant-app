@@ -101,6 +101,7 @@ describe('sales report', () => {
         takeaway: '0',
         delivery: '0',
         deliveryFees: '0',
+        serviceFees: '0',
         repayments: '0',
         repaymentCash: '0',
         repaymentCard: '0',

@@ -74,7 +74,7 @@ import { printShiftReport } from '../printing/shift-report';
 import { listFailedTickets, printTestTicket, reprintKitchenTicket } from '../printing/kitchen';
 import { createPrinter, listPrinters, setMainPrinter, updatePrinter } from '../printing/printers';
 import { addCashMovement, getCashSummary } from '../sessions/cash';
-import { salesReport } from '../reports/reports';
+import { salesReport, staffReport } from '../reports/reports';
 import { applyResiduals, listExpenses, listResiduals } from '../residuals/residuals';
 import {
   closeSession,
@@ -582,4 +582,5 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     listExpenses(ctx.db, input),
   ),
   'reports:sales': need('reports', S.salesReportInput, (ctx, input) => salesReport(ctx.db, input)),
+  'reports:staff': need('reports', S.staffReportInput, (ctx, input) => staffReport(ctx.db, input)),
 };

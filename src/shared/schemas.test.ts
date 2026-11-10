@@ -45,8 +45,20 @@ describe('create schemas apply defaults', () => {
       fullName: 'Zohid',
       phone: '998901234567',
       role: 'STAFF',
+      earningsPercent: '0',
     });
     expect(createUserInput.safeParse({ fullName: 'Zohid' }).success).toBe(false);
+    // Feature F17: a percent is 0..100.
+    const pct = (earningsPercent: string) =>
+      createUserInput.safeParse({ fullName: 'Z', phone: '998901234567', earningsPercent }).success;
+    expect([pct('0'), pct('7.5'), pct('100'), pct('100.01'), pct('-1'), pct('1.234')]).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
   });
 
   it('menu item cannot be both portioned and sold by weight', () => {

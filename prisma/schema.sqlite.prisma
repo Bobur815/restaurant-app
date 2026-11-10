@@ -101,24 +101,27 @@ enum ExpenseType {
 // ==================== USERS & SETTINGS ====================
 
 model User {
-  id            Int       @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   // Display name (required by the app; the old username was copied here by migration 0009).
-  fullName      String?
+  fullName        String?
   // 998XXXXXXXXX. Unique; required by the app (users from before phones fill it in on edit).
-  phone         String?   @unique
+  phone           String?   @unique
   // Login is a 4-digit PIN only (feature F2). HMAC-SHA256 of the PIN with the per-install key
   // (settings `pin_key`): deterministic, so a PIN can be looked up and kept unique. Null = cannot
   // log in. The digits never reach the database.
-  pinHash       String?   @unique
+  pinHash         String?   @unique
   // The bcrypt PIN of an older version: works once, then becomes `pinHash` (auth.ts).
-  legacyPinCode String?
-  role          UserRole  @default(STAFF)
+  legacyPinCode   String?
+  role            UserRole  @default(STAFF)
   // JSON list of permissions (shared/permissions.ts); the role only gives the defaults.
-  permissions   String    @default("[]")
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  permissions     String    @default("[]")
+  isActive        Boolean   @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  // Feature F17: the waiter's share of their sales, in percent (0-100). Copied onto each order
+  // when it is paid (Order.waiterPercent), so a later change does not rewrite past earnings.
+  earningsPercent Decimal   @default(0)
 
   ordersCreated    Order[]         @relation("OrderCreatedBy")
   paymentsTaken    Payment[]       @relation("PaymentCreatedBy")
@@ -574,6 +577,13 @@ model Order {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   completedAt     DateTime?
+  // Feature F17: service fee (xizmat haqi), part of totalAmount; worked out by main on every save
+  // from the settings then (percent of the dishes or per guest). 0 when off and on older orders.
+  serviceFee      Decimal         @default(0)
+  // Guests at the table, entered by the waiter (per-guest service fee, reports). Null = not asked.
+  guestCount      Int?
+  // The opener's earningsPercent when the order was paid (staff report). Null = unpaid or older.
+  waiterPercent   Decimal?
 
   session   Session         @relation(fields: [sessionId], references: [id], onDelete: Restrict)
   createdBy User?           @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)

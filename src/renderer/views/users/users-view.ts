@@ -21,7 +21,8 @@ import { t } from '../../i18n';
 import { appStore } from '../../store/app';
 import { html } from '../../ui/html';
 import { icon } from '../../ui/icons';
-import { formatDateTime } from '../../utils/format';
+import { formatDateTime, formatQty, toInputDecimal } from '../../utils/format';
+import { dec } from '@shared/utils/decimal';
 import { formatPhone } from '@shared/utils/phone';
 import type { View } from '../types';
 import { withInfo } from '../../components/info-hint';
@@ -97,6 +98,7 @@ export const usersView: View = () => {
 
   const render = () => {
     const me = appStore.get().user!;
+    const lang = appStore.get().language;
     list.replaceChildren(
       html`<div class="table-wrap">
         <table class="lines-table">
@@ -105,6 +107,7 @@ export const usersView: View = () => {
               <th>${t('users.fullName')}</th>
               <th>${t('users.phone')}</th>
               <th>${t('users.role')}</th>
+              <th class="num">${t('users.earningsPercentShort')}</th>
               <th>${t('users.permissions')}</th>
               <th>${t('users.status')}</th>
               <th>${t('users.pin')}</th>
@@ -123,6 +126,9 @@ export const usersView: View = () => {
                   </td>
                   <td>${u.phone ? formatPhone(u.phone) : '—'}</td>
                   <td>${t(`nav.role${u.role}`)}</td>
+                  <td class="num">
+                    ${dec(u.earningsPercent).gt(0) ? `${formatQty(u.earningsPercent, lang)}%` : '—'}
+                  </td>
                   <td>${permissionSummary(u)}</td>
                   <td>
                     <span class="badge ${u.isActive ? 'badge-success' : 'badge-muted'}"
@@ -192,12 +198,21 @@ export const usersView: View = () => {
             autocomplete: 'off',
           })}${phone.el}
         </div>
-        ${selectField({
-          name: 'role',
-          label: t('users.role'),
-          value: user?.role ?? 'STAFF',
-          options: roleOptions(),
-        })}
+        <div class="form-row">
+          ${selectField({
+            name: 'role',
+            label: t('users.role'),
+            value: user?.role ?? 'STAFF',
+            options: roleOptions(),
+          })}
+          ${field({
+            name: 'earningsPercent',
+            label: t('users.earningsPercent'),
+            inputmode: 'decimal',
+            value: toInputDecimal(user?.earningsPercent ?? '0'),
+            info: t('users.earningsPercentHint'),
+          })}
+        </div>
         <fieldset class="permission-grid">
           <legend>${t('users.permissions')}</legend>
           ${boxes}
@@ -230,6 +245,7 @@ export const usersView: View = () => {
         phone: phone.input.value,
         role: roleSelect.value as Role,
         permissions,
+        earningsPercent: value(form, 'earningsPercent').replace(/\s/g, '').replace(',', '.') || '0',
       };
       try {
         if (user) {

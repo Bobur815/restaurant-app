@@ -78,6 +78,11 @@ describe('redirectFor', () => {
     expect(redirectFor('/settings', ['settings', 'users'], done, staff)).toBe('/tables');
   });
 
+  it('a page outside the plan is closed like a missing permission (F17: Debtors on Start)', () => {
+    expect(redirectFor('/debtors', 'debt', done, admin, false)).toBe('/tables');
+    expect(redirectFor('/debtors', 'debt', done, admin, true)).toBeNull();
+  });
+
   it('unknown routes go home or to login', () => {
     expect(redirectFor('/nope', null, done, staff)).toBe('/tables');
     expect(redirectFor('/nope', null, done, null)).toBe('/login');

@@ -9,13 +9,14 @@ import type {
 } from '@shared/schemas';
 import type { OpenOrderSummaryDto, OrderDto, PaymentMethod, TableSummaryDto } from '@shared/types';
 import { dec, roundMoney, sum, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
+import { serviceFeeFor } from '@shared/utils/service-fee';
 import { LineError, priceLine } from '@shared/utils/order-line';
 import { hasPermission } from '@shared/permissions';
 import { decStr, iso, isoOrNull, type Actor, type Db, type DbOrTx, type Tx } from '../domain/db';
 import { AppError, conflict, invalid, isUniqueViolation, notFound } from '../domain/errors';
 import { upsertCustomer } from '../customers/customers';
 import { requireOpenSessionId } from '../sessions/sessions';
-import { getSettings } from '../settings/settings';
+import { getSettings, serviceFeeRule } from '../settings/settings';
 import { applyStockDeltas } from '../sessions/stock';
 import { writeKitchenTickets } from '../printing/kitchen';
 
@@ -61,6 +62,8 @@ export function toOrderDto(o: OrderRow): OrderDto {
     deliveryAddress: o.deliveryAddress,
     deliveryNote: o.deliveryNote,
     deliveryFee: decStr(o.deliveryFee),
+    serviceFee: decStr(o.serviceFee),
+    guestCount: o.guestCount,
     deliveryStatus: o.deliveryStatus,
     courierName: o.courierName,
     lines: o.items.map((i) => ({
@@ -337,14 +340,23 @@ export async function saveTableOrder(
         input.lines,
         existing?.items,
       );
-      const total = toMoneyString(linesTotal);
+      // Feature F17: the service fee from the settings of this moment, on every save; part of
+      // the total like the delivery fee. Guests: as sent, else as saved before.
+      const guestCount = input.guestCount ?? existing?.guestCount ?? null;
+      const serviceFee = serviceFeeFor(
+        serviceFeeRule(await getSettings(tx)),
+        linesTotal,
+        guestCount,
+      );
+      const total = toMoneyString(linesTotal.plus(serviceFee));
+      const fees = { serviceFee: serviceFee.toFixed(), guestCount };
 
       if (existing) {
         await tx.orderItem.deleteMany({ where: { orderId: existing.id } });
         // The version condition makes the write itself fail if anything changed it meanwhile.
         const res = await tx.order.updateMany({
           where: { id: existing.id, version: existing.version, status: 'pending' },
-          data: { totalAmount: total, version: { increment: 1 } },
+          data: { totalAmount: total, ...fees, version: { increment: 1 } },
         });
         if (res.count !== 1) throw staleOrder(null);
         await tx.orderItem.createMany({ data: lines.map((l) => ({ ...l, orderId: existing.id })) });
@@ -364,6 +376,7 @@ export async function saveTableOrder(
           tableNumber: input.tableNumber,
           sessionId,
           totalAmount: total,
+          ...fees,
           createdById: actor.id,
           items: { create: lines },
         },

@@ -30,6 +30,7 @@ export interface CashFigures {
   payIn: Dec;
   payOut: Dec;
   expected: Dec;
+  serviceFees: Dec;
 }
 
 type SessionWindow = {
@@ -49,7 +50,13 @@ export async function cashFigures(
   const [payments, repayments, movements] = await Promise.all([
     db.payment.findMany({
       where: { order: { sessionId: session.id } },
-      select: { orderId: true, method: true, amount: true, status: true },
+      select: {
+        orderId: true,
+        method: true,
+        amount: true,
+        status: true,
+        order: { select: { serviceFee: true } },
+      },
     }),
     db.debtRepayment.findMany({
       where: {
@@ -76,9 +83,12 @@ export async function cashFigures(
   const payOut = sum(movements.filter((m) => m.type === 'PAY_OUT').map((m) => m.amount.toString()));
   const opening = dec(session.openingCash.toString());
 
+  // Feature F17: the service fees inside these sales, each check once.
+  const feeByOrder = new Map(counted.map((p) => [p.orderId, p.order.serviceFee.toString()]));
   return {
     opening,
     sales,
+    serviceFees: sum(feeByOrder.values()),
     checksCount: new Set(counted.map((p) => p.orderId)).size,
     debtRepaymentsCash,
     payIn,
@@ -139,6 +149,7 @@ export async function getCashSummary(db: DbOrTx, sessionId: number): Promise<Shi
       f.sales.cash.plus(f.sales.card).plus(f.sales.click).plus(f.sales.debt),
     ),
     checksCount: f.checksCount,
+    serviceFees: toMoneyString(f.serviceFees),
     debtRepaymentsCash: toMoneyString(f.debtRepaymentsCash),
     payIn: toMoneyString(f.payIn),
     payOut: toMoneyString(f.payOut),

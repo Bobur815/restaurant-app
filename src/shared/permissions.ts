@@ -18,7 +18,7 @@ export const PERMISSIONS = [
   'shifts',
   /** Dishes, categories, pictures. */
   'menu',
-  /** Sales, leftovers and expense reports. */
+  /** Sales, leftovers, expense and staff earnings reports (F17: everyone's pay is visible). */
   'reports',
   /** Edit and delete paid checks, delete shifts. */
   'corrections',

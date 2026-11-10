@@ -263,6 +263,16 @@ export const checksView: View = () => {
           )}
         </tbody>
         <tfoot>
+          ${dec(order.serviceFee).gt(0)
+            ? html`<tr>
+                <td colspan="2">
+                  ${t('order.serviceFee')}${order.guestCount
+                    ? html` <span class="muted">(${t('order.guests')}: ${order.guestCount})</span>`
+                    : ''}
+                </td>
+                <td class="num">${formatMoney(order.serviceFee, l)}</td>
+              </tr>`
+            : ''}
           <tr>
             <td colspan="2" class="strong">${t('order.total')}</td>
             <td class="num strong">${formatMoney(order.totalAmount, l)}</td>

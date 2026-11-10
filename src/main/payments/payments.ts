@@ -130,12 +130,21 @@ export async function payOrder(
       paidAt: now,
       createdById: actor.id,
     });
+    // Feature F17: the opener's earnings percent as of now, so changing it later does not
+    // rewrite what they already earned.
+    const waiter = order.createdById
+      ? await tx.user.findUnique({
+          where: { id: order.createdById },
+          select: { earningsPercent: true },
+        })
+      : null;
     const res = await tx.order.updateMany({
       where: { id: order.id, version: order.version, status: 'pending' },
       data: {
         status: 'completed',
         paymentMethod: method,
         completedAt: now,
+        waiterPercent: waiter ? waiter.earningsPercent : null,
         // A delivery is paid when the courier is back with the money.
         ...(order.orderType === 'DELIVERY' ? { deliveryStatus: 'DELIVERED' as const } : {}),
         version: { increment: 1 },

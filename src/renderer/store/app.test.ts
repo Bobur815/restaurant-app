@@ -1,4 +1,4 @@
-import { loadPrefs, savePrefs } from './app';
+import { loadPrefs, menuLayout, savePrefs } from './app';
 
 describe('per-machine preferences', () => {
   beforeEach(() => localStorage.clear());
@@ -7,6 +7,15 @@ describe('per-machine preferences', () => {
     savePrefs({ language: 'ru' });
     savePrefs({ theme: 'dark' });
     expect(loadPrefs()).toEqual({ language: 'ru', theme: 'dark' });
+  });
+
+  it('keeps the order-screen menu layout, horizontal by default', () => {
+    expect(menuLayout()).toBe('horizontal');
+    savePrefs({ menuLayout: 'vertical' });
+    savePrefs({ language: 'ru' });
+    expect(menuLayout()).toBe('vertical');
+    localStorage.setItem('savdochef.ui', JSON.stringify({ menuLayout: 'diagonal' }));
+    expect(menuLayout()).toBe('horizontal');
   });
 
   it('ignores invalid or corrupt stored values', () => {

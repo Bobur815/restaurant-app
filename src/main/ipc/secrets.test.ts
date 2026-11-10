@@ -1,5 +1,5 @@
 import type { IpcChannel } from '@shared/ipc';
-import { receiptSettingsInput } from '@shared/schemas';
+import { localDate, receiptSettingsInput } from '@shared/schemas';
 import { newRecoveryCode } from '../auth/auth';
 import type { Actor } from '../domain/db';
 import { RECEIPT_SETTINGS_ID } from '../settings/settings';
@@ -138,7 +138,8 @@ beforeAll(async () => {
 });
 afterAll(() => t.close());
 
-const today = new Date().toISOString().slice(0, 10);
+// The till's local date (UTC differs between midnight and 05:00 in Tashkent).
+const today = localDate();
 const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'halls:list': { includeInactive: true },
   'printing:printReceipt': { orderId: 1 },
@@ -159,6 +160,7 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'orders:getByNumber': { orderNumber: '2026-00001' },
   'checks:list': { startDate: today, endDate: today },
   'reports:sales': { start: today, end: today },
+  'reports:staff': { start: today, end: today },
   'license:signupStart': { phone: '+998 90 123 45 67' },
   'license:signupStatus': { verificationId: 'v1' },
 };
@@ -214,6 +216,17 @@ describe('no secrets over IPC', () => {
     expect(JSON.stringify(result)).not.toMatch(SECRET);
     // A failed call proves nothing about secrets: every read channel must really run here.
     expect(result).toMatchObject({ ok: true });
+  });
+
+  it('the staff report really lists a user (F17), with no hash in it', async () => {
+    const result = await invokeHandler(
+      'reports:staff',
+      HANDLERS['reports:staff'] as never,
+      ctx(admin),
+      INPUTS['reports:staff'],
+    );
+    expect(result).toMatchObject({ ok: true, data: { rows: [expect.anything()] } });
+    expect(JSON.stringify(result)).not.toMatch(SECRET);
   });
 
   it('PIN login and user management answers carry no hash, key or recovery code', async () => {

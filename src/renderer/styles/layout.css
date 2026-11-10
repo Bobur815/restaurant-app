@@ -1,12 +1,13 @@
-/* App frame: the top bar spans the window; below it the sidebar rail and the scrolling outlet. */
+/* App frame: the top bar spans the window; the scrolling outlet takes everything below it (the
+   pages are a drop-down in the top bar). */
 .shell {
   display: grid;
-  grid-template-columns: var(--sidebar-rail-width) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: var(--topbar-height) minmax(0, 1fr);
   grid-template-areas:
-    'top top'
-    'side main';
-  /* Top bar and sidebar float as cards: padding around the frame, a gap between them. */
+    'top'
+    'main';
+  /* The top bar floats as a card: padding around the frame, a gap under it. */
   gap: var(--shell-gap);
   height: 100vh;
   padding: var(--shell-gap);
@@ -14,7 +15,7 @@
 
 .topbar {
   grid-area: top;
-  /* Above the drawer, so an open drawer never covers it. */
+  /* Above the page, so the pages drop-down opens over it. */
   position: relative;
   z-index: 40;
   display: flex;
@@ -150,99 +151,45 @@
   font-size: var(--font-size-xl);
 }
 
-/* ── Sidebar: a 72 px rail under the top bar that opens as a drawer over the page ───────────
-   The grid column stays the rail's width; the panel inside is absolutely positioned within the
-   row below the top bar and widens over the content when open, so nothing behind it moves.
-   Icons sit at the same x in both states; labels fade in. */
-.sidebar {
-  grid-area: side;
+/* ── Pages menu: a drop-down under the gear button next to the profile ─────────────────── */
+.nav-menu-wrap {
   position: relative;
-  z-index: 30;
 }
 
-.sidebar-panel {
-  position: absolute;
-  inset: 0 auto 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: var(--sidebar-rail-width);
-  padding: var(--space-3);
-  overflow: hidden;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  /* Closing is quicker than opening; both decelerate so the edge settles instead of stopping. */
-  transition:
-    width 0.2s var(--ease-drawer),
-    box-shadow 0.2s ease;
-  will-change: width;
-}
-
-/* Open: hover (.is-open after an intent pause), pinned by the hamburger, or keyboard focus. */
-.sidebar.is-open .sidebar-panel,
-.sidebar.is-pinned .sidebar-panel,
-.sidebar:has(:focus-visible) .sidebar-panel {
-  width: var(--sidebar-drawer-width);
-  box-shadow: var(--shadow-lg);
-  transition:
-    width 0.28s var(--ease-drawer),
-    box-shadow 0.28s ease;
-}
-
-/* Labels slide in with the edge and fade out first when it closes. */
-.sidebar-label,
-.nav-section-title > span {
-  white-space: nowrap;
-  opacity: 0;
-  transform: translateX(-6px);
-  transition:
-    opacity 0.1s ease,
-    transform 0.1s ease;
-}
-
-.sidebar.is-open :is(.sidebar-label, .nav-section-title > span),
-.sidebar.is-pinned :is(.sidebar-label, .nav-section-title > span),
-.sidebar:has(:focus-visible) :is(.sidebar-label, .nav-section-title > span) {
-  opacity: 1;
-  transform: none;
-  transition:
-    opacity 0.2s ease 0.08s,
-    transform 0.24s var(--ease-drawer) 0.08s;
-}
-
-/* Windows with "Animation effects" off reports reduced motion, which switches every transition
-   off (base.css). The drawer still slides, briefly and plainly: snapping 176 px wide over the
-   page is more jarring than a short slide. The labels only fade. */
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-panel {
-    transition: width 0.16s ease-out !important;
-  }
-
-  .sidebar :is(.sidebar-label, .nav-section-title > span) {
-    transform: none !important;
-  }
-}
-
-.sidebar-hamburger {
-  flex-shrink: 0;
-  margin-bottom: var(--space-1);
+.nav-menu-button {
+  width: 44px;
+  height: 44px;
   color: var(--color-text);
 }
 
-.sidebar-hamburger[aria-expanded='true'] {
+.nav-menu-button:hover,
+.nav-menu-button[aria-expanded='true'] {
   background: var(--color-surface-2);
 }
 
-.sidebar-nav {
+.nav-menu-button[aria-expanded='true'] {
+  color: var(--color-primary);
+}
+
+.nav-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  right: 0;
   display: flex;
-  flex: 1;
   flex-direction: column;
-  gap: var(--space-4);
-  min-height: 0;
+  gap: var(--space-3);
+  width: 260px;
+  max-height: calc(100vh - var(--topbar-height) - 2 * var(--shell-gap));
+  padding: var(--space-3);
   overflow-y: auto;
-  overflow-x: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.nav-menu[hidden] {
+  display: none;
 }
 
 .nav-section {
@@ -251,12 +198,13 @@
   gap: var(--space-1);
 }
 
+.nav-section + .nav-section {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
 .nav-section-title {
-  /* The rail is too narrow for the words: a short rule over the icons there, the title in the
-     drawer (aligned with the labels, so nothing jumps sideways as it opens). */
-  position: relative;
-  min-height: 16px;
-  padding: 0 0 var(--space-1) 14px;
+  padding: 0 14px var(--space-1);
   color: var(--color-text-muted);
   font-size: 10px;
   font-weight: 600;
@@ -265,22 +213,8 @@
   white-space: nowrap;
 }
 
-.nav-section-title::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  left: 14px;
-  width: 20px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--color-border);
-  transition: opacity 0.12s ease;
-}
-
-.sidebar.is-open .nav-section-title::before,
-.sidebar.is-pinned .nav-section-title::before,
-.sidebar:has(:focus-visible) .nav-section-title::before {
-  opacity: 0;
+.nav-label {
+  white-space: nowrap;
 }
 
 .nav-link {
@@ -289,7 +223,6 @@
   gap: var(--space-3);
   width: 100%;
   min-height: 44px;
-  /* 12 panel padding + 14 = icon starts at 26: a 20 px icon is centred in the 72 px rail. */
   padding: 0 14px;
   border: 0;
   border-radius: var(--radius-md);

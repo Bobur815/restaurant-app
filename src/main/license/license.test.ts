@@ -192,6 +192,25 @@ describe('licence', () => {
     expect(
       await refusal('reports:sales', { start: '2026-10-20', end: '2026-10-20' }, start, halls),
     ).toBeNull();
+    // Feature F17: the staff report too is one day at a time on Start; Debtors is off.
+    expect(
+      await refusal('reports:staff', { start: '2026-10-01', end: '2026-10-20' }, start, halls),
+    ).toMatch(/hisobot/);
+    expect(
+      await refusal('reports:staff', { start: '2026-10-20', end: '2026-10-20' }, start, halls),
+    ).toBeNull();
+    for (const ch of [
+      'debts:list',
+      'debts:get',
+      'debts:repay',
+      'debts:writeOff',
+      'debts:void',
+      'debts:assign',
+      'customers:update',
+    ] as const)
+      expect(await refusal(ch, {}, start, halls)).toMatch(/Nasiya/);
+    const pro = state(read(signed({ plan: 'PRO', features: ['debt'] }))!);
+    expect(await refusal('debts:list', {}, pro, halls)).toBeNull();
     expect(await refusal('halls:create', { name: 'Terrasa' }, start, halls)).toMatch(/zal/);
     expect(await refusal('halls:create', { name: 'Zal' }, start, async () => 0)).toBeNull();
     expect(

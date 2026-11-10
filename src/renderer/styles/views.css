@@ -140,9 +140,13 @@
 /* ── Order screen ────────────────────────────────────────────────────────────────────────── */
 .order-page {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(340px, 1fr);
+  /* F16: the order is a column at the side; the menu gets the rest of the screen. The order
+     column also has the width the old sidebar rail took (72 px + the 12 px gap), so the menu side
+     is as wide as before. */
+  grid-template-columns: clamp(444px, calc(33% + 56px), 564px) minmax(0, 1fr);
   gap: var(--space-4);
   height: 100%;
+  min-height: 0;
   /* Its two cards sit directly in the frame, aligned with the top bar's edges. */
   padding: 0;
 }
@@ -163,8 +167,9 @@
 
 .order-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2) var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--color-border);
 }
@@ -220,6 +225,31 @@
   margin-top: 2px;
 }
 
+.line-variant:empty {
+  display: none;
+}
+
+/* F16: the unit price sits under the name, so the narrower order column needs no price column. */
+.line-unit {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-lines .lines-table th,
+.order-lines .lines-table td {
+  padding: var(--space-2);
+}
+
+.order-lines .lines-table th:first-child,
+.order-lines .lines-table td:first-child {
+  padding-left: var(--space-3);
+}
+
+.order-lines .qty-input {
+  width: 44px;
+}
+
 .portion-select {
   height: 30px;
   padding: 0 var(--space-2);
@@ -255,18 +285,67 @@
 
 .order-footer {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--color-border);
   background: var(--color-surface-2);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
-.order-total {
+/* F17: guests (per-guest service fee) and the service fee, above the total. */
+.order-service {
   display: flex;
   flex-direction: column;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.order-service[hidden],
+.order-guests[hidden] {
+  display: none;
+}
+
+.order-guests,
+.order-fee {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.order-fee strong {
+  color: var(--color-text);
+  font-size: var(--font-size-md);
+  font-variant-numeric: tabular-nums;
+}
+
+.guest-count {
+  min-width: 36px;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: var(--color-text);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.order-guests .icon-button {
+  width: 44px;
+  height: 44px;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.order-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
 }
 
 .order-total span {
@@ -283,19 +362,167 @@
 
 .order-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  flex-shrink: 0;
 }
 
+/* Equal shares of the row; a long label wraps the row instead of being cut. */
 .order-actions .btn {
+  flex: 1 1 0;
+  min-width: max-content;
   white-space: nowrap;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-3);
 }
 
-/* Menu side */
+/* Menu side (F16): one grid, two layouts. A = search / categories row / dishes;
+   B = categories sidebar | search over dishes. Each part scrolls on its own. */
 .menu-panel {
+  display: grid;
   gap: var(--space-3);
   padding: var(--space-3);
+  min-width: 0;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: 'head' 'cats' 'grid';
+}
+
+.menu-panel[data-layout='vertical'] {
+  grid-template-columns: 156px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: 'cats head' 'cats grid';
+}
+
+.menu-head {
+  grid-area: head;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.menu-head .menu-search {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout-toggle {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-2);
+}
+
+.layout-toggle .icon-button {
+  width: 44px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+}
+
+.layout-toggle .icon-button[aria-pressed='true'] {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Category tiles: a picture over the name, or the name alone. */
+.category-tiles {
+  grid-area: cats;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  /* Wheel, drag and swipe scroll the row; a cut-off tile at the edge shows there is more. */
+  scrollbar-width: none;
+  padding: 2px;
+  user-select: none;
+}
+
+.category-tiles.is-dragging {
+  cursor: grabbing;
+}
+
+.category-tiles.is-dragging .category-tile {
+  pointer-events: none;
+}
+
+.menu-panel[data-layout='vertical'] .category-tiles {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  padding: 2px 4px 2px 2px;
+}
+
+.category-tile {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  min-width: 96px;
+  min-height: 48px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+}
+
+.category-tile.has-image {
+  width: 112px;
+  padding: var(--space-1) var(--space-1) var(--space-2);
+}
+
+.menu-panel[data-layout='vertical'] .category-tile {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+}
+
+.category-tile:hover {
+  border-color: var(--color-primary);
+}
+
+.category-tile[aria-selected='true'] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-primary-contrast);
+}
+
+.category-tile-label {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.category-tile-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.category-tile-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .menu-search {
@@ -323,8 +550,11 @@
 }
 
 .dish-grid {
+  grid-area: grid;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  /* Rows as tall as their cards: a card clips its picture, so auto rows would squeeze it. */
+  grid-auto-rows: max-content;
   align-content: start;
   gap: var(--space-3);
   flex: 1;
@@ -336,8 +566,9 @@
 .dish-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 0 0 var(--space-2);
+  gap: 0;
+  min-height: 44px;
+  padding: 0;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -360,54 +591,31 @@
 }
 
 .dish-card .dish-image {
-  height: 84px;
-  margin-bottom: var(--space-1);
+  flex: none;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.dish-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-2) var(--space-3);
 }
 
 /* Feature F10: pictures turned off, a compact text tile. */
-.dish-card.no-image {
-  padding-top: var(--space-2);
+.dish-card.no-image .dish-body {
+  padding-top: var(--space-3);
 }
 
 .dish-card.no-image .dish-name {
   font-size: var(--font-size-md);
 }
 
-/* Category chip with its picture (order screen). */
-.chip.chip-with-image {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-left: 4px;
-}
-
-.chip-image {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-2);
-  color: var(--color-text-muted);
-}
-
-.chip-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
 .form-subtitle {
   margin: var(--space-4) 0 var(--space-1);
   font-size: var(--font-size-md);
-}
-
-.dish-name,
-.dish-price,
-.dish-stock {
-  margin: 0 var(--space-2);
 }
 
 .dish-name {
@@ -519,8 +727,15 @@
     font-size: var(--font-size-xl);
   }
 
-  .dish-card .dish-image {
-    height: 64px;
+  .category-tile.has-image {
+    width: 96px;
+  }
+}
+
+/* 1366-wide screens: more, smaller cards (4 in a row, 3 beside the category sidebar). */
+@media (max-width: 1500px), (max-height: 760px) {
+  .dish-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 }
 
@@ -1618,7 +1833,8 @@
   accent-color: var(--color-primary);
 }
 
-/* A newer version waits: a dot on Settings in the sidebar and on its menu entry. */
+/* A newer version waits: a dot on Settings in the pages menu, on the button that opens it, and
+   on the Settings page's own entry. */
 .nav-link.has-dot,
 .settings-nav-link.has-dot {
   position: relative;
@@ -1639,6 +1855,22 @@
 
 .settings-nav-link.has-dot::after {
   left: 22px;
+}
+
+.nav-menu-button.has-dot {
+  position: relative;
+}
+
+.nav-menu-button.has-dot::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--color-surface);
+  border-radius: 50%;
+  background: var(--color-danger);
 }
 
 .update-card .form-actions + p {

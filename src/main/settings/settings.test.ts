@@ -73,6 +73,10 @@ describe('settings', () => {
       lanEnabled: false,
       showCategoryImages: true,
       showMenuImages: true,
+      // Feature F17: off after the upgrade.
+      serviceFeeType: 'off',
+      serviceFeePercent: '10',
+      serviceFeePerGuest: '0',
       setupComplete: false,
     });
     const after = await updateSettings(t.db, { language: 'ru' });

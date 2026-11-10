@@ -41,7 +41,8 @@ const ROUTES: RouteDef<View>[] = [
   { path: '/orders/:id', access: 'orders', layout: 'shell', view: orderView },
   { path: '/sessions', access: 'user', layout: 'shell', view: sessionsView },
   { path: '/checks', access: 'checks', layout: 'shell', view: checksView },
-  { path: '/debtors', access: 'debt', layout: 'shell', view: debtorsView },
+  // Feature F17: Debtors is part of the debt feature (off on the Start plan).
+  { path: '/debtors', access: 'debt', feature: 'debt', layout: 'shell', view: debtorsView },
   { path: '/profile', access: 'user', layout: 'shell', view: profileView },
   { path: '/menu', access: 'menu', layout: 'shell', view: menuView },
   { path: '/reports', access: 'reports', layout: 'shell', view: reportsView },

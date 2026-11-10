@@ -8,11 +8,17 @@ import type {
 import { TABLE_LOCK_RENEW_MS } from '@shared/table-lock';
 import { dec, sum } from '@shared/utils/decimal';
 import { PORTION_FACTORS, type PortionFactor } from '@shared/utils/order-line';
+import {
+  DEFAULT_GUESTS,
+  MAX_GUESTS_AT_TABLE,
+  serviceFeeFor,
+  type ServiceFeeRule,
+} from '@shared/utils/service-fee';
 import { api, isApiError } from '../../api';
 import { confirmDialog } from '../../components/modal';
 import { toast, toastError } from '../../components/toast';
 import { t } from '../../i18n';
-import { appStore, can } from '../../store/app';
+import { appStore, can, menuLayout, savePrefs, type MenuLayout } from '../../store/app';
 import { html, refs } from '../../ui/html';
 import { icon } from '../../ui/icons';
 import { playClick } from '../../ui/sound';
@@ -40,32 +46,19 @@ import { payOrderModal } from './payment-modal';
 import { moveTableModal } from './move-table-modal';
 import { printPreBill, printReceipt } from './print-receipt';
 import { askWeight } from './weight-modal';
+import {
+  createCategoryList,
+  createMenuGrid,
+  layoutToggle,
+  menuItemCard,
+  thumb,
+} from './menu-browser';
 
 const PORTION_LABEL: Record<PortionFactor, string> = {
   '1': 'order.portionFull',
   '0.7': 'order.portion07',
   '0.5': 'order.portionHalf',
 };
-
-const imageUrl = (file: string | null) =>
-  file ? `savdochef-img://img/${encodeURIComponent(file)}` : null;
-
-function thumb(file: string | null, className: string): HTMLElement {
-  const box = document.createElement('div');
-  box.className = className;
-  const url = imageUrl(file);
-  if (url) {
-    const img = document.createElement('img');
-    img.src = url;
-    img.alt = '';
-    img.loading = 'lazy';
-    img.addEventListener('error', () => img.replaceWith(icon('noImage', 22)));
-    box.append(img);
-  } else {
-    box.append(icon('noImage', 22));
-  }
-  return box;
-}
 
 /**
  * What the screen is editing: a table's order (`/tables/:table`), or a takeaway/delivery order,
@@ -140,6 +133,14 @@ export const orderView: View = ({ params, navigate }) => {
         <div data-ref="customer"></div>
         <div class="order-lines" data-ref="lines"></div>
         <footer class="order-footer">
+          <div class="order-service" data-ref="service" hidden>
+            <div class="order-guests" data-ref="guests" hidden>
+              <span>${t('order.guests')}</span>
+            </div>
+            <div class="order-fee">
+              <span data-ref="feeLabel"></span><strong data-ref="fee"></strong>
+            </div>
+          </div>
           <div class="order-total">
             <span>${t('order.total')}</span><strong data-ref="total"></strong>
           </div>
@@ -147,16 +148,16 @@ export const orderView: View = ({ params, navigate }) => {
         </footer>
       </div>
       <aside class="menu-panel" aria-label="${t('nav.menu')}">
-        <div class="menu-search">
-          ${icon('search', 18)}<input
-            type="search"
-            data-ref="search"
-            placeholder="${t('order.searchPlaceholder')}"
-            aria-label="${t('app.search')}"
-          />
+        <div class="menu-head" data-ref="menuHead">
+          <div class="menu-search">
+            ${icon('search', 18)}<input
+              type="search"
+              data-ref="search"
+              placeholder="${t('order.searchPlaceholder')}"
+              aria-label="${t('app.search')}"
+            />
+          </div>
         </div>
-        <div class="chips" data-ref="chips" role="tablist"></div>
-        <div class="dish-grid" data-ref="dishes"></div>
       </aside>`,
   );
   const r = refs<{
@@ -169,10 +170,59 @@ export const orderView: View = ({ params, navigate }) => {
     total: HTMLElement;
     actions: HTMLElement;
     search: HTMLInputElement;
-    chips: HTMLElement;
-    dishes: HTMLElement;
+    menuHead: HTMLElement;
+    service: HTMLElement;
+    guests: HTMLElement;
+    feeLabel: HTMLElement;
+    fee: HTMLElement;
   }>(el);
+
+  // Feature F17: guests at the table (per-guest service fee); null until someone sets it.
+  let guests: number | null = null;
+  const guestInput = document.createElement('output');
+  guestInput.className = 'guest-count';
+  const guestMinus = iconButton('minus', t('order.guestsFewer'), () =>
+    setGuests(shownGuests() - 1),
+  );
+  const guestPlus = iconButton('plus', t('order.guestsMore'), () => setGuests(shownGuests() + 1));
+  r.guests.append(html`<div class="stepper">${guestMinus}${guestInput}${guestPlus}</div>`);
+  const feeRule = (): ServiceFeeRule | null => {
+    const s = appStore.get().settings;
+    if (target.kind !== 'table' || !s || s.serviceFeeType === 'off') return null;
+    return { type: s.serviceFeeType, percent: s.serviceFeePercent, perGuest: s.serviceFeePerGuest };
+  };
+  const shownGuests = () => guests ?? DEFAULT_GUESTS;
+  function setGuests(n: number) {
+    guests = Math.min(MAX_GUESTS_AT_TABLE, Math.max(1, n));
+    renderLines();
+  }
+  /** What main will add on save (it computes the same; its number is what is stored). */
+  const serviceFee = () => {
+    const rule = feeRule();
+    return rule ? serviceFeeFor(rule, draftTotal(lines), shownGuests()).toFixed() : '0';
+  };
   const menuPanel = el.querySelector<HTMLElement>('.menu-panel')!;
+
+  // Feature F16: categories in a row above the dishes, or in a sidebar beside them (per machine).
+  const categoryList = createCategoryList((id) => {
+    categoryId = id;
+    renderChips();
+    renderDishes();
+    dishGrid.resetScroll();
+  });
+  const dishGrid = createMenuGrid();
+  const applyLayout = (layout: MenuLayout) => {
+    menuPanel.dataset['layout'] = layout;
+    categoryList.setOrientation(layout);
+    toggle.set(layout);
+  };
+  const toggle = layoutToggle(menuLayout(), (layout) => {
+    savePrefs({ menuLayout: layout });
+    applyLayout(layout);
+  });
+  r.menuHead.append(toggle.el);
+  menuPanel.append(categoryList.el, dishGrid.el);
+  applyLayout(menuLayout());
 
   const saveButton = button(t('order.save'), 'primary');
   const payButton = button(t('order.pay'), 'success');
@@ -213,7 +263,9 @@ export const orderView: View = ({ params, navigate }) => {
       : null;
   if (panel) r.customer.append(panel.el);
 
-  const dirty = () => !sameAsSaved(lines, order) || (panel?.isDirty() ?? false);
+  const guestsChanged = () =>
+    feeRule()?.type === 'perGuest' && shownGuests() !== (order?.guestCount ?? DEFAULT_GUESTS);
+  const dirty = () => !sameAsSaved(lines, order) || (panel?.isDirty() ?? false) || guestsChanged();
   const title = () =>
     target.kind === 'table' ? t('order.title', { n: tableNumber }) : t(`orderType.${panel!.type}`);
 
@@ -279,7 +331,6 @@ export const orderView: View = ({ params, navigate }) => {
             <tr>
               ${dishPictures() ? html`<th></th>` : ''}
               <th>${t('order.dish')}</th>
-              <th class="num">${t('order.price')}</th>
               <th class="num">${t('order.qty')}</th>
               <th class="num">${t('order.total')}</th>
               <th></th>
@@ -291,8 +342,29 @@ export const orderView: View = ({ params, navigate }) => {
         </table>`,
       );
     }
-    // The delivery fee is part of the order total (main computes the same).
-    r.total.textContent = formatMoney(sum([draftTotal(lines), panel?.fee() ?? '0']).toFixed(), l);
+    // The delivery and service fees are part of the order total (main computes the same).
+    // A saved order nobody changed shows what is stored (what payment checks against), even if
+    // the fee settings changed since; any change shows what the next save will store.
+    const rule = feeRule();
+    const stored = order !== null && !dirty();
+    const computed = serviceFee();
+    const fee = stored ? order!.serviceFee : computed;
+    r.service.hidden = !rule && dec(fee).isZero();
+    r.guests.hidden = rule?.type !== 'perGuest';
+    guestInput.value = String(shownGuests());
+    guestMinus.disabled = shownGuests() <= 1;
+    guestPlus.disabled = shownGuests() >= MAX_GUESTS_AT_TABLE;
+    r.feeLabel.textContent =
+      rule?.type === 'percent' && dec(fee).equals(computed)
+        ? t('order.serviceFeePercent', { percent: formatQty(String(rule.percent), l) })
+        : t('order.serviceFee');
+    r.fee.textContent = formatMoney(fee, l);
+    r.total.textContent = formatMoney(
+      stored && target.kind === 'table'
+        ? order!.totalAmount
+        : sum([draftTotal(lines), panel?.fee() ?? '0', fee]).toFixed(),
+      l,
+    );
     r.title.textContent = title();
     const unsaved = dirty();
     saveButton.disabled =
@@ -383,9 +455,11 @@ export const orderView: View = ({ params, navigate }) => {
           : ''}
         <td>
           <div class="line-name">${localName(line, l)}</div>
+          <div class="line-unit" title="${t('order.price')}">
+            ${formatMoney(p.unitPrice.toFixed(), l, false)}
+          </div>
           <div class="line-variant">${variant}</div>
         </td>
-        <td class="num">${formatMoney(p.unitPrice.toFixed(), l, false)}</td>
         <td class="num"><div class="stepper">${minus}${qty}${plus}</div></td>
         <td class="num strong">${formatMoney(p.totalPrice.toFixed(), l, false)}</td>
         <td>${remove}</td>`,
@@ -427,47 +501,27 @@ export const orderView: View = ({ params, navigate }) => {
   function renderChips() {
     const l = lang();
     const pictures = categoryPictures();
-    const chip = (label: string, id: number | null, imageFile: string | null = null) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'chip';
-      b.setAttribute('role', 'tab');
-      b.setAttribute('aria-selected', String(categoryId === id));
-      if (pictures && imageFile) {
-        b.classList.add('chip-with-image');
-        b.append(thumb(imageFile, 'chip-image'), html`<span>${label}</span>`);
-      } else {
-        b.textContent = label;
-      }
-      b.addEventListener('click', () => {
-        categoryId = id;
-        renderChips();
-        renderDishes();
-      });
-      return b;
-    };
-    r.chips.replaceChildren(
-      chip(t('order.allCategories'), null),
-      ...categories.map((c) => chip(localName(c, l), c.id, c.imageFile)),
+    // "Barchasi" always first.
+    categoryList.render(
+      [
+        { id: null, label: t('order.allCategories'), imageFile: null },
+        ...categories.map((c) => ({
+          id: c.id,
+          label: localName(c, l),
+          imageFile: pictures ? c.imageFile : null,
+        })),
+      ],
+      categoryId,
     );
   }
 
   function renderDishes() {
     const l = lang();
-    const dishes = visibleDishes();
-    if (dishes.length === 0) {
-      r.dishes.replaceChildren(html`<p class="muted empty-inline">${t('order.noDishes')}</p>`);
-      return;
-    }
-    r.dishes.replaceChildren(
-      ...dishes.map((dish) => {
+    const pictures = dishPictures();
+    dishGrid.render(
+      visibleDishes().map((dish) => {
         const left = availabilityOf(dish);
         const out = left === null || (left !== UNLIMITED && dec(left).lte(0));
-        const b = document.createElement('button');
-        b.type = 'button';
-        const pictures = dishPictures();
-        b.className = `dish-card${out ? ' is-out' : ''}${pictures ? '' : ' no-image'}`;
-        b.disabled = out || appStore.get().openSession === null || stale;
         const badge =
           left === null
             ? t('order.notInSession')
@@ -476,18 +530,15 @@ export const orderView: View = ({ params, navigate }) => {
               : dec(left).lte(0)
                 ? t('order.outOfStock')
                 : t('order.left', { qty: formatQty(left, l, dish.soldByWeight) });
-        b.append(
-          html`${pictures ? thumb(dish.imageFile, 'dish-image') : ''}
-            <span class="dish-name">${localName(dish, l)}</span>
-            <span class="dish-price"
-              >${formatMoney(dish.price, l)}${dish.soldByWeight ? ` ${t('order.perKg')}` : ''}</span
-            >
-            <span class="dish-stock ${out ? 'badge badge-muted' : 'badge badge-success'}"
-              >${badge}</span
-            >`,
-        );
-        b.addEventListener('click', () => void addToOrder(dish));
-        return b;
+        return menuItemCard({
+          name: localName(dish, l),
+          price: `${formatMoney(dish.price, l)}${dish.soldByWeight ? ` ${t('order.perKg')}` : ''}`,
+          badge,
+          out,
+          disabled: out || appStore.get().openSession === null || stale,
+          imageFile: pictures ? dish.imageFile : undefined,
+          onAdd: () => void addToOrder(dish),
+        });
       }),
     );
   }
@@ -527,7 +578,13 @@ export const orderView: View = ({ params, navigate }) => {
     panel?.clearErrors();
     try {
       if (target.kind === 'table') {
-        order = await api.orders.save(toSaveInput(tableNumber, lines, order?.version));
+        order = await api.orders.save({
+          ...toSaveInput(tableNumber, lines, order?.version),
+          // Sent whenever the per-guest fee is on, so the count is stored with the order.
+          ...(feeRule()?.type === 'perGuest' || guests !== null
+            ? { guestCount: shownGuests() }
+            : {}),
+        });
       } else {
         const { feeValid: _feeValid, ...customer } = panel!.values();
         order = await api.orders.saveOpen({
@@ -746,6 +803,7 @@ export const orderView: View = ({ params, navigate }) => {
       categories = c;
       order = o;
       lines = o ? fromOrder(o, m) : [];
+      guests = o?.guestCount ?? null;
       panel?.setOrder(o);
       stale = false;
       const me = appStore.get().user?.id;
@@ -817,6 +875,9 @@ export const orderView: View = ({ params, navigate }) => {
     ) {
       renderChips();
       renderDishes();
+      renderLines();
+    } else if (s.settings !== prev.settings) {
+      // Feature F17: the service fee settings may have changed.
       renderLines();
     }
   });

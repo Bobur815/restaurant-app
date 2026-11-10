@@ -1,4 +1,5 @@
 import { hasPermission, type Permission } from '@shared/permissions';
+import type { LicenseFeature } from '@shared/license';
 import type { CurrentUser, SetupStatus } from '@shared/types';
 
 /**
@@ -15,6 +16,8 @@ export interface RouteDef<V> {
   access: Access;
   /** 'shell' = inside the app frame with navigation; 'bare' = full screen (setup, login). */
   layout: 'shell' | 'bare';
+  /** A plan feature the page needs (F5/F17): without it the page is closed like a missing permission. */
+  feature?: LicenseFeature;
   view: V;
 }
 
@@ -63,6 +66,8 @@ export function redirectFor(
   access: Access | null,
   setup: SetupStatus,
   user: CurrentUser | null,
+  /** The route's plan feature is included (or the route needs none). */
+  inPlan = true,
 ): string | null {
   if (!setup.setupComplete) return path === '/setup' ? null : '/setup';
   if (path === '/setup') return user ? homeFor(user) : '/login';
@@ -71,7 +76,7 @@ export function redirectFor(
   if (access === null) return user ? homeFor(user) : '/login'; // unknown route
   if (access === 'public') return null;
   if (!user) return '/login';
-  if (!canAccess(user, access)) return homeFor(user);
+  if (!canAccess(user, access) || !inPlan) return homeFor(user);
   return null;
 }
 

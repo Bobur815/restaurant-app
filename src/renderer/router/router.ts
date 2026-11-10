@@ -1,4 +1,4 @@
-import { appStore } from '../store/app';
+import { appStore, licensed } from '../store/app';
 import type { View, ViewInstance } from '../views/types';
 import { matchRoute, pathFromHash, redirectFor, type RouteDef } from './routes';
 
@@ -47,6 +47,7 @@ export function startRouter(options: RouterOptions): Router {
       match?.route.access ?? null,
       setup ?? { setupComplete: false, hasAdmin: false },
       user,
+      match?.route.feature ? licensed(match.route.feature) : true,
     );
     if (redirect !== null && redirect !== path) {
       suppressNext = false;

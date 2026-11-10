@@ -1,7 +1,13 @@
 import type { z } from 'zod';
-import type { salesReportInput } from '@shared/schemas';
-import type { DailyReportRow, ProductSalesRow, SalesReport } from '@shared/types';
-import { dec, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
+import type { salesReportInput, staffReportInput } from '@shared/schemas';
+import type {
+  DailyReportRow,
+  ProductSalesRow,
+  SalesReport,
+  StaffReport,
+  StaffReportRow,
+} from '@shared/types';
+import { dec, roundMoney, sum, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
 import { dayEnd, dayKey, dayStart, type Db } from '../domain/db';
 
 /**
@@ -37,6 +43,7 @@ export async function salesReport(
             id: true,
             orderType: true,
             deliveryFee: true,
+            serviceFee: true,
             items: {
               select: {
                 menuItemId: true,
@@ -70,6 +77,7 @@ export async function salesReport(
     | 'TAKEAWAY'
     | 'DELIVERY'
     | 'fees'
+    | 'serviceFees'
     | 'repaid'
     | 'repaidCash'
     | 'repaidCard'
@@ -97,6 +105,7 @@ export async function salesReport(
         'TAKEAWAY',
         'DELIVERY',
         'fees',
+        'serviceFees',
         'repaid',
         'repaidCash',
         'repaidCard',
@@ -147,6 +156,7 @@ export async function salesReport(
     if (first < range.gte) continue; // counted in the range that holds its first payment
     acc.orders += 1;
     acc.fees = acc.fees.plus(p.order.deliveryFee.toString());
+    acc.serviceFees = acc.serviceFees.plus(p.order.serviceFee.toString());
     const perDay = products.get(key) ?? new Map();
     products.set(key, perDay);
     for (const line of p.order.items) {
@@ -199,6 +209,7 @@ export async function salesReport(
     takeaway: toMoneyString(a.TAKEAWAY),
     delivery: toMoneyString(a.DELIVERY),
     deliveryFees: toMoneyString(a.fees),
+    serviceFees: toMoneyString(a.serviceFees),
     repayments: toMoneyString(a.repaid),
     repaymentCash: toMoneyString(a.repaidCash),
     repaymentCard: toMoneyString(a.repaidCard),
@@ -239,4 +250,104 @@ export async function salesReport(
     }));
 
   return { daily, productsByDate };
+}
+
+/**
+ * Feature F17, Xodimlar bo'yicha hisobot: paid orders (on the day of their first payment, as in
+ * the sales report) grouped by who opened them, whatever the order type. Sales are the dishes only (no service or delivery fee): the base of the waiter's
+ * earnings, at the percent copied onto each order when it was paid (null on older orders = 0).
+ * Earnings are summed exactly per user and rounded once; the totals add the rounded rows.
+ */
+export async function staffReport(
+  db: Db,
+  input: z.infer<typeof staffReportInput>,
+): Promise<StaffReport> {
+  // The same day rule as the sales report: an order belongs to the day of its first payment
+  // (legacy imports can differ from completedAt); refunded legacy checks are not sales.
+  const range = { gte: dayStart(input.start), lte: dayEnd(input.end) };
+  const candidates = await db.order.findMany({
+    where: {
+      status: 'completed',
+      payments: { some: { paidAt: range, status: { not: 'refunded' } } },
+    },
+    select: {
+      id: true,
+      createdById: true,
+      guestCount: true,
+      serviceFee: true,
+      waiterPercent: true,
+      items: { select: { totalPrice: true } },
+      createdBy: { select: { fullName: true, earningsPercent: true } },
+    },
+  });
+  const firstPaid = new Map(
+    (
+      await db.payment.groupBy({
+        by: ['orderId'],
+        where: { orderId: { in: candidates.map((o) => o.id) } },
+        _min: { paidAt: true },
+      })
+    ).map((g) => [g.orderId, g._min.paidAt!]),
+  );
+  const orders = candidates.filter((o) => {
+    const first = firstPaid.get(o.id);
+    return first !== undefined && first >= range.gte && first <= range.lte;
+  });
+
+  type Acc = {
+    fullName: string | null;
+    currentPercent: string | null;
+    orders: number;
+    guests: number;
+    sales: Dec;
+    fees: Dec;
+    earnings: Dec;
+  };
+  const byUser = new Map<number | null, Acc>();
+  for (const o of orders) {
+    const acc = byUser.get(o.createdById) ?? {
+      fullName: o.createdBy?.fullName ?? null,
+      currentPercent: o.createdBy ? o.createdBy.earningsPercent.toString() : null,
+      orders: 0,
+      guests: 0,
+      sales: dec(0),
+      fees: dec(0),
+      earnings: dec(0),
+    };
+    const dishes = sum(o.items.map((i) => i.totalPrice.toString()));
+    acc.orders += 1;
+    acc.guests += o.guestCount ?? 0;
+    acc.sales = acc.sales.plus(dishes);
+    acc.fees = acc.fees.plus(o.serviceFee.toString());
+    if (o.waiterPercent)
+      acc.earnings = acc.earnings.plus(dishes.times(o.waiterPercent.toString()).div(100));
+    byUser.set(o.createdById, acc);
+  }
+
+  const rows: StaffReportRow[] = [...byUser.entries()]
+    .map(([userId, a]) => ({
+      userId,
+      fullName: a.fullName,
+      orders: a.orders,
+      guests: a.guests,
+      sales: toMoneyString(a.sales),
+      serviceFees: toMoneyString(a.fees),
+      currentPercent: a.currentPercent === null ? null : dec(a.currentPercent).toFixed(),
+      earnings: toMoneyString(a.earnings),
+    }))
+    .sort(
+      (x, y) =>
+        dec(y.sales).comparedTo(dec(x.sales)) || (x.fullName ?? '').localeCompare(y.fullName ?? ''),
+    );
+
+  return {
+    rows,
+    totals: {
+      orders: rows.reduce((n, r) => n + r.orders, 0),
+      guests: rows.reduce((n, r) => n + r.guests, 0),
+      sales: toMoneyString(sum(rows.map((r) => r.sales))),
+      serviceFees: toMoneyString(sum(rows.map((r) => r.serviceFees))),
+      earnings: toMoneyString(roundMoney(sum(rows.map((r) => r.earnings)))),
+    },
+  };
 }

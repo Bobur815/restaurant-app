@@ -1063,3 +1063,90 @@ Q5.
 
 - `npm run release -- patch`: check 48 suites / 645 tests, commit + tag `v0.9.1`, `release/v0.9.1/SavdoChef-Setup-0.9.1.exe` sha256 `760634c10aea0ef1564721cbea849e01654731d921a96236aac360e42f4f7bbc`. Not pushed, not uploaded.
 - Smoke test: silent install over 0.9.0 (exit 0, exe 0.9.1.0), packaged run on the scratch v17 copy: started, schema v17 (no migration), closed normally. This PC now has 0.9.1 installed. The update feed still serves 0.8.0.
+
+## F16 order screen layout: narrower order panel, bigger pictures, two menu layouts (2026-11-09, UI only)
+
+The task text assumes React/NestJS; this app is vanilla TS + Electron IPC, so "components" are DOM factory functions. No IPC, schema, money or stock change: `order-view.ts` keeps every calculation (availability, badges, Enter-to-add, add/save/pay) and only hands finished values to the new factories.
+
+- [x] `store/app.ts`: `MenuLayout = 'horizontal' | 'vertical'`, stored with the existing per-machine prefs (`savdochef.ui`, like language/theme; default `horizontal`). AppState unchanged. Test in `app.test.ts`.
+- [x] `views/order/menu-browser.ts` (new): `thumb()` (moved, + `decoding=async`), `createCategoryList()` (one list, `orientation`; wheel -> horizontal scroll, mouse drag, touch swipe native; active tile scrolled into view), `menuItemCard()`, `createMenuGrid()` (`resetScroll`), `layoutToggle()`.
+- [x] `order-view.ts`: panel built from those; category change resets the grid's scroll; toggle switches `data-layout` on the panel and saves the pref.
+- [x] `views.css`: order panel `clamp(360px, 33%, 480px)`, menu panel the rest; header and footer wrap instead of truncating; one CSS grid on `.menu-panel` with areas (A: head / cats / grid; B: cats | head, grid); dish cards 4:3 cover image, `minmax(220px, 1fr)` (smaller on short screens); category tiles with a larger picture, text-only without one; tap targets >= 44px; tokens only.
+- [x] `ui/icons.ts`: `PanelTop`, `PanelLeft`. uz + ru: `order.layoutHorizontal`, `order.layoutVertical`, `order.layout`.
+- [x] Verify: check + build, harness on a scratch copy: both layouts at 1366x768 and 1920x1080 (no page scrollbar: `scrollHeight <= clientHeight` on document and frame), toggle survives a reload, add a dish by click and Enter, disabled card, dark theme.
+- Version: patch (UI only).
+
+### F16 built (2026-11-09, not committed)
+
+- Order column `clamp(360px, 33%, 480px)`; header and footer wrap (total on its own row, three equal buttons). The unit price moved under the dish name (the separate "Narxi" column did not fit 416 px).
+- `menu-browser.ts`: `createCategoryList` (one list, `orientation`), `menuItemCard`, `createMenuGrid`, `layoutToggle`, `thumb`. `menuLayout` per machine in `savdochef.ui`. Dish grid `grid-auto-rows: max-content` (auto rows squeezed the cards, which clip their pictures).
+- Tests: `menu-browser.test.ts` (4), `app.test.ts` layout pref. 49 suites / 650 tests.
+- Real app (harness `f16.cjs`, scratch copy of the cafe data with pictures switched on and six test categories): 1366x768 A = 4 columns, B = 3; 1920x1080 (zoom 0.8 on this 125 % screen) A = 5, B = 4; no document scroll in any; lines table fits; toggle saves and survives a reload; category change resets the grid scroll and scrolls the active tile into view; wheel scrolls the row sideways; click and Enter add lines; out-of-stock card greyed and disabled; light uz + dark ru screenshots looked at. Not exercised: a real touch swipe and a mouse drag (no touch screen in the harness; native overflow scroll).
+
+### F16b sidebar -> pages menu in the top bar (2026-11-10, asked after F16, not committed)
+
+- `layout/shell.ts`: the 72 px rail (hover/pin drawer) is gone; a gear button between the theme button and the profile opens the same sections and links as a drop-down (closes on a choice, Esc with focus back on the gear, a tap outside, Tab out, route change; focus goes to the current page's link). The update dot shows on the gear too. `layout.css`: one-column frame, drop-down styles; drawer tokens removed.
+- The freed width (rail 72 + gap 12) goes to the order column: `clamp(444px, calc(33% + 56px), 564px)` in both menu layouts, so the menu side is exactly as wide as in F16 (1366: order 416 -> 500, menu 828; 1920: 480 -> 564, menu 1316).
+- Test: `shell.test.ts` (menu replaces the sidebar, only allowed pages, open/close paths). 49 suites / 651 tests.
+- Real app (harness `f17.cjs`, same scratch copy): no `.sidebar`, menu 260 px under the gear with 7 links for the admin, outside tap / Esc / link close it, link navigates; no document scroll on the order page in A and B at 1366x768 and 1920x1080, the tables page outlet now starts at x 12; light uz + dark ru screenshots looked at.
+
+## F17 service fee, Start plan without debtors, waiter earnings + Xodimlar bo'yicha hisobot (approved 2026-11-10: all questions = R)
+
+Copies: the delivery fee (setting `deliveryFeeDefault` -> `orders.deliveryFee`, part of `totalAmount`, own receipt row, `deliveryFees` in the sales report) for the service fee; `reports:sales` + the Reports tabs for the new report; licence gating as `licensed('takeaway')` / `featureNeeded` (license-core.ts) for debtors.
+
+### 1. Service fee (xizmat haqi)
+
+- Settings (Settings → Buyurtmalar, `orders-section.ts`), keys in `settings.ts` + seed defaults: `serviceFeeType` `off | percent | perGuest` (default `off`: nothing changes for anyone after the upgrade), `serviceFeePercent` (0–100, decimal), `serviceFeePerGuest` (so'm). Admin (`settings`) as today.
+- Order: `guestCount` saved with a table order (stepper "Mehmonlar" in the order header, shown only when the per-guest fee is on, Q3). Main computes the fee on every save, inside the save transaction, from the settings at that moment, rounded once (`roundMoney`):
+  - percent: `lines total × p / 100`; per guest: `guestCount × amount`.
+  - Before: `totalAmount = lines total` (+ delivery fee). After: `totalAmount = lines total + serviceFee` (+ delivery fee). The order screen shows "Xizmat haqi" above "Jami" (renderer mirrors the formula for display only; main's number is what is stored).
+  - Payment, guest split, debt and check edits use `totalAmount` as now, so the fee is paid like the rest. A settings change applies to orders saved after it; an already saved order keeps its fee until it is saved again.
+- Receipt + pre-bill (`receipt.ts`): a row "Xizmat haqi (10%)" / "Xizmat haqi (3 × 5 000)" when > 0. Checks view: fee in the detail line like the delivery fee. Sales report: `serviceFees` total next to `deliveryFees`; Z/shift report: one row "Xizmat haqi".
+- No stock effect.
+
+### 2. Start plan: Debtors off
+
+- STARTER's features are `[]` on the server (posgro `savdochef-config.ts`): selling on debt is already refused there (`payments:pay`, `checks:update`). New: the Debtors link and `/debtors` route need `licensed('debt')` (route access gains a licence check in `routes.ts`/`router.ts`), the Settings → To'lovlar "Nasiya" switch shows the plan note, and main refuses `debts:*` / `customers:update` without the `debt` feature (`featureNeeded`, Q7).
+
+### 3. Waiter earnings + report
+
+- `users.earningsPercent` (decimal 0–100, default 0): set per user in Xodimlar (users-view create/edit modal, "Ish haqi foizi, %"); `users:create`/`users:update` take it (access as today: `users`).
+- Snapshot at payment (Q6): `orders.waiterPercent` = the opener's (`createdById`) percent when the order is paid (`payments:pay`); a later rate change does not rewrite past earnings. Check edits keep it.
+- New channel `reports:staff` (`reports` permission, read-only; ranges longer than a day need the `reports` feature like `reports:sales`): per user for paid orders in the range: orders, guests, dishes total (the base, Q5), service fee, percent, earnings = Σ base × waiterPercent / 100 per order, rounded once per user; totals row.
+- Reports → new tab "Xodimlar bo'yicha hisobot" (table, same range controls; print not in scope).
+
+### Schema (migration 0018 `service_fee_staff_pay`, additive)
+
+- `orders.serviceFee DECIMAL NOT NULL DEFAULT 0`, `orders.guestCount INTEGER NULL`, `orders.waiterPercent DECIMAL NULL`; `users.earningsPercent DECIMAL NOT NULL DEFAULT 0`. Installed databases: old orders get fee 0, no guest count, no percent (they count in the report with 0 earnings); every user 0 %. Settings keys seeded with `off`. Skill `prisma-migration`, then `migration-reviewer`; `prisma-reviewer` on orders/payments/reports.
+
+### Files
+
+- shared: `schemas.ts` (settings, save inputs `guestCount`, user `earningsPercent`, `staffReportInput`), `types.ts` (`OrderDto.serviceFee/guestCount`, `UserDto.earningsPercent`, `StaffReport`), `ipc.ts` (`reports:staff`), `utils/service-fee.ts` (one formula used by main and the order screen) + tests.
+- main: `orders/orders.ts` (fee in table + open saves), `payments/payments.ts` (snapshot), `users/users.ts`, `settings/settings.ts`, `database/seed.ts`, `reports/reports.ts` (`staffReport`, `serviceFees`), `printing/receipt.ts` + `shift-report.ts`, `license/license-core.ts`, `ipc/handlers.ts` + `events.ts` (read-only), migration + `index.ts`, schema.
+- renderer: `order-view.ts` (guest stepper, fee row), `settings/orders-section.ts`, `users/users-view.ts`, `reports/reports-view.ts` (+ `staff-report.ts`), `shell.ts` + `routes.ts` (debtors), `checks-view.ts`; uz + ru strings (fee labels, settings, guests, earnings %, report columns, plan note).
+
+### Tests and verification
+
+- `service-fee.test.ts` (percent rounding, per guest, off), `orders.test` (fee stored and in total, changes with lines/guests, takeaway rule per Q1, settings change only on next save), `payments.test` (snapshot), `reports.test` (staff report exact Decimal sums, legacy rows 0), `license.test` (debts refused on Start), `database.test` (drift), `ipc.test` access snapshot, `routes.test` (debtors hidden without the feature).
+- Real app: build, harness on a scratch copy of the cafe data: percent fee and per-guest fee on a table order, pay, receipt + pre-bill PNG (fake printer), check in the sales report, earnings % on a waiter, report tab uz + ru light/dark; Start plan (licence state patched on the copy): no Debtors link, `/debtors` redirects, `debts:list` refused.
+- Version: **minor (0.10.0)**: migration + features. 0.9 satellites need the update (F15 button on their waiting card).
+
+### Open questions
+
+1. Service fee only on table (dine-in) orders (R), or on takeaway/delivery too?
+2. One fee type at a time, chosen in Settings: off / % / per guest (R), or both together?
+3. Per guest: the waiter sets the guest count on the order screen, default 1, saved with the order (R)? Or the cashier enters it at payment?
+4. May an admin take the fee off a single order (e.g. a "Xizmat haqisiz" switch on the order, `corrections` permission)? R: not in this version.
+5. Earnings base: the dishes total of the waiter's paid orders, without service fee and delivery fee (R)? Or dishes + service fee, or only the service fee?
+6. The waiter is who opened the order (R; moving tables keeps them), and the percent is fixed when the order is paid (R)?
+7. Start plan: hide Debtors and refuse every debt call, so debts left from a Pro period cannot be collected until upgrading (R, as "off")? Or keep the page for collecting old debts only?
+
+### F17 built (2026-11-10, not committed)
+
+- Migration 0018 (4 x ADD COLUMN; migration-reviewer: safe). Fee in `shared/utils/service-fee.ts`, whole so'm half up; stored on every table save (`orders.ts`), 0 on takeaway/delivery; receipt + pre-bill row (guests shown for per-guest), check detail row, sales report `serviceFees` (Zalda tile note), shift summary + X/Z report row "Shundan xizmat haqi". Order screen: guest stepper (per-guest only, default 1, always sent while per-guest is on), fee row; a saved unchanged order shows the stored fee and total (what payment checks), a changed one the next save's.
+- `waiterPercent` copied at `payments:pay` for every order type (a cashier with a percent earns on takeaway too; documented). `reports:staff` (`reports` permission; > 1 day needs the plan feature): orders on the day of their first payment like the sales report, refunded legacy checks left out; rounded once per user.
+- Start plan: `debts:*` + `customers:update` refused in main without `debt`; `/debtors` route `feature: 'debt'` (router `inPlan`), gear-menu link hidden (re-checked on licence change), Settings → To'lov note. `reports` permission text now says it shows staff earnings.
+- Reviews: migration safe; prisma-reviewer and security-reviewer findings fixed (report day rule + refunded, stored fee on screen, secrets test now really returns a row with local date, all 7 debt channels in the plan test, more fee tests). Not changed: `residuals:list`/`expenses:list` accept any range on Start (pre-F17 gap); a user with `users` can edit their own percent (same trust as permissions).
+- Tests: service-fee (shared 4, domain 6), license, routes, schemas, secrets. 51 suites / 666 tests.
+- Real app (harness `f17b.cjs`, fresh copy of the v17 cafe data -> migrated to v18 with a `savdochef-v17-*` backup): per-guest 5 000 x 4 guests on a 6 000 order -> 20 000 fee, 26 000 total, stored and reopened unchanged; percent 10 % on 9 000 -> 900; waiter 5 %; paid; pre-bill and receipt text show the fee rows; staff report 2 orders, 4 guests, sales 15 000, fees 20 900, earnings 750 (uz light + ru dark); shift summary fees 20 900; Start plan (licence answer patched in the window): no Debtors link, `/debtors` -> `/tables`, To'lov note. Screenshots looked at.
+- Version: 0.10.0 (minor) at release; repeat the install-over-0.9.1 upgrade test then.

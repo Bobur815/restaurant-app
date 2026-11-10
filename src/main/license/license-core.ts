@@ -173,7 +173,7 @@ const READONLY_MESSAGE: Record<string, string> = {
 const FEATURE_MESSAGE: Record<LicenseFeature, string> = {
   takeaway: "«Olib ketish» buyurtmalari tarifingizda yo'q (Pro tarifida bor)",
   delivery: "«Yetkazib berish» buyurtmalari tarifingizda yo'q (Pro tarifida bor)",
-  debt: "Nasiyaga sotish tarifingizda yo'q (Pro tarifida bor)",
+  debt: "Nasiya (qarzdorlar) tarifingizda yo'q (Pro tarifida bor)",
   reports: "Bir kundan uzun hisobotlar tarifingizda yo'q (Pro tarifida bor)",
   multiHall: "Bir nechta zal tarifingizda yo'q (VIP tarifida bor)",
   receiptLogos: "Chekdagi rasmlar tarifingizda yo'q (VIP tarifida bor)",
@@ -208,7 +208,17 @@ export function featureNeeded(
     case 'payments:pay':
     case 'checks:update':
       return sellsOnDebt(input) ? 'debt' : null;
+    // Feature F17: the debtors page is part of the debt feature (off on the Start plan).
+    case 'debts:list':
+    case 'debts:get':
+    case 'debts:repay':
+    case 'debts:writeOff':
+    case 'debts:void':
+    case 'debts:assign':
+    case 'customers:update':
+      return 'debt';
     case 'reports:sales':
+    case 'reports:staff':
       return input?.['start'] === input?.['end'] ? null : 'reports';
     case 'receipt:updateLayout':
     case 'receipt:updatePreBillLayout':

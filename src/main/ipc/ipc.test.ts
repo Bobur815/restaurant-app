@@ -190,7 +190,7 @@ describe('access levels', () => {
       payments: ['payments:pay'],
       debt: ['debts:list', 'debts:get', 'debts:repay'],
       debtsAdmin: ['debts:writeOff', 'debts:void', 'debts:assign', 'customers:update'],
-      reports: ['expenses:list', 'reports:sales'],
+      reports: ['expenses:list', 'reports:sales', 'reports:staff'],
     });
   });
 

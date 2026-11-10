@@ -4,7 +4,7 @@ import type { createUserInput, updateProfileInput, updateUserInput } from '@shar
 import type { CurrentUser, UserDto } from '@shared/types';
 import { setPinOf, toCurrentUser } from '../auth/auth';
 import type { Actor, Db, Tx } from '../domain/db';
-import { iso, isoOrNull } from '../domain/db';
+import { decStr, iso, isoOrNull } from '../domain/db';
 import { conflict, isUniqueViolation, notFound } from '../domain/errors';
 
 /**
@@ -19,6 +19,7 @@ type UserRow = Parameters<typeof toCurrentUser>[0] & {
   legacyPinCode: string | null;
   lastLoginAt: Date | null;
   createdAt: Date;
+  earningsPercent: { toString(): string };
 };
 
 export function toUserDto(u: UserRow): UserDto {
@@ -28,6 +29,7 @@ export function toUserDto(u: UserRow): UserDto {
     hasPin: u.pinHash !== null || u.legacyPinCode !== null,
     lastLoginAt: isoOrNull(u.lastLoginAt),
     createdAt: iso(u.createdAt),
+    earningsPercent: decStr(u.earningsPercent),
   };
 }
 
@@ -52,6 +54,7 @@ export async function createUser(db: Db, input: z.infer<typeof createUserInput>)
           phone: input.phone,
           role: input.role,
           permissions: JSON.stringify(input.permissions ?? ROLE_DEFAULTS[input.role]),
+          earningsPercent: input.earningsPercent,
         },
       })
       .catch(uniqueFailure);
@@ -100,6 +103,7 @@ export async function updateUser(
           phone: input.phone,
           role: input.role,
           isActive: input.isActive,
+          earningsPercent: input.earningsPercent,
           ...(permissions ? { permissions: JSON.stringify(permissions) } : {}),
         },
       })
