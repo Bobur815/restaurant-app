@@ -167,8 +167,26 @@ export interface IpcChannels {
   'payments:pay': Channel<In<typeof S.payOrderInput>, T.OrderDto>;
   'checks:list': Channel<In<typeof S.listChecksInput>, T.CheckDto[]>;
   'checks:update': Channel<In<typeof S.editCheckInput>, T.OrderDto>;
-  /** Removes the check's payments and cancels its order (stock back if the shift is open). */
-  'checks:delete': Channel<In<typeof S.orderNumberInput>, T.OrderDto>;
+  /**
+   * Removes the check's payments and cancels its order (stock back if the shift is open). A
+   * fiscalised check gets its VCR refund first (F18; `scannedQr` when VCR masked the link).
+   */
+  'checks:delete': Channel<In<typeof S.deleteCheckInput>, T.OrderDto>;
+
+  // fiscal receipts through REGOS:VCR (feature F18), on the main till
+  'fiscal:getConfig': Channel<undefined, T.FiscalConfigDto>;
+  'fiscal:setConfig': Channel<In<typeof S.fiscalConfigInput>, T.FiscalConfigDto>;
+  'fiscal:testConnection': Channel<undefined, T.FiscalConnectionDto>;
+  /** For every user: is it on, and how many checks wait (the top bar counter). */
+  'fiscal:status': Channel<undefined, T.FiscalStatusDto>;
+  /** VCR's current Z-report; null when fiscal receipts are off. */
+  'fiscal:zReport': Channel<undefined, T.FiscalZReportDto | null>;
+  'fiscal:zOpen': Channel<undefined, T.FiscalZReportDto>;
+  'fiscal:zClose': Channel<undefined, T.FiscalZReportDto>;
+  'fiscal:retry': Channel<In<typeof S.fiscalOrderInput>, T.OrderDto>;
+  'fiscal:retryAll': Channel<undefined, T.FiscalRetryAllDto>;
+  /** VCR prints a copy of the fiscal receipt. */
+  'fiscal:duplicate': Channel<In<typeof S.fiscalOrderInput>, null>;
 
   // debt (nasiya, feature F1-C): any user records and takes repayments; admins correct
   'debts:list': Channel<In<typeof S.listDebtorsInput>, T.DebtorDto[]>;
@@ -301,6 +319,16 @@ export const IPC_CHANNELS = [
   'checks:list',
   'checks:update',
   'checks:delete',
+  'fiscal:getConfig',
+  'fiscal:setConfig',
+  'fiscal:testConnection',
+  'fiscal:status',
+  'fiscal:zReport',
+  'fiscal:zOpen',
+  'fiscal:zClose',
+  'fiscal:retry',
+  'fiscal:retryAll',
+  'fiscal:duplicate',
   'debts:list',
   'debts:get',
   'debts:repay',

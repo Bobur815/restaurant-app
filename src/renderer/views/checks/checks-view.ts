@@ -1,8 +1,15 @@
-import type { CheckDto, OrderDto, OrderType, PaymentMethod, PaymentStatus } from '@shared/types';
+import type {
+  CheckDto,
+  FiscalStatus,
+  OrderDto,
+  OrderType,
+  PaymentMethod,
+  PaymentStatus,
+} from '@shared/types';
 import { PAYMENT_METHODS, PAYMENT_STATUSES } from '@shared/types';
 import { dec, sum, toMoneyString } from '@shared/utils/decimal';
 import { formatPhone } from '@shared/utils/phone';
-import { api } from '../../api';
+import { api, isApiError } from '../../api';
 import { field, selectField, value } from '../../components/forms';
 import { confirmDialog, openModal } from '../../components/modal';
 import { button, pageHeader } from '../../components/page';
@@ -47,6 +54,55 @@ const statusBadge = (status: PaymentStatus) =>
     >${t(`checks.status_${status}`)}</span
   >`;
 
+/** Feature F18: the check's fiscal receipt, as a badge (nothing when fiscal was off). */
+const FISCAL_BADGE: Record<FiscalStatus, string> = {
+  FISCALIZED: 'badge-success',
+  PENDING: 'badge-warning',
+  DEFERRED_DEBT: 'badge-muted',
+  FAILED: 'badge-danger',
+  REFUNDED: 'badge-muted',
+};
+const fiscalBadge = (status: FiscalStatus | null, error?: string | null) =>
+  status
+    ? html`<span class="badge ${FISCAL_BADGE[status]}" title="${error ?? ''}"
+        >${t(`fiscal.status_${status}`)}</span
+      >`
+    : '';
+const waitsForVcr = (s: FiscalStatus | null) =>
+  s === 'PENDING' || s === 'FAILED' || s === 'DEFERRED_DEBT';
+
+/**
+ * Feature F18: the QR code on the check's paper receipt, read with the barcode scanner (it types
+ * the link and Enter) or typed. Null when cancelled.
+ */
+function askForReceiptQr(message: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    let result: string | null = null;
+    const body = html`<p>${message}</p>
+      ${field({ name: 'scannedQr', label: t('fiscal.scanLabel'), autocomplete: 'off' })}`;
+    const modal = openModal({
+      title: t('fiscal.scanTitle'),
+      body,
+      size: 'md',
+      actions: [
+        { label: t('app.cancel') },
+        {
+          label: t('checks.delete'),
+          kind: 'danger',
+          submit: true,
+          onClick: () => {
+            const v = value(modal.dialog, 'scannedQr');
+            if (!v) return false;
+            result = v;
+          },
+        },
+      ],
+    });
+    modal.dialog.querySelector<HTMLInputElement>('[name="scannedQr"]')?.focus();
+    void modal.closed.then(() => resolve(result));
+  });
+}
+
 /** Checks (legacy "cheklar"): payments by day with filters; details; admin edit/delete. */
 export const checksView: View = () => {
   const lang = () => appStore.get().language;
@@ -74,6 +130,16 @@ export const checksView: View = () => {
         ...PAYMENT_STATUSES.map((s) => ({ value: s, label: t(`checks.status_${s}`) })),
       ],
     })}
+    ${appStore.get().fiscal?.enabled
+      ? selectField({
+          name: 'fiscal',
+          label: t('fiscal.filter'),
+          options: [
+            { value: '', label: t('checks.all') },
+            { value: 'waiting', label: t('fiscal.filterWaiting') },
+          ],
+        })
+      : ''}
     ${selectField({
       name: 'orderType',
       label: t('orderType.label'),
@@ -105,7 +171,28 @@ export const checksView: View = () => {
   );
   const list = document.createElement('div');
   list.className = 'card';
-  el.append(pageHeader(t('checks.title')), filters, list);
+  // Feature F18: everything still waiting goes to VCR (FAILED ones once more).
+  const sendAll = button(t('fiscal.sendAll'), 'secondary', async () => {
+    sendAll.disabled = true;
+    try {
+      const r = await api.fiscal.retryAll();
+      toast(
+        t('fiscal.sendAllDone', { sent: r.sent, failed: r.failed, pending: r.pending }),
+        r.failed || r.pending ? 'error' : 'success',
+      );
+    } catch (e) {
+      toastError(e);
+    } finally {
+      sendAll.disabled = false;
+    }
+  });
+  const renderSendAll = () => {
+    const f = appStore.get().fiscal;
+    sendAll.hidden = !(can('checks') && f?.enabled && f.pending + f.failed > 0);
+  };
+  renderSendAll();
+  const stopFiscal = appStore.subscribe(renderSendAll);
+  el.append(pageHeader(t('checks.title'), sendAll), filters, list);
 
   let checks: CheckDto[] = [];
 
@@ -115,6 +202,7 @@ export const checksView: View = () => {
       list.replaceChildren(html`<p class="muted empty-inline">${t('checks.empty')}</p>`);
       return;
     }
+    const showFiscal = checks.some((c) => c.fiscalStatus !== null);
     const rows = checks.map((c) => {
       const tr = document.createElement('tr');
       tr.className = 'clickable';
@@ -132,6 +220,7 @@ export const checksView: View = () => {
               : ''}
           </td>
           <td>${statusBadge(c.status)}</td>
+          ${showFiscal ? html`<td>${fiscalBadge(c.fiscalStatus, c.fiscalError)}</td>` : ''}
           <td class="num strong">${formatMoney(c.amount, l)}</td>`,
       );
       const open = () => void showOrder(c.orderNumber);
@@ -152,6 +241,7 @@ export const checksView: View = () => {
               <th>${t('checks.time')}</th>
               <th>${t('checks.method')}</th>
               <th>${t('checks.status')}</th>
+              ${showFiscal ? html`<th>${t('fiscal.column')}</th>` : ''}
               <th class="num">${t('checks.amount')}</th>
             </tr>
           </thead>
@@ -160,7 +250,9 @@ export const checksView: View = () => {
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="5" class="strong">${t('checks.total', { count: checks.length })}</td>
+              <td colspan="${showFiscal ? '6' : '5'}" class="strong">
+                ${t('checks.total', { count: checks.length })}
+              </td>
               <td class="num strong">${formatMoney(total, l)}</td>
             </tr>
           </tfoot>
@@ -181,6 +273,9 @@ export const checksView: View = () => {
         orderType: (value(filters, 'orderType') || undefined) as OrderType | undefined,
         sortBy: value(filters, 'sortBy') as 'paidAt' | 'tableNumber' | 'amount',
       });
+      // Feature F18: "Fiskal emas" = still waiting for VCR (or refused by it).
+      if (value(filters, 'fiscal') === 'waiting')
+        checks = checks.filter((c) => waitsForVcr(c.fiscalStatus));
       render();
     } catch (e) {
       toastError(e);
@@ -213,15 +308,79 @@ export const checksView: View = () => {
         danger: true,
       });
       if (!ok) return;
+      let scannedQr: string | undefined;
+      // F18: a fiscalised check is refunded through VCR first; its stored link may be masked.
+      for (;;) {
+        try {
+          await api.checks.delete({ orderNumber: order.orderNumber, scannedQr });
+          toast(t('checks.deleted'), 'success');
+          modal.close();
+          await load();
+          return;
+        } catch (e) {
+          const reason = isApiError(e)
+            ? (e.details as { reason?: string } | undefined)?.reason
+            : undefined;
+          if (reason !== 'RECEIPT_QR_NEEDED' && reason !== 'RECEIPT_QR_OTHER') {
+            toastError(e);
+            return;
+          }
+          const next = await askForReceiptQr(
+            reason === 'RECEIPT_QR_OTHER' ? t('fiscal.scanOther') : t('fiscal.scanNeeded'),
+          );
+          if (!next) return;
+          scannedQr = next;
+        }
+      }
+    });
+    const fiscal = order.fiscal;
+    const retry = button(t('fiscal.retry'), 'secondary', async () => {
+      retry.disabled = true;
       try {
-        await api.checks.delete({ orderNumber: order.orderNumber });
-        toast(t('checks.deleted'), 'success');
+        const next = await api.fiscal.retry({ orderId: order.id });
+        if (next.fiscal?.status === 'FISCALIZED') toast(t('fiscal.sent'), 'success');
+        else toast(next.fiscal?.error ?? t('fiscal.notSent'), 'error', 8000);
         modal.close();
-        await load();
+      } catch (e) {
+        toastError(e);
+      } finally {
+        retry.disabled = false;
+      }
+    });
+    const duplicate = button(t('fiscal.duplicate'), 'secondary', async () => {
+      try {
+        await api.fiscal.duplicate({ orderId: order.id });
+        toast(t('fiscal.duplicatePrinted'), 'success');
       } catch (e) {
         toastError(e);
       }
     });
+    const fiscalLocked = fiscal?.status === 'FISCALIZED' || fiscal?.status === 'REFUNDED';
+    const shownNo = fiscal?.receiptNo && fiscal.receiptNo !== '***' ? fiscal.receiptNo : null;
+    const fiscalBlock = fiscal
+      ? html`<h3 class="section-title">${t('fiscal.receipt')}</h3>
+          <p>
+            ${fiscalBadge(fiscal.status)}
+            ${shownNo
+              ? html` <span class="muted">${t('fiscal.receiptNo', { no: shownNo })}</span>`
+              : ''}
+            ${fiscal.fiscalAt
+              ? html` <span class="muted">· ${formatDateTime(fiscal.fiscalAt)}</span>`
+              : ''}
+          </p>
+          ${fiscal.error && fiscal.status !== 'FISCALIZED'
+            ? html`<p class="notice notice-error">${fiscal.error}</p>`
+            : ''}
+          ${fiscal.status === 'DEFERRED_DEBT'
+            ? html`<p class="muted small">${t('fiscal.deferredHint')}</p>`
+            : ''}
+          ${can('checks') && order.status === 'completed'
+            ? html`<div class="bulk-actions">
+                ${fiscal.status === 'PENDING' || fiscal.status === 'FAILED' ? retry : ''}
+                ${fiscal.status === 'FISCALIZED' ? duplicate : ''}
+              </div>`
+            : ''}`
+      : '';
     const print = button(t('printing.print'), 'secondary', () => printReceipt(order.id));
     const body = html`<p class="muted">
         ${where(order)} · ${t(`checks.order_${order.status}`)} · ${t('checks.cashier')}:
@@ -304,8 +463,11 @@ export const checksView: View = () => {
           )}
         </tbody>
       </table>
+      ${fiscalBlock}
       ${order.status === 'completed'
-        ? html`<div class="bulk-actions">${print}${admin ? edit : ''}${admin ? del : ''}</div>`
+        ? html`<div class="bulk-actions">
+            ${print}${admin && !fiscalLocked ? edit : ''}${admin ? del : ''}
+          </div>`
         : ''}`;
     const modal = openModal({
       title: t('checks.details', { number: order.orderNumber }),
@@ -385,5 +547,11 @@ export const checksView: View = () => {
   const stop = api.events.subscribe((e) => {
     if (e.type === 'orders-changed' || e.type === 'debts-changed') void load();
   });
-  return { el, destroy: stop };
+  return {
+    el,
+    destroy: () => {
+      stop();
+      stopFiscal();
+    },
+  };
 };

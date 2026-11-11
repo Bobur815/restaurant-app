@@ -191,6 +191,9 @@ export async function closeShiftModal(session: SessionDto): Promise<SessionClose
               }),
               'success',
             );
+            // F18: the shift is closed; VCR trouble (unsent receipts, Z-report) is a warning.
+            if (result.fiscalWarning)
+              toast(t('fiscal.closeWarning', { reason: result.fiscalWarning }), 'error', 12000);
           } catch (e) {
             error.textContent = errorMessage(e);
             return false;

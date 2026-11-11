@@ -182,6 +182,21 @@ export function dishModal(
           options: printerChoices(printers, dish?.printerId ?? null),
           info: t('printers.dishPrinterHint'),
         })}
+        <div class="form-row">
+          ${field({
+            name: 'mxik',
+            label: t('fiscal.dishMxik'),
+            value: dish?.mxik ?? '',
+            inputmode: 'numeric',
+            info: t('fiscal.dishMxikHint'),
+          })}
+          ${field({
+            name: 'packageCode',
+            label: t('fiscal.package'),
+            value: dish?.packageCode ?? '',
+            inputmode: 'numeric',
+          })}
+        </div>
         ${textareaField({
           name: 'description',
           label: t('menu.description'),
@@ -221,6 +236,8 @@ export function dishModal(
               soldByWeight: type === 'weight',
               imageFile: picture.value(),
               printerId: Number(value(form, 'printerId')) || null,
+              mxik: value(form, 'mxik') || null,
+              packageCode: value(form, 'packageCode') || null,
             };
             try {
               if (dish)

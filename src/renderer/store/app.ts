@@ -2,6 +2,7 @@ import { hasPermission, type Permission } from '@shared/permissions';
 import type {
   AppSettings,
   CurrentUser,
+  FiscalStatusDto,
   LanLinkDto,
   Language,
   ReceiptSettingsDto,
@@ -30,6 +31,8 @@ export interface AppState {
   license: LicenseStatusDto | null;
   /** Feature F12: this till's role and, on a satellite, its line to the main till. */
   lan: LanLinkDto | null;
+  /** Feature F18: fiscal receipts on, and how many checks wait; null until logged in. */
+  fiscal: FiscalStatusDto | null;
 }
 
 export const appStore = createStore<AppState>({
@@ -43,6 +46,7 @@ export const appStore = createStore<AppState>({
   update: null,
   license: null,
   lan: null,
+  fiscal: null,
 });
 
 /** A newer version is known (found, downloading or ready to install): Settings shows a dot. */

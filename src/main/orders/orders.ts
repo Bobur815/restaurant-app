@@ -7,7 +7,13 @@ import type {
   SaveTableOrderInput,
   tableInput,
 } from '@shared/schemas';
-import type { OpenOrderSummaryDto, OrderDto, PaymentMethod, TableSummaryDto } from '@shared/types';
+import type {
+  FiscalStatus,
+  OpenOrderSummaryDto,
+  OrderDto,
+  PaymentMethod,
+  TableSummaryDto,
+} from '@shared/types';
 import { dec, roundMoney, sum, toMoneyString, toQtyString, type Dec } from '@shared/utils/decimal';
 import { serviceFeeFor } from '@shared/utils/service-fee';
 import { LineError, priceLine } from '@shared/utils/order-line';
@@ -94,6 +100,18 @@ export function toOrderDto(o: OrderRow): OrderDto {
       dueDate: isoOrNull(p.dueDate),
       settledAt: isoOrNull(p.settledAt),
     })),
+    fiscal: o.fiscalStatus
+      ? {
+          status: o.fiscalStatus as FiscalStatus,
+          error: o.fiscalError,
+          receiptNo: o.fiscalReceiptNo,
+          fiscalSign: o.fiscalSign,
+          qrUrl: o.fiscalQrUrl,
+          terminalId: o.fiscalTerminalId,
+          fiscalAt: isoOrNull(o.fiscalAt),
+          refundedAt: isoOrNull(o.fiscalRefundedAt),
+        }
+      : null,
   };
 }
 

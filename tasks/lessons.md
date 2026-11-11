@@ -28,6 +28,8 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 
 ## Editing on Windows / Git Bash
 
+- Git Bash: a heredoc fed to `python -` failed with "unexpected EOF while looking for matching `'" on long patches with mixed quotes. Write the patch script to the scratchpad with Write and run `python <file> <repo>`. (2026-11-11, F18)
+
 - Files may be CRLF. Scripts that patch by exact string must normalise `\r\n` first and write back the original line ending.
 - Prettier reflows lines after the first edit; anchor later patches on the formatted text, not on what you wrote.
 - Git Bash heredocs and `sed` eat backslashes (`\u00a0` became `00a0`, `\s` became `s`). For text with backslashes write a script file and build the character with `String.fromCharCode(92)` / `chr(92)`, then check the bytes (`od -c`).
@@ -57,3 +59,5 @@ Mistakes and surprises worth not repeating. One line each where possible, newest
 - Two app instances against each other: different `userData` folders get different single-instance locks, so both run. A satellite that calls `app.relaunch()` re-runs the harness script with the same env: make the script pick its phase from app state (`lan:link`). Wait on log files, not on the process. (2026-11-08, F12)
 - Run harness Electron from the repo folder (`cd <repo> && npx electron <scratch>/script.cjs <repo>`): `npx electron` started in the scratch folder downloads another Electron version and fails. (2026-11-09, F13)
 - Never delete a database's `-wal`/`-shm` after the app was killed: committed transactions (a whole migration) can still be in the WAL. Close the app normally (`CloseMainWindow`) and read the file as it is. (2026-11-09, 0.9.0 upgrade test: a deleted WAL made the copy look un-migrated.)
+- An IPv4 "private address" check must accept canonical decimal octets only: Number('010') is 10, but the URL parser that fetch uses reads 010 as octal (8) and 0x7f as hex, so `010.8.8.8` passed as 10.x and connected to 8.8.8.8. And give fetch `redirect: 'error'` when the body carries credentials (F18 security review).
+- Node's fetch refuses some ports outright ("bad port", e.g. 9): it never connects, so it is not ECONNREFUSED. For "nothing listens" in tests, listen on port 0, read the port, close it, and use that (`closedVcrUrl`). (2026-11-11, F18)

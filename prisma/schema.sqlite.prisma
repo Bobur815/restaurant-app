@@ -344,6 +344,10 @@ model MenuItem {
   isActive     Boolean  @default(true)
   // Feature F11: where saving an order sends this dish's kitchen ticket; null = no ticket.
   printerId    Int?
+  // Feature F18: MXIK (IKPU, 17 digits) and package code for the fiscal receipt; null = the
+  // defaults from settings (fiscal_default_mxik / fiscal_default_package).
+  mxik         String?
+  packageCode  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -438,6 +442,9 @@ model Session {
   openingCash  Decimal       @default(0)
   countedCash  Decimal?
   expectedCash Decimal?
+  // Feature F18: the REGOS:VCR Z-report opened for this shift, and when VCR closed it.
+  fiscalZReportId Int?
+  fiscalZClosedAt DateTime?
 
   openedBy         User?          @relation("SessionOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
   closedBy         User?          @relation("SessionClosedBy", fields: [closedById], references: [id], onDelete: Restrict)
@@ -584,6 +591,21 @@ model Order {
   guestCount      Int?
   // The opener's earningsPercent when the order was paid (staff report). Null = unpaid or older.
   waiterPercent   Decimal?
+  // Feature F18: the fiscal receipt (REGOS:VCR). Null = fiscal receipts were off when it was
+  // paid (never sent). PENDING | FISCALIZED | FAILED | DEFERRED_DEBT | REFUNDED (FiscalStatus).
+  fiscalStatus     String?
+  fiscalError      String?
+  // Data errors only (MXIK, VAT); VCR being off or busy never counts.
+  fiscalAttempts   Int       @default(0)
+  // What VCR answered (since VCR 2026-10-30 the number, sign and link may come back as "***").
+  fiscalReceiptId  String?
+  fiscalReceiptNo  String?
+  fiscalSign       String?
+  fiscalQrUrl      String?
+  fiscalTerminalId String?
+  fiscalAt         DateTime?
+  fiscalRefundSign String?
+  fiscalRefundedAt DateTime?
 
   session   Session         @relation(fields: [sessionId], references: [id], onDelete: Restrict)
   createdBy User?           @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -598,6 +620,7 @@ model Order {
   @@index([createdAt])
   @@index([orderType, status])
   @@index([customerId])
+  @@index([fiscalStatus])
   @@map("orders")
 }
 

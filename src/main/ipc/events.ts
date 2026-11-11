@@ -58,6 +58,12 @@ export const READ_ONLY_CHANNELS = [
   'expenses:list',
   'reports:sales',
   'reports:staff',
+  // Feature F18: reads; the test asks VCR only; a duplicate is printed by VCR.
+  'fiscal:getConfig',
+  'fiscal:testConnection',
+  'fiscal:status',
+  'fiscal:zReport',
+  'fiscal:duplicate',
 ] as const satisfies readonly IpcChannel[];
 
 type Emit<C extends IpcChannel> = (input: IpcInput<C>, data: IpcOutput<C>) => AppEvent[];
@@ -153,6 +159,12 @@ export const CHANNEL_EVENTS: { [C in Mutating]: Emit<C> } = {
   'debts:void': () => [DEBTS, orders(), SESSION],
   'debts:assign': () => [DEBTS, orders()],
   'customers:update': () => [DEBTS],
+  // Feature F18. Background sends announce orders-changed themselves (FiscalService.onChange).
+  'fiscal:setConfig': () => [SETTINGS, orders()],
+  'fiscal:zOpen': () => [SESSION],
+  'fiscal:zClose': () => [SESSION],
+  'fiscal:retry': (_input, order) => [orders(order)],
+  'fiscal:retryAll': () => [orders()],
   'residuals:apply': () => [SESSION],
   // The updater broadcasts update-changed itself as its state moves (updater.ts onChange).
   'updater:check': () => [],

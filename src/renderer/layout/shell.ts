@@ -158,6 +158,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
           <span class="date" data-ref="date"></span>
         </div>
         <div class="topbar-right">
+          <a class="badge badge-warning" href="#/checks" data-ref="fiscal" hidden></a>
           <span class="badge" data-ref="shift"></span>
           ${langButton}${themeButton}
           <span class="topbar-divider" aria-hidden="true"></span>
@@ -230,6 +231,7 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     clock: HTMLElement;
     date: HTMLElement;
     shift: HTMLElement;
+    fiscal: HTMLElement;
     restaurant: HTMLElement;
     profile: HTMLElement;
     avatar: HTMLElement;
@@ -258,6 +260,12 @@ export function createShell(navigate: (path: string) => void): ShellInstance {
     const open = !!s.openSession;
     r.shift.textContent = t(open ? 'nav.shiftOpen' : 'nav.shiftClosed');
     r.shift.className = `badge ${open ? 'badge-success' : 'badge-muted'}`;
+    // Feature F18: paid checks VCR has not registered yet (main checks it all again).
+    const waiting = s.fiscal?.enabled ? s.fiscal.pending + s.fiscal.failed : 0;
+    r.fiscal.hidden = waiting === 0;
+    r.fiscal.textContent = t('fiscal.topbar', { count: waiting });
+    r.fiscal.title = t('fiscal.topbarHint');
+    r.fiscal.className = `badge ${s.fiscal?.failed ? 'badge-danger' : 'badge-warning'}`;
     const banner = licenseBannerText(s.license);
     r.licenseBanner.hidden = !banner;
     if (banner) {

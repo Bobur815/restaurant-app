@@ -5,6 +5,7 @@ import { html } from '../../ui/html';
 import { icon, type IconName } from '../../ui/icons';
 import type { View, ViewInstance } from '../types';
 import { usersView } from '../users/users-view';
+import { fiscalSection } from './fiscal-section';
 import { hallsSection } from './halls-section';
 import { lanSection } from './lan-section';
 import { ordersSection } from './orders-section';
@@ -68,6 +69,14 @@ export const SETTINGS_SECTIONS: readonly Section[] = [
     view: printerSection,
     needs: 'settings',
   },
+  // Feature F18: fiscal receipts through REGOS:VCR (the main till).
+  {
+    id: 'fiscal',
+    label: 'settings.sectionFiscal',
+    icon: 'fiscal',
+    view: fiscalSection,
+    needs: 'settings',
+  },
   { id: 'users', label: 'settings.sectionUsers', icon: 'users', view: usersView, needs: 'users' },
   // Feature F12: satellites (main till) or the main till (satellite).
   { id: 'lan', label: 'settings.sectionLan', icon: 'tables', view: lanSection, needs: 'settings' },
@@ -92,7 +101,10 @@ export const SETTINGS_SECTIONS: readonly Section[] = [
  * section, `/settings/<section>`. `/settings` and unknown sections open the first one.
  */
 export const settingsView: View = (ctx) => {
-  const sections = SETTINGS_SECTIONS.filter((s) => can(s.needs));
+  const satellite = appStore.get().lan?.role === 'satellite';
+  const sections = SETTINGS_SECTIONS.filter(
+    (s) => can(s.needs) && !(satellite && s.id === 'fiscal'),
+  );
   // The route lets in only users with settings or users, so there is always a section.
   const current = sections.find((s) => s.id === ctx.params['section']) ?? sections[0]!;
 

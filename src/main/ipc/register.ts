@@ -12,6 +12,7 @@ import { createPrinterService } from '../printing/printer';
 import type { UpdaterService } from '../updater/updater';
 import type { LicenseService } from '../license/license-service';
 import type { LanService } from '../lan/lan-service';
+import type { FiscalService } from '../fiscal/fiscal-service';
 import { printKitchenTickets } from '../printing/kitchen';
 import { TableLocks } from '../orders/table-locks';
 import { eventsFor } from './events';
@@ -28,6 +29,11 @@ const tracked = new WeakSet<WebContents>();
 /** Feature F12, on a satellite: each window's session token on the main till. */
 const sessions = new Map<number, string>();
 let lan: LanService | null = null;
+/** Feature F18: the main till's fiscal service (none on a satellite: it forwards every call). */
+let fiscal: FiscalService | null = null;
+export function setFiscalService(service: FiscalService | null): void {
+  fiscal = service;
+}
 
 /**
  * Feature F13: which till has which table open. Used on a main till only (a satellite forwards
@@ -111,6 +117,7 @@ export function servicesFor(
     updater,
     license,
     ...(lan ? { lan } : {}),
+    ...(fiscal ? { fiscal } : {}),
   };
 }
 

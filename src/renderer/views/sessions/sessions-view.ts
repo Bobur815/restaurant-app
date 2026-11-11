@@ -12,6 +12,7 @@ import { formatDateTime, formatMoney, formatQty, localName } from '../../utils/f
 import type { View } from '../types';
 import { cashPanel, cashSummaryBlock, differenceText, printShiftReport } from './cash-panel';
 import { closeShiftModal } from './close-modal';
+import { fiscalZPanel } from './fiscal-z-panel';
 import { shiftQuantitiesModal } from './quantities-modal';
 
 function itemsTable(session: SessionDto): HTMLElement {
@@ -35,7 +36,9 @@ function itemsTable(session: SessionDto): HTMLElement {
               <td class="line-name">${localName(i, lang)}</td>
               <td class="num">
                 ${i.unlimited
-                  ? html`<span class="unlimited-mark" title="${t('sessions.unlimitedHint')}">∞</span>`
+                  ? html`<span class="unlimited-mark" title="${t('sessions.unlimitedHint')}"
+                      >∞</span
+                    >`
                   : formatQty(i.initialQuantity, lang, i.soldByWeight)}
               </td>
               <td class="num">${formatQty(i.soldQuantity, lang, i.soldByWeight)}</td>
@@ -60,7 +63,9 @@ export const sessionsView: View = () => {
   // Anyone sees the shift; opening, editing and closing it need the shifts permission.
   const shifts = can('shifts');
   const openButton = button(t('sessions.open'), 'primary', () => void openShift());
-  el.append(pageHeader(t('sessions.title'), openButton), current, cash, history);
+  // Feature F18: VCR's Z-report, for whoever runs shifts.
+  const fiscalZ = fiscalZPanel();
+  el.append(pageHeader(t('sessions.title'), openButton), current, cash, fiscalZ.el, history);
 
   let sessions: SessionDto[] = [];
 
@@ -202,6 +207,7 @@ export const sessionsView: View = () => {
       sessions = await api.sessions.list({ limit: 50 });
       renderCurrent();
       renderHistory();
+      if (shifts) fiscalZ.refresh();
     } catch (e) {
       toastError(e);
     }

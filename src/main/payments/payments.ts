@@ -5,7 +5,13 @@ import type {
   listChecksInput,
   payOrderInput,
 } from '@shared/schemas';
-import type { CheckDto, OrderDto, OrderPaymentMethod, PaymentMethod } from '@shared/types';
+import type {
+  CheckDto,
+  FiscalStatus,
+  OrderDto,
+  OrderPaymentMethod,
+  PaymentMethod,
+} from '@shared/types';
 import { dec, toMoneyString, type Dec } from '@shared/utils/decimal';
 import { settleTenders, type TenderLine } from '@shared/utils/split-payment';
 import { localDate } from '@shared/schemas';
@@ -15,6 +21,12 @@ import { conflict, invalid, notFound } from '../domain/errors';
 import { getOrder } from '../orders/orders';
 import { applyStockDeltas } from '../sessions/stock';
 import { getSettings } from '../settings/settings';
+import {
+  assertFiscalDeletable,
+  assertFiscalEditable,
+  resetFiscalAfterEdit,
+  setFiscalStatusAtPayment,
+} from '../fiscal/order-status';
 
 const SPLIT_PROBLEM: Record<'empty' | 'short' | 'nonCashOver', string> = {
   empty: "To'lov usulini tanlang",
@@ -152,6 +164,8 @@ export async function payOrder(
     });
     if (res.count !== 1)
       throw conflict("Buyurtma boshqa joyda o'zgartirilgan. Qayta oching", { reason: 'STALE' });
+    // Feature F18: queued for its fiscal receipt (sent after commit by FiscalService).
+    await setFiscalStatusAtPayment(tx, order.id);
   });
   return getOrder(db, input.orderId);
 }
@@ -181,7 +195,14 @@ export async function listChecks(
     },
     include: {
       order: {
-        select: { orderNumber: true, tableNumber: true, orderType: true, customerName: true },
+        select: {
+          orderNumber: true,
+          tableNumber: true,
+          orderType: true,
+          customerName: true,
+          fiscalStatus: true,
+          fiscalError: true,
+        },
       },
     },
     orderBy: [{ paidAt: 'asc' }, { id: 'asc' }],
@@ -206,6 +227,8 @@ export async function listChecks(
         customerName: p.order.customerName,
         methods: [],
         paidAt: iso(p.paidAt),
+        fiscalStatus: p.order.fiscalStatus as FiscalStatus | null,
+        fiscalError: p.order.fiscalError,
       },
       total: dec(0),
       debt: dec(0),
@@ -280,6 +303,7 @@ export async function editCheck(
       throw conflict("Faqat to'langan chekni tahrirlash mumkin", { status: order.status });
     if (input.expectedVersion !== undefined && input.expectedVersion !== order.version)
       throw conflict("Chek boshqa joyda o'zgartirilgan. Qayta oching", { reason: 'STALE' });
+    assertFiscalEditable(order);
     // Settled or refunded in the legacy app: rewriting it would make it owed (or paid) again.
     if (
       order.payments.some(
@@ -313,6 +337,9 @@ export async function editCheck(
     });
     if (res.count !== 1)
       throw conflict("Chek boshqa joyda o'zgartirilgan. Qayta oching", { reason: 'STALE' });
+    // F18: then its debt is re-covered once more, which releases it only when repaid in money.
+    await resetFiscalAfterEdit(tx, order.id);
+    for (const customerId of await debtCustomersOf(tx, order.id)) await reallocate(tx, customerId);
     return order.id;
   });
   return getOrder(db, id);
@@ -328,42 +355,67 @@ export async function editCheck(
  * their order screen.
  */
 export async function cancelPaidOrder(db: Db, orderNumber: string): Promise<OrderDto> {
-  const id = await db.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({
-      where: { orderNumber },
-      include: { items: true, session: { select: { status: true } } },
-    });
-    if (!order) throw notFound('Buyurtma');
-    if (order.status === 'cancelled') throw conflict('Buyurtma allaqachon bekor qilingan');
-    if (order.status === 'pending') {
-      throw conflict("To'lanmagan buyurtmani buyurtma oynasidan bekor qiling", {
-        status: order.status,
-      });
-    }
-
-    const debtors = await debtCustomersOf(tx, order.id);
-    await tx.payment.deleteMany({ where: { orderId: order.id } });
-    for (const customerId of debtors) {
-      await assertNotOverpaid(tx, customerId);
-      await reallocate(tx, customerId);
-    }
-
-    if (order.session.status === 'open') {
-      const deltas = new Map<number, Dec>();
-      for (const i of order.items) {
-        deltas.set(
-          i.menuItemId,
-          (deltas.get(i.menuItemId) ?? dec(0)).minus(dec(i.stockQuantity.toString())),
-        );
-      }
-      await applyStockDeltas(tx, order.sessionId, deltas);
-    }
-
-    await tx.order.update({
-      where: { id: order.id },
-      data: { status: 'cancelled', version: { increment: 1 } },
-    });
-    return order.id;
-  });
+  const id = await db.$transaction((tx) => cancelInTx(tx, orderNumber, { fiscalGuard: true }));
   return getOrder(db, id);
+}
+
+const DRY_RUN = Symbol('dry run');
+
+/**
+ * Feature F18: would `cancelPaidOrder` succeed (debt repaid rules and all)? Asked before a VCR
+ * refund, so a refund is never registered for a check whose delete is then refused. Runs the very
+ * same cancel and rolls it back; the fiscal guard is left out (the refund comes next).
+ */
+export async function assertCheckCancellable(db: Db, orderNumber: string): Promise<void> {
+  try {
+    await db.$transaction(async (tx) => {
+      await cancelInTx(tx, orderNumber, { fiscalGuard: false });
+      throw DRY_RUN;
+    });
+  } catch (e) {
+    if (e !== DRY_RUN) throw e;
+  }
+}
+
+async function cancelInTx(
+  tx: Tx,
+  orderNumber: string,
+  opts: { fiscalGuard: boolean },
+): Promise<number> {
+  const order = await tx.order.findUnique({
+    where: { orderNumber },
+    include: { items: true, session: { select: { status: true } } },
+  });
+  if (!order) throw notFound('Buyurtma');
+  if (order.status === 'cancelled') throw conflict('Buyurtma allaqachon bekor qilingan');
+  if (opts.fiscalGuard) assertFiscalDeletable(order);
+  if (order.status === 'pending') {
+    throw conflict("To'lanmagan buyurtmani buyurtma oynasidan bekor qiling", {
+      status: order.status,
+    });
+  }
+
+  const debtors = await debtCustomersOf(tx, order.id);
+  await tx.payment.deleteMany({ where: { orderId: order.id } });
+  for (const customerId of debtors) {
+    await assertNotOverpaid(tx, customerId);
+    await reallocate(tx, customerId);
+  }
+
+  if (order.session.status === 'open') {
+    const deltas = new Map<number, Dec>();
+    for (const i of order.items) {
+      deltas.set(
+        i.menuItemId,
+        (deltas.get(i.menuItemId) ?? dec(0)).minus(dec(i.stockQuantity.toString())),
+      );
+    }
+    await applyStockDeltas(tx, order.sessionId, deltas);
+  }
+
+  await tx.order.update({
+    where: { id: order.id },
+    data: { status: 'cancelled', version: { increment: 1 } },
+  });
+  return order.id;
 }

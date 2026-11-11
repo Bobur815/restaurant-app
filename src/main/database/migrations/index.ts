@@ -16,6 +16,7 @@ import { sql as kitchenPrinters } from './0015_kitchen_printers';
 import { sql as lanDevices } from './0016_lan_devices';
 import { sql as ordersOthersPermission } from './0017_orders_others_permission';
 import { sql as serviceFeeStaffPay } from './0018_service_fee_staff_pay';
+import { sql as fiscalRegos } from './0019_fiscal_regos';
 
 export interface Migration {
   /** Becomes PRAGMA user_version once applied. Consecutive, starting at 1. */
@@ -49,4 +50,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 16, name: 'lan_devices', sql: lanDevices },
   { version: 17, name: 'orders_others_permission', sql: ordersOthersPermission },
   { version: 18, name: 'service_fee_staff_pay', sql: serviceFeeStaffPay },
+  { version: 19, name: 'fiscal_regos', sql: fiscalRegos },
 ];

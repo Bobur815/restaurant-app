@@ -19,6 +19,8 @@ type Row = {
   soldByWeight: boolean;
   isActive: boolean;
   printerId: number | null;
+  mxik: string | null;
+  packageCode: string | null;
   category: { nameUz: string };
 };
 
@@ -37,6 +39,8 @@ export function toMenuItemDto(m: Row): MenuItemDto {
     soldByWeight: m.soldByWeight,
     isActive: m.isActive,
     printerId: m.printerId,
+    mxik: m.mxik,
+    packageCode: m.packageCode,
   };
 }
 

@@ -248,6 +248,17 @@ legend {
   color: var(--color-warning);
 }
 
+/* Feature F18: the top bar's unsent-checks badge is a link. */
+a.badge {
+  text-decoration: none;
+}
+
+/* Feature F18: a check VCR refused. */
+.badge-danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;
@@ -296,6 +307,18 @@ legend {
 
 .notice-warning > .icon {
   color: var(--color-warning);
+}
+
+.notice-error {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+
+/* A group heading inside a form card (fiscal settings). */
+.card-subtitle {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
 }
 
 .notice-success {

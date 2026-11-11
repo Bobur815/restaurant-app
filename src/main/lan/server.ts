@@ -61,6 +61,10 @@ export const NOT_OVER_LAN: ReadonlySet<IpcChannel> = new Set<IpcChannel>([
   'lan:link',
   'lan:join',
   'lan:leave',
+  // F18: REGOS:VCR runs on the main till's PC; it is configured there (its password stays there).
+  'fiscal:getConfig',
+  'fiscal:setConfig',
+  'fiscal:testConnection',
 ]);
 
 /** The largest call a satellite makes (a dish with its fields, an order with lines) is a few KB. */

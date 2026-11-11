@@ -4,6 +4,7 @@ import { PORTION_FACTORS } from './utils/order-line';
 import { digitsOnly, isUzPhoneComplete, normalizeUzPhone } from './utils/phone';
 import { MAX_GUESTS_AT_TABLE, SERVICE_FEE_TYPES } from './utils/service-fee';
 import { TENDER_METHODS } from './utils/split-payment';
+import { FISCAL_VAT_MODES } from './utils/fiscal-receipt';
 import { cleanPermissions, PERMISSIONS } from './permissions';
 
 /**
@@ -62,6 +63,15 @@ const trimmed = (min: number, max: number, label: string) =>
     .trim()
     .min(min, { message: `${label}: kamida ${min} ta belgi` })
     .max(max, { message: `${label}: ko'pi bilan ${max} ta belgi` });
+
+/** An optional code: empty or missing becomes null, anything else must match. */
+const optionalCode = (pattern: RegExp, message: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === '' || pattern.test(v), { message })
+    .nullish()
+    .transform((v) => (v ? v : null));
 
 const optionalText = (max: number) =>
   z
@@ -430,6 +440,9 @@ const menuItemFields = {
   soldByWeight: z.boolean(),
   /** Feature F11: where saving an order sends this dish's kitchen ticket; null = nowhere. */
   printerId: id.nullish().transform((v) => v ?? null),
+  /** Feature F18: empty = the defaults from the fiscal settings. */
+  mxik: optionalCode(/^\d{17}$/, "MXIK kodi 17 ta raqamdan iborat bo'lishi kerak"),
+  packageCode: optionalCode(/^\d{1,20}$/, "Qadoq kodi faqat raqamlardan iborat bo'lishi kerak"),
 };
 export const menuItemInput = z
   .object({
@@ -591,6 +604,13 @@ export const moveTableInput = z
   });
 export type MoveTableInput = z.infer<typeof moveTableInput>;
 export const orderNumberInput = z.object({ orderNumber: z.string().regex(/^\d{4}-\d{5,}$/) });
+/**
+ * Feature F18: deleting a fiscalised check refunds its receipt first; when VCR stored its link as
+ * "***", the link scanned off the paper receipt (checked in main, sent only to VCR).
+ */
+export const deleteCheckInput = orderNumberInput.extend({
+  scannedQr: z.string().trim().max(500).optional(),
+});
 
 const tenderLine = z.object({ method: z.enum(TENDER_METHODS), amount: moneyOrZero });
 const tenders = z.array(tenderLine).min(1, { message: "To'lov usulini tanlang" }).max(8);
@@ -759,3 +779,47 @@ export type SaveTableOrderInput = z.infer<typeof saveTableOrderInput>;
 export type SaveOpenOrderInput = z.infer<typeof saveOpenOrderInput>;
 /** As the renderer sends it (before schema defaults). */
 export type UpdateReceiptSettingsInput = z.input<typeof updateReceiptSettingsInput>;
+
+// ── Fiscal receipts (feature F18, REGOS:VCR) ─────────────────────────────────────────────────
+
+/**
+ * Where REGOS:VCR answers: this PC or another one in the shop's network, plain http (VCR serves
+ * nothing else). Main builds the URL; the renderer never sends one.
+ */
+export function isAllowedVcrHost(host: string): boolean {
+  if (host === 'localhost') return true;
+  // Canonical decimal octets only: the URL parser reads "010" as octal (8) and "0x7f" as hex, so
+  // "010.8.8.8" would pass as 10.x here and connect to 8.8.8.8 (security review F18).
+  const octet = '(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)';
+  const m = new RegExp(`^${octet}\\.${octet}\\.${octet}\\.${octet}$`).exec(host);
+  if (!m) return false;
+  const [a, b] = m.slice(1).map(Number) as [number, number];
+  return a === 127 || a === 10 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+}
+
+const fiscalCode = (pattern: RegExp, message: string) =>
+  z
+    .string()
+    .trim()
+    .refine((v) => v === '' || pattern.test(v), { message });
+
+export const fiscalConfigInput = z.object({
+  enabled: z.boolean(),
+  host: z.string().trim().refine(isAllowedVcrHost, {
+    message: "Manzil: 127.0.0.1 yoki do'kon tarmog'idagi kompyuter (192.168.x.x)",
+  }),
+  port: z.number().int().min(1).max(65535),
+  login: trimmed(1, 40, 'Login'),
+  /** Empty or absent keeps the saved password. */
+  password: z.string().max(100).optional(),
+  vatMode: z.enum(FISCAL_VAT_MODES),
+  defaultMxik: fiscalCode(/^\d{17}$/, "MXIK kodi 17 ta raqamdan iborat bo'lishi kerak"),
+  defaultPackage: fiscalCode(/^\d{1,20}$/, "Qadoq kodi faqat raqamlardan iborat bo'lishi kerak"),
+  serviceMxik: fiscalCode(/^\d{17}$/, "MXIK kodi 17 ta raqamdan iborat bo'lishi kerak"),
+  servicePackage: fiscalCode(/^\d{1,20}$/, "Qadoq kodi faqat raqamlardan iborat bo'lishi kerak"),
+  deliveryMxik: fiscalCode(/^\d{17}$/, "MXIK kodi 17 ta raqamdan iborat bo'lishi kerak"),
+  deliveryPackage: fiscalCode(/^\d{1,20}$/, "Qadoq kodi faqat raqamlardan iborat bo'lishi kerak"),
+});
+export type FiscalConfigInput = z.infer<typeof fiscalConfigInput>;
+
+export const fiscalOrderInput = z.object({ orderId: id });

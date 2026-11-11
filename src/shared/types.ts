@@ -1,5 +1,6 @@
 import type { ServiceFeeType } from './utils/service-fee';
 import type { DecimalString } from './utils/decimal';
+import type { FiscalVatMode } from './utils/fiscal-receipt';
 
 /**
  * Data shapes that cross IPC. Plain JSON: money and quantities are DecimalString, dates are ISO
@@ -347,6 +348,9 @@ export interface MenuItemDto {
   isActive: boolean;
   /** Feature F11: the kitchen/bar printer for this dish's tickets; null = none. */
   printerId: number | null;
+  /** Feature F18: MXIK (17 digits) and package code; null = the defaults from fiscal settings. */
+  mxik: string | null;
+  packageCode: string | null;
 }
 
 /** Result of a delete request: removed, or hidden because history refers to it. */
@@ -443,6 +447,8 @@ export interface SessionCloseResult {
   closedAt: string;
   carried: Array<{ menuItemId: number; quantity: DecimalString }>;
   writtenOff: Array<{ menuItemId: number; quantity: DecimalString; amount: DecimalString }>;
+  /** Feature F18: why sending receipts or closing the VCR Z-report failed (the shift is closed). */
+  fiscalWarning?: string | null;
 }
 
 // ── Orders & payments ────────────────────────────────────────────────────────────────────────
@@ -512,6 +518,8 @@ export interface OrderDto {
   courierName: string | null;
   lines: OrderLineDto[];
   payments: PaymentDto[];
+  /** Feature F18: its fiscal receipt; null when fiscal receipts were off when it was paid. */
+  fiscal: OrderFiscalDto | null;
 }
 
 /** An unpaid takeaway or delivery order, for the strip on the tables screen. */
@@ -595,6 +603,82 @@ export interface CheckDto {
   status: PaymentStatus;
   /** When it was paid (its first payment). */
   paidAt: string;
+  /** Feature F18: null = fiscal receipts were off when it was paid. */
+  fiscalStatus: FiscalStatus | null;
+  fiscalError: string | null;
+}
+
+// ── Fiscal receipts (feature F18, REGOS:VCR) ─────────────────────────────────────────────────
+
+/**
+ * PENDING: waiting to be sent (or VCR was unreachable); FISCALIZED: VCR registered it; FAILED:
+ * VCR refused its data (MXIK, VAT); DEFERRED_DEBT: waits until its debt is repaid; REFUNDED: VCR
+ * registered its refund (the check is then cancelled).
+ */
+export type FiscalStatus = 'PENDING' | 'FISCALIZED' | 'FAILED' | 'DEFERRED_DEBT' | 'REFUNDED';
+
+export interface OrderFiscalDto {
+  status: FiscalStatus;
+  error: string | null;
+  /** As VCR answered; since VCR 2026-10-30 these may be "***" (only the paper receipt has them). */
+  receiptNo: string | null;
+  fiscalSign: string | null;
+  qrUrl: string | null;
+  terminalId: string | null;
+  fiscalAt: string | null;
+  refundedAt: string | null;
+}
+
+export interface FiscalConfigDto {
+  enabled: boolean;
+  host: string;
+  port: number;
+  login: string;
+  /** The password itself never leaves main. */
+  hasPassword: boolean;
+  vatMode: FiscalVatMode;
+  defaultMxik: string;
+  defaultPackage: string;
+  serviceMxik: string;
+  servicePackage: string;
+  deliveryMxik: string;
+  deliveryPackage: string;
+  /** A development run talks to the URL in SAVDOCHEF_VCR_URL instead of host and port. */
+  urlOverride: boolean;
+}
+
+export interface FiscalConnectionDto {
+  terminalId: string;
+  appletVersion: string;
+  freeZReports: number;
+  freeUnsentReceipts: number;
+}
+
+export interface FiscalStatusDto {
+  enabled: boolean;
+  /** Paid checks waiting to be sent, and those VCR refused. */
+  pending: number;
+  failed: number;
+}
+
+export interface FiscalZReportDto {
+  open: boolean;
+  terminalId: string;
+  number: number;
+  openTime: string;
+  closeTime: string;
+  saleCount: number;
+  saleCash: DecimalString;
+  saleCard: DecimalString;
+  refundCount: number;
+  refundCash: DecimalString;
+  refundCard: DecimalString;
+}
+
+export interface FiscalRetryAllDto {
+  sent: number;
+  failed: number;
+  pending: number;
 }
 
 // ── Residuals, expenses, reports ─────────────────────────────────────────────────────────────

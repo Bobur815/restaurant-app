@@ -19,7 +19,8 @@ export interface PaidResult {
  * it on debt (nasiya). Resolves the paid order and whether to print its receipt, or null if closed.
  *
  * Printing is the cashier's choice here. It starts from the "print after payment" setting, except
- * for delivery: its receipt already printed when the order was saved, so it starts unticked.
+ * for delivery: its receipt already printed when the order was saved, so it starts unticked; and
+ * with fiscal receipts on (F18), when REGOS:VCR prints the receipt itself (decided 2026-11-11, Q5).
  */
 export function payOrderModal(order: OrderDto): Promise<PaidResult | null> {
   return new Promise((resolve) => {
@@ -29,7 +30,9 @@ export function payOrderModal(order: OrderDto): Promise<PaidResult | null> {
       name: 'printReceipt',
       label: t('payment.printReceipt'),
       checked:
-        order.orderType !== 'DELIVERY' && appStore.get().settings?.printAfterPayment !== false,
+        order.orderType !== 'DELIVERY' &&
+        appStore.get().settings?.printAfterPayment !== false &&
+        !appStore.get().fiscal?.enabled,
     });
     let confirm: HTMLButtonElement | null = null;
 

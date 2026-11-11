@@ -319,6 +319,7 @@ export function sampleOrder(lang: Language, type: OrderType = 'DINE_IN'): OrderD
   return {
     id: 0,
     orderNumber: `${new Date().getFullYear()}-00000`,
+    fiscal: null,
     tableNumber: 1,
     customerId: null,
     customerName: null,

@@ -1157,3 +1157,103 @@ Copies: the delivery fee (setting `deliveryFeeDefault` -> `orders.deliveryFee`, 
 - Upgrade test on this PC: silent install 0.10.0 over 0.9.1 (exit 0, exe 0.10.0) -> packaged run with `--user-data-dir` = scratch copy of the v17 cafe profile (`up10`): backup `savdochef-v17-*` written, migrated v17 -> v18 (0018); every table's row count identical except settings 18 -> 21 (the three service-fee keys, seeded `off`), orders total identical (50 000); closed normally. This PC now has 0.10.0 installed. The update feed serves 0.9.1.
 - 0.9 satellites are not compatible with a 0.10 main till: they need this update (F15 button on their waiting card, once 0.10.0 is on the feed).
 - Published 2026-11-10 with `npm run deploy:pos` (check 51 / 666 again, installer rebuilt and signed again, so its sha256 is `8ec74005d681a7c2c8fe4649bd3eeaefaa32d60d157bc043af43656aba73c70d`, not the `release/` copy's; same code and version). Feed `latest.yml` serves 0.10.0. Pushed `rewrite/ts-ipc` and tags v0.9.0, v0.9.1, v0.10.0.
+
+## F18 fiscal receipts through REGOS:VCR (approved 2026-11-11: all questions = R)
+
+Copies posgro's proven pipeline (`C:\Users\user\posgro\src\main\fiscal\`: `regos-vcr-client.ts`, the sale / Z-report / recovery / refund parts of `regos-vcr-service.ts`, `secret-store.ts`, `ofd-link.ts`; guide `posgro\tasks\REGOS_VCR_INTEGRATION.md`), cut down to one restaurant till. Not copied: UzQR / `Payment.*`, marking codes (Asl-Belgisi), the backlog stepper, merged batches, VAT self-heal, reconcile, tasnif lookups. SavdoChef patterns copied: a settings section + `settings` keys (F17 service fee), `ctx.services.*` for an Electron-dependent service (updater, license), an Electron-free domain module tested against a real local HTTP server (`lan/satellite.e2e.test.ts`).
+
+### How it works (recommendations, see questions)
+
+- REGOS:VCR runs on the **main till's** PC (default `http://127.0.0.1:22298/`, JSON-RPC, login `cassir`). Satellites forward every call to the main till (F12), so only the main till talks to VCR; nothing changes on satellites.
+- Off by default. Settings -> new section "Fiskal chek" (`settings` permission): on/off; VCR host + port (host limited to `127.0.0.1` / `localhost` / private LAN IPv4, `http` only, so the renderer never hands main a free URL; an unpackaged build may take `SAVDOCHEF_VCR_URL` for the test stand); login; password (Electron `safeStorage` / DPAPI, stored encrypted in `settings`, never returned, only `hasPassword`; added to `secrets.test.ts`); VAT mode ("QQS to'lovchisi emas" -> `vat_value: -1`, or 12 % -> ceil(amount x 12 / 112), posgro's rounding gotcha); default MXIK + package code for dishes; MXIK + package code for the service fee and the delivery fee (Q3); "Ulanishni tekshirish" (`Sys.Initialize` + `Sys.GetOverflowInfo`: terminal id, free Z-reports, unsent-receipt slots).
+- Dish form (menu-modals): optional MXIK (17 digits) + package code; empty = the default from settings.
+- **Payment** (`payments:pay`): the transaction is unchanged; with fiscal on, the order also gets `fiscalStatus = PENDING` inside it, and after commit main sends `Receipt.Sale` in the background ("allow, fiscalise later": the payment never waits for VCR or fails because of it). One queue (`runExclusive`): VCR is single-threaded. `code` = orderNumber (idempotency key). Before any re-send main asks `Receipt.GetInfo {Code}`; a receipt whose answer was lost is adopted, never sent twice (posgro `lookupByCode` / `tryRecoverByCode` / `nothingWasSent`). Result -> `FISCALIZED` + receipt id / number / sign / QR link / terminal / time (VCR may answer `***` since 2026-10-30; stored as given). Environment errors (VCR off, busy, no internet, printer or module missing) -> stays `PENDING`; data errors (MXIK, VAT) -> `FAILED` with the Uzbek reason, attempts counted (max 5).
+- Positions, one per order line: `amount` = line total x 100; `quantity` = `stockQuantity` x 1000 (portion 0.7 -> 700, weight: kg x 1000, so amount / quantity is the full-portion or per-kg price); `vat_value` per VAT mode; `discount` 0 (SavdoChef has no discounts); name = dish name in the receipt language. Service fee and delivery fee as their own positions (Q3). Payments: cash -> `type 1`; card -> `type 2, card_type 2` (plain bank terminal, no `payment_id`, confirmed by REGOS 2026-06-04); click -> Q1; debt -> Q2. Integer tiyin via Decimal, no float math.
+- **Retry**: at shift close (before `ZReport.Close`), "Qayta yuborish" per check and "Hammasini yuborish" in Cheklar, and once after app start when a shift is open. No timer loop (posgro removed theirs).
+- **Z-report** (Q4): `ZReport.GetInfo` / `ZReport.Open` when a shift opens (and lazily before the first receipt; 704010 -> reopen once and retry); at `sessions:close` pending receipts are sent first, then `ZReport.Close` (704020 "empty" = fine). A VCR failure never blocks opening or closing the shift: the result carries a warning the close modal shows. Shift page: Z-report state + VCR totals (`ZReport.GetInfo`), manual open / close buttons (`shifts`).
+- **Printing** (Q5): with fiscal on, VCR prints the fiscal receipt; SavdoChef's automatic receipt after payment is skipped (manual print from Cheklar and the pre-bill stay; kitchen tickets unchanged). "Fiskal nusxa" in Cheklar -> `Receipt.Duplicate`. Note: since VCR 2026-10-30 the API masks the QR link (`***`), so SavdoChef could not print the OFD QR on its own receipt anyway.
+- **Corrections** (Q6): a `FISCALIZED` check: `checks:update` refused ("Fiskal chekning to'lov usulini o'zgartirib bo'lmaydi"); `checks:delete` first needs a fiscal refund: `Receipt.FullRefund` with the stored QR link or, when it was stored as `***`, the link scanned off the paper receipt (validated as `https://ofd.soliq.uz/check?...`, terminal id + time checked like posgro `scannedLinkMismatch`, sent only to VCR, never opened or fetched). The check is cancelled only after VCR confirms the refund (same rules as today). `PENDING` / `FAILED` checks: edit or delete first asks VCR by code (posgro `checkBeforeChange`); unreachable -> refused.
+- Cheklar: fiscal badge per check (yuborildi / kutilmoqda / xato + reason), filter "Fiskal emas", counter in the top bar while anything is `PENDING` / `FAILED` (main till).
+
+### Schema (migration 0019 `fiscal_regos`, additive; skill `prisma-migration`, then `migration-reviewer`)
+
+- `menu_items`: `mxik TEXT NULL`, `packageCode TEXT NULL`.
+- `orders`: `fiscalStatus TEXT NULL` (`PENDING | FISCALIZED | FAILED | DEFERRED_DEBT | REFUNDED`; NULL = fiscal was off when paid, never sent), `fiscalError TEXT NULL`, `fiscalAttempts INTEGER NOT NULL DEFAULT 0`, `fiscalReceiptId` / `fiscalReceiptNo` / `fiscalSign` / `fiscalQrUrl` / `fiscalTerminalId` (TEXT NULL), `fiscalAt DATETIME NULL`, `fiscalRefundSign TEXT NULL`, `fiscalRefundedAt DATETIME NULL`; index on `fiscalStatus`.
+- `sessions`: `fiscalZReportId INTEGER NULL`, `fiscalZClosedAt DATETIME NULL`.
+- Settings keys (JSON in `settings`, seeded): `fiscal_enabled false`, `fiscal_vcr_host "127.0.0.1"`, `fiscal_vcr_port 22298`, `fiscal_vcr_login "cassir"`, `fiscal_vat_mode "nonPayer"`, `fiscal_default_mxik ""`, `fiscal_default_package ""`, `fiscal_service_mxik` / `_package`, `fiscal_delivery_mxik` / `_package`; plus `fiscal_vcr_password_enc` (secret, not part of `AppSettings`).
+- Installed databases: every existing order NULL (old checks are not fiscalised afterwards), every dish without MXIK, fiscal off -> behaves exactly like 0.10.1 until an admin turns it on.
+
+### Money / stock (before -> after)
+
+- Stock: no change anywhere.
+- `payments:pay`: before: payments + order `completed` in one transaction. After: the same, plus `fiscalStatus` written in that transaction when fiscal is on; the VCR call happens after commit and never changes amounts, payments or order status.
+- `checks:update`: before: any paid check. After: refused for `FISCALIZED` / `REFUNDED`; NULL as today; `PENDING` / `FAILED` after the code check, then sent with the new methods.
+- `checks:delete`: before: payments deleted, order `cancelled`, stock back while the shift is open. After: the same, but a `FISCALIZED` check only after a successful VCR refund (refund sign stored, status `REFUNDED`); reports already leave cancelled orders out.
+- Debt (Q2): an order with a debt part is `DEFERRED_DEBT`; it is sent when `reallocate` marks its last debt row settled (debt part as cash in v1). Write-offs never send it; a voided repayment that re-opens a settled, already fiscalised debt changes nothing fiscal.
+- Sums: positions total = payments total exactly (both from the same Decimal totals).
+
+### Files
+
+- shared: `schemas.ts` (fiscal settings input with host/port check, `fiscalRetryInput`, `checks:delete` optional `scannedQr`, dish `mxik` / `packageCode`), `types.ts` (`FiscalConfigDto`, `FiscalStatus`, `FiscalZReportDto`, `FiscalConnectionDto`, fiscal fields on `OrderDto` / `CheckDto`, `SessionCloseResult.fiscalWarning`), `ipc.ts`, `utils/fiscal-receipt.ts` (Electron-free: order -> positions / payments, tiyin and quantity conversion, VAT) + test.
+- main: `fiscal/vcr-client.ts` (posgro client trimmed to Sys, ZReport, Receipt.Sale / GetInfo / Duplicate / FullRefund / CheckQRcodeUrl; `VcrError` + `netCause`), `fiscal/vcr-errors.ts` (Uzbek texts for the codes in the guide), `fiscal/fiscal-service.ts` (config, queue, sale / recover / refund / Z-report, retry), `fiscal/secret-store.ts` (safeStorage), `fiscal/ofd-link.ts`; `payments/payments.ts`, `debts/debts.ts` (settled hook), `sessions/sessions.ts` (close result), `menu/menu-items.ts`, `settings/settings.ts` + `database/seed.ts`, `ipc/handlers.ts`, `ipc/events.ts`, `ipc/ipc-safe.ts` (`services.fiscal`), `index.ts` (wiring + start-up retry), migration + `migrations/index.ts`, schema.
+- renderer: `settings/fiscal-section.ts` (+ `settings-view.ts`), `menu/menu-modals.ts` (MXIK fields), `order/payment-modal.ts` (no auto print when fiscal on), `checks/checks-view.ts` (badge, filter, retry, duplicate, refund + QR scan prompt), `sessions/sessions-view.ts` + `close-modal.ts` (Z-report block, warning), top-bar counter (`layout/`); uz + ru strings.
+
+### IPC channels (access)
+
+| channel | access | event |
+|---|---|---|
+| `fiscal:getConfig` | `settings` | read-only |
+| `fiscal:setConfig` (incl. password) | `settings` | `settings-changed` |
+| `fiscal:testConnection` | `settings` | read-only |
+| `fiscal:status` (enabled, pending / failed counts) | user | read-only |
+| `fiscal:zReport` (GetInfo) | `shifts` | read-only |
+| `fiscal:zOpen` / `fiscal:zClose` | `shifts` | `session-changed` |
+| `fiscal:retry` (orderId) / `fiscal:retryAll` | `checks` | `orders-changed` |
+| `fiscal:duplicate` (orderId) | `checks` | read-only |
+| `checks:delete` + `scannedQr?` | `corrections` (as today) | `orders-changed` (as today) |
+
+The service also emits `orders-changed` when a background send finishes, so Cheklar and the counter refresh. Reviews: `electron-security-reviewer` (new outbound HTTP, secret storage, scanned link), `prisma-reviewer` (payments, debts, sessions), `migration-reviewer`.
+
+### Strings (uz + ru)
+
+Settings section (title, every field, VAT modes, test result, password saved / not saved), dish form MXIK / package labels + hint, fiscal badges and reasons, Cheklar filter and buttons, refund + "scan the QR on the paper receipt" prompt, shift Z-report block and close warning, top-bar counter. Errors from main in Uzbek, as everywhere.
+
+### Tests
+
+- `fiscal-receipt.test.ts`: tiyin / quantity for portions 0.7 / 0.5, weight, service + delivery fee positions, VAT modes (ceil, -1), payments per method and split, sums equal exactly.
+- `vcr-client.test.ts` against a fake JSON-RPC server: ok / error answers, auth, busy 704042 retry, refused vs timeout `netCause`, non-JSON.
+- `fiscal-service.test.ts` (temp SQLite + fake VCR): pay -> FISCALIZED with stored fields; VCR down -> PENDING, later retry -> FISCALIZED; lost answer -> adopted by code, never two `Receipt.Sale`; data error -> FAILED + attempts; 704010 -> reopen once; shift close sends pending then closes Z; debt order deferred, sent on settle; refund then delete; `***` link -> scan needed, wrong terminal refused; edit refused when FISCALIZED; fiscal off -> nothing sent, status NULL.
+- Existing `payments` / `debts` / `sessions` suites stay green; `schemas.test` (host check), `secrets.test` (no password in any result), `ipc.test` access snapshot, `events.test`, `database.test` drift.
+
+### Verify in the real app
+
+- `npm run build`, harness on a scratch copy of the cafe data (migrates v18 -> v19 with backup), fake printer, against a **fake VCR** process that records requests: settings section (uz light + ru dark), test connection, dish MXIK, pay cash / card / split -> badge FISCALIZED; VCR stopped -> PENDING -> started -> "Hammasini yuborish"; shift close with Z close; refund + delete. Screenshots looked at.
+- Only with your OK (outward-facing, shared stand): a short run against `http://vcr-test.regos.uz` with posgro's test credentials (`posgro\.env`): one sale + one full refund, watched on `https://vcr-camera.regos.uz/`; Z-report not closed (shared shift).
+- Real VCR + fiscal module on a customer PC: not available here; first install with the owner.
+
+### Version
+
+**minor (0.11.0)**: migration + feature. 0.10 satellites need the update (F15 button), as with every minor.
+
+### Open questions
+
+1. Click: fiscalise as cash (`type 1`, posgro's rule: the money goes to the shop's Click account) (R), or as cashless (`type 2`)?
+2. Orders paid partly or wholly on debt: issue the receipt when the order's debt is fully repaid, the debt part as cash (R)? Or never automatically (manual "Yuborish" in Cheklar)?
+3. MXIK: one default MXIK + package code for all dishes in settings, optional per-dish override, and the service fee and delivery fee as their own receipt lines with their own MXIK (R)? Or MXIK required on every dish, fees spread into the dish lines?
+4. Z-report follows the SavdoChef shift: opened with the shift, closed at shift close after pending receipts are sent (R)? Or only by hand from the shift page?
+5. Printing with fiscal on: VCR prints the fiscal receipt and SavdoChef skips its own automatic receipt (R; manual print stays)? Or both print (VCR on a different / virtual printer)?
+6. Fiscalised checks: payment-method edit refused, delete only after a VCR full refund (scanning the paper receipt's QR when VCR masked the link) (R)? Or in v1 refuse delete entirely and do refunds in the REGOS app?
+7. Plan: fiscal receipts on every plan, no licence feature (R: it is a legal requirement)? Or a new `fiscal` feature (needs posgro's server `savdochef-config.ts` changed too)?
+
+### F18 built (2026-11-11, not committed)
+
+- Migration 0019 (hand-written ADD COLUMNs: Prisma wanted to rebuild `orders`). migration-reviewer: safe. Nothing is seeded: a missing `fiscal_enabled` reads as off (plan said "seeded"; not needed).
+- Main: `fiscal/vcr-client.ts` (JSON-RPC, busy retry, refused/timeout/reset, `redirect: 'error'`), `fiscal/fiscal-service.ts` (one queue; sent after commit by `kick`, at shift close, "Qayta yuborish" / "Hammasini yuborish", once after start; code `SC-<db prefix>-<orderNumber>`, looked up before any re-send and after any unclear failure; amount must match to adopt), `fiscal/config.ts` (settings + DPAPI password), `fiscal/order-status.ts`, `fiscal/ofd-link.ts`; shared `utils/fiscal-receipt.ts`. Satellites run none (they forward); `fiscal:getConfig/setConfig/testConnection` are not served over LAN and the section is hidden on a satellite.
+- Debt: `reallocate` also tracks which credits covered each row (same status/settledAt as before, verified by prisma-reviewer); money-covered -> PENDING, write-off -> stays DEFERRED_DEBT; an open debt is never sold (checked again just before Receipt.Sale).
+- Corrections: edit refused for FISCALIZED/REFUNDED (and when VCR turns out to hold an unsent check); delete = dry-run cancel first (`assertCheckCancellable`), then Receipt.FullRefund (stored link, or the scanned paper QR when VCR masked it, terminal + time checked), then cancel. A check being edited/deleted is not sent meanwhile (`whileChanging`); a receipt for a check no longer paid is logged as an error, not recorded.
+- Reviews: migration safe; security M1 (octal/hex IPv4 like `010.8.8.8` passed the private check -> canonical octets + re-check before connecting), M2 (redirects -> refused), L1-L4 fixed; L5 (scanned link matched by terminal + time only, not amount) accepted: the link only goes to VCR's refund. Prisma review bugs 1-7 + kick on debts:void/writeOff fixed, with tests. Not changed: position/payment totals add integer tiyin as JS numbers (safe, built from Decimal).
+- Exception to "the renderer never passes URLs to main": `checks:delete.scannedQr`, reduced in main to `https://ofd.soliq.uz/check?<safe chars>` and only sent to VCR.
+- Tests: fiscal-receipt 8, vcr-client 9, fiscal-service 29, schemas +3, secrets (password + base64 auth in every read channel and setConfig), ipc snapshot. `npm run check`: 54 suites / 739 tests.
+- Real app (harness `f18.cjs` with a bundled fake VCR, fresh scratch copy of the v18 cafe data -> v19, backup `savdochef-v18-*` written): 10 old checks, none with a fiscal status; settings form saved + "Ulanishni tekshirish"; bad host refused; dish form MXIK fields; pay through the screen: print box unticked, FISCALIZED (positions: dish 000006 + service fee line, own MXIK, vat -1, code SC-...); card + cash split -> type 1 + type 2; 704002 -> PENDING, 705511 -> FAILED, top bar "Fiskal emas: 2", filter, failed detail, "Hammasini yuborish" -> both FISCALIZED; duplicate; edit refused; masked link -> delete asks for the paper QR -> refunded + cancelled. Screenshots looked at (uz light, ru dark). Shift close not run in the app: the copy has 4 older unpaid orders (close + Z-report covered by tests).
+- Not verified: a real REGOS:VCR / fiscal module, and the shared test stand `vcr-test.regos.uz` (needs your OK; posgro's test credentials).
+- Version: 0.11.0 (minor) at release; repeat the install-over-0.10.1 upgrade test then.

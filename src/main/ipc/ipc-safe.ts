@@ -1,4 +1,5 @@
 import { ZodError, type z } from 'zod';
+import type { FiscalService } from '../fiscal/fiscal-service';
 import type { IpcError, IpcResult } from '@shared/errors';
 import type { IpcChannel, IpcOutput } from '@shared/ipc';
 import { hasPermission, type Permission } from '@shared/permissions';
@@ -37,6 +38,8 @@ export interface HandlerServices {
   /** Feature F12: satellites (main till) and this till's role. Absent in tests without LAN. */
   lan?: LanService;
   updater: UpdaterService;
+  /** Feature F18: fiscal receipts through REGOS:VCR (main till). Absent in tests without it. */
+  fiscal?: FiscalService;
   /** Feature F5: the licence; `refusal` is asked on every call (invokeHandler). */
   license: Pick<
     LicenseService,

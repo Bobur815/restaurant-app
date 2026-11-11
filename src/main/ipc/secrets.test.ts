@@ -13,6 +13,9 @@ import { plainCipher } from '../lan/config';
 import { hashSecret } from '../lan/pairing';
 import { LanService } from '../lan/lan-service';
 import { TableLocks } from '../orders/table-locks';
+import { FiscalService } from '../fiscal/fiscal-service';
+import { saveFiscalConfig } from '../fiscal/config';
+import { startFakeVcr, type FakeVcr } from '../test-utils/fake-vcr';
 
 jest.setTimeout(60_000);
 
@@ -22,10 +25,18 @@ jest.setTimeout(60_000);
  * return real rows (users, orders with createdBy, checks...).
  */
 // bcrypt hashes, the 64-hex PIN HMACs, and the secret column names.
-const SECRET = /\$2[aby]\$\d\d\$|[0-9a-f]{64}|pinHash|legacyPinCode|pin_key|recovery_hash/;
+// F18: the VCR cassir password (and its base64 auth form) never leaves main either.
+const VCR_PASSWORD = 'vcr-pass-9876';
+const VCR_AUTH = Buffer.from(`cassir:${VCR_PASSWORD}`).toString('base64');
+const SECRET = new RegExp(
+  /\$2[aby]\$\d\d\$|[0-9a-f]{64}|pinHash|legacyPinCode|pin_key|recovery_hash/.source +
+    `|${VCR_PASSWORD}|${VCR_AUTH}`,
+);
 
 let t: TestDb;
 let admin: Actor;
+let vcr: FakeVcr;
+let fiscal: FiscalService;
 
 beforeAll(async () => {
   t = await createTestDb();
@@ -135,8 +146,50 @@ beforeAll(async () => {
       error: 'offline',
     },
   });
+  // Fiscal receipts on against a fake VCR (F18); order 1 is fiscalised, so duplicate runs.
+  vcr = await startFakeVcr({ password: VCR_PASSWORD });
+  await saveFiscalConfig(t.db, plainCipher, {
+    enabled: true,
+    host: '127.0.0.1',
+    port: 22298,
+    login: 'cassir',
+    password: VCR_PASSWORD,
+    vatMode: 'nonPayer',
+    defaultMxik: '10202001001000000',
+    defaultPackage: '',
+    serviceMxik: '',
+    servicePackage: '',
+    deliveryMxik: '',
+    deliveryPackage: '',
+  });
+  vcr.receipts.push({
+    Id: 'uuid-1',
+    Code: 'x',
+    Amount: 500000,
+    QRCodeURL: 'https://ofd.soliq.uz/check?t=T&r=1&c=20261111100000&s=1',
+    TerminalID: 'T',
+    ReceiptNo: '1',
+    DateTime: '',
+    FiscalSign: '1',
+    refunded: false,
+    params: null,
+  });
+  await t.db.order.update({
+    where: { id: 1 },
+    data: { fiscalStatus: 'FISCALIZED', fiscalReceiptId: 'uuid-1', fiscalSign: '1' },
+  });
+  fiscal = new FiscalService({
+    getDb: () => t.db,
+    cipher: plainCipher,
+    urlOverride: vcr.url,
+    onChange: () => undefined,
+    log: { info: () => undefined, warn: () => undefined, error: () => undefined },
+  });
 });
-afterAll(() => t.close());
+afterAll(async () => {
+  await vcr.close();
+  await t.close();
+});
 
 // The till's local date (UTC differs between midnight and 05:00 in Tashkent).
 const today = localDate();
@@ -163,6 +216,7 @@ const INPUTS: Partial<Record<IpcChannel, unknown>> = {
   'reports:staff': { start: today, end: today },
   'license:signupStart': { phone: '+998 90 123 45 67' },
   'license:signupStatus': { verificationId: 'v1' },
+  'fiscal:duplicate': { orderId: 1 },
 };
 
 /** Feature F12: the main till's LAN side, not started (no server needed to read its status). */
@@ -199,6 +253,7 @@ function ctx(actor: Actor | null): HandlerContext {
       updater: unsupportedUpdater(),
       license: allowAllLicense(),
       lan,
+      fiscal,
     },
     log: () => undefined,
   };
@@ -242,6 +297,24 @@ describe('no secrets over IPC', () => {
       ['debts:list', { includeSettled: true }],
       ['debts:get', { customerId: null }],
       ['sessions:addCashMovement', { type: 'PAY_IN', amount: '1000', note: 'x' }],
+      // F18: saving the fiscal settings answers with them, never with the password.
+      [
+        'fiscal:setConfig',
+        {
+          enabled: true,
+          host: '127.0.0.1',
+          port: 22298,
+          login: 'cassir',
+          password: VCR_PASSWORD,
+          vatMode: 'nonPayer',
+          defaultMxik: '10202001001000000',
+          defaultPackage: '',
+          serviceMxik: '',
+          servicePackage: '',
+          deliveryMxik: '',
+          deliveryPackage: '',
+        },
+      ],
     ];
     for (const [channel, input] of calls) {
       const result = await invokeHandler(channel, HANDLERS[channel] as never, ctx(admin), input);

@@ -13,6 +13,7 @@ import { dec, sum, toMoneyString, type Dec } from '@shared/utils/decimal';
 import type { Actor, Db, DbOrTx, Tx } from '../domain/db';
 import { decStr, iso, isoOrNull } from '../domain/db';
 import { conflict, invalid, isUniqueViolation, notFound } from '../domain/errors';
+import { syncDeferredReceipts, type DebtRowCoverage } from '../fiscal/order-status';
 
 /**
  * Debt (nasiya), feature F1-C. A debt is a payment row with method `debt` on a customer; money
@@ -78,15 +79,36 @@ export async function reallocate(tx: Tx, customerId: number): Promise<void> {
   let pool = dec(0);
   let lastAt: Date | null = null;
   let r = 0;
+  // Feature F18: the credits still in the pool, oldest first, with what is left of each, so a
+  // row knows whether a write-off paid part of it (such a debt gets no fiscal receipt).
+  const inPool: Array<{ left: Dec; writeOff: boolean }> = [];
+  const coverage: DebtRowCoverage[] = [];
   for (const row of rows) {
     const amount = dec(row.amount.toString());
     while (pool.lt(amount) && r < paid.length) {
       pool = pool.plus(paid[r]!.amount.toString());
+      inPool.push({
+        left: dec(paid[r]!.amount.toString()),
+        writeOff: paid[r]!.kind === 'WRITE_OFF',
+      });
       lastAt = paid[r]!.createdAt;
       r++;
     }
     const covered = pool.gte(amount);
-    if (covered) pool = pool.minus(amount);
+    let writtenOff = false;
+    if (covered) {
+      pool = pool.minus(amount);
+      let need = amount;
+      while (need.gt(0) && inPool.length > 0) {
+        const head = inPool[0]!;
+        const take = head.left.lt(need) ? head.left : need;
+        if (take.gt(0) && head.writeOff) writtenOff = true;
+        head.left = head.left.minus(take);
+        need = need.minus(take);
+        if (head.left.lte(0)) inPool.shift();
+      }
+    }
+    coverage.push({ orderId: row.orderId, covered, writtenOff });
     // Settled when the repayment that completed it was made.
     const status = covered ? 'paid' : 'pending';
     const at = covered ? lastAt : null;
@@ -94,6 +116,7 @@ export async function reallocate(tx: Tx, customerId: number): Promise<void> {
       await tx.payment.update({ where: { id: row.id }, data: { status, settledAt: at } });
     }
   }
+  await syncDeferredReceipts(tx, coverage);
 }
 
 /** Refuses a change that would leave the customer having paid back more than they owe. */

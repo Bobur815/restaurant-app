@@ -48,7 +48,13 @@ import {
   saveTableOrder,
   setDeliveryStatus,
 } from '../orders/orders';
-import { cancelPaidOrder, editCheck, listChecks, payOrder } from '../payments/payments';
+import {
+  assertCheckCancellable,
+  cancelPaidOrder,
+  editCheck,
+  listChecks,
+  payOrder,
+} from '../payments/payments';
 import {
   assignDebt,
   getDebtor,
@@ -97,7 +103,13 @@ import { completeSetup, getSetupStatus } from '../settings/setup';
 import { createUser, listUsers, updateProfile, updateUser } from '../users/users';
 import { conflict, forbidden } from '../domain/errors';
 import type { LanLinkDto } from '@shared/types';
-import type { AnyHandlerDef, HandlerContext, HandlerDef, PublicHandlerDef } from './ipc-safe';
+import type {
+  AnyHandlerDef,
+  HandlerContext,
+  HandlerDef,
+  HandlerServices,
+  PublicHandlerDef,
+} from './ipc-safe';
 
 // Typed builders: each infers the handler's input type from its schema.
 const pub = <C extends IpcChannel, Sc extends z.ZodType>(
@@ -109,6 +121,12 @@ const user = <C extends IpcChannel, Sc extends z.ZodType>(
   run: HandlerDef<C, Sc>['run'],
 ) => ({ access: 'user', input, run }) as HandlerDef<C, Sc>;
 /** Needs a permission (shared/permissions.ts); checked in invokeHandler on every call. */
+/** Feature F18: the fiscal service (absent in tests that do not need it). */
+function fiscalOf(ctx: { services: HandlerServices }) {
+  if (!ctx.services.fiscal) throw conflict("Fiskal chek bu kassada yo'q", { reason: 'NO_FISCAL' });
+  return ctx.services.fiscal;
+}
+
 const need = <C extends IpcChannel, Sc extends z.ZodType>(
   access: Permission,
   input: Sc,
@@ -421,15 +439,23 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'sessions:addCashMovement': need('shifts', S.addCashMovementInput, (ctx, input) =>
     addCashMovement(ctx.db, ctx.actor, input),
   ),
-  'sessions:open': need('shifts', S.openSessionInput, (ctx, input) =>
-    openSession(ctx.db, ctx.actor, input),
-  ),
+  'sessions:open': need('shifts', S.openSessionInput, async (ctx, input) => {
+    const session = await openSession(ctx.db, ctx.actor, input);
+    // F18: VCR's Z-report opens with the shift, in the background (never fails the shift).
+    ctx.services.fiscal?.afterShiftOpen(session.id);
+    return session;
+  }),
   'sessions:update': need('shifts', S.updateSessionInput, (ctx, input) =>
     updateOpenSession(ctx.db, input),
   ),
-  'sessions:close': need('shifts', S.closeSessionInput, (ctx, input) =>
-    closeSession(ctx.db, ctx.actor, input),
-  ),
+  'sessions:close': need('shifts', S.closeSessionInput, async (ctx, input) => {
+    const result = await closeSession(ctx.db, ctx.actor, input);
+    // F18: waiting receipts go out, then VCR's Z-report closes; trouble is a warning only.
+    const fiscalWarning = ctx.services.fiscal
+      ? await ctx.services.fiscal.afterShiftClose(result.sessionId)
+      : null;
+    return { ...result, fiscalWarning };
+  }),
   'sessions:delete': need('corrections', S.idInput, async (ctx, { id }) => {
     await deleteSession(ctx.db, id);
     return null;
@@ -537,18 +563,61 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
     // Selling on debt is its own permission (a cashier may take payments but not give credit).
     const debt = input.method === 'debt' || (input.tenders ?? []).some((t) => t.method === 'debt');
     if (debt && !hasPermission(ctx.actor, 'debt')) throw forbidden("Nasiyaga sotishga ruxsat yo'q");
-    return payOrder(ctx.db, ctx.actor, input);
+    const order = await payOrder(ctx.db, ctx.actor, input);
+    // F18: its fiscal receipt goes to VCR after commit; the payment never waits for it.
+    ctx.services.fiscal?.kick();
+    return order;
   }),
   'checks:list': need('checks', S.listChecksInput, (ctx, input) => listChecks(ctx.db, input)),
-  'checks:update': need('corrections', S.editCheckInput, (ctx, input) => {
+  'checks:update': need('corrections', S.editCheckInput, async (ctx, input) => {
     // Turning a paid check into debt is selling on debt: the same permission as at payment.
     const debt = input.tenders.some((t) => t.method === 'debt');
     if (debt && !hasPermission(ctx.actor, 'debt')) throw forbidden("Nasiyaga sotishga ruxsat yo'q");
-    return editCheck(ctx.db, ctx.actor, input);
+    // F18: refused when VCR holds its receipt (asked when it was sent before); no receipt for it
+    // is sent while the edit runs.
+    const fiscal = ctx.services.fiscal;
+    const order = fiscal
+      ? await fiscal.whileChanging(input.orderNumber, async () => {
+          await fiscal.beforeEdit(input.orderNumber);
+          return editCheck(ctx.db, ctx.actor, input);
+        })
+      : await editCheck(ctx.db, ctx.actor, input);
+    fiscal?.kick();
+    return order;
   }),
-  'checks:delete': need('corrections', S.orderNumberInput, (ctx, { orderNumber }) =>
-    cancelPaidOrder(ctx.db, orderNumber),
+  'checks:delete': need('corrections', S.deleteCheckInput, async (ctx, input) => {
+    // F18: a fiscalised check gets its VCR refund first, only once the delete is known to go
+    // through; then it is cancelled as before. No receipt for it is sent meanwhile.
+    const fiscal = ctx.services.fiscal;
+    if (!fiscal) return cancelPaidOrder(ctx.db, input.orderNumber);
+    return fiscal.whileChanging(input.orderNumber, async () => {
+      await assertCheckCancellable(ctx.db, input.orderNumber);
+      await fiscal.beforeDelete(input.orderNumber, input.scannedQr);
+      return cancelPaidOrder(ctx.db, input.orderNumber);
+    });
+  }),
+
+  // ── fiscal receipts (feature F18, REGOS:VCR on the main till) ────────────────────────────
+  'fiscal:getConfig': need('settings', S.empty, (ctx) => fiscalOf(ctx).getConfig()),
+  'fiscal:setConfig': need('settings', S.fiscalConfigInput, (ctx, input) =>
+    fiscalOf(ctx).setConfig(input),
   ),
+  'fiscal:testConnection': need('settings', S.empty, (ctx) => fiscalOf(ctx).testConnection()),
+  'fiscal:status': user(S.empty, async (ctx) =>
+    ctx.services.fiscal ? ctx.services.fiscal.status() : { enabled: false, pending: 0, failed: 0 },
+  ),
+  'fiscal:zReport': need('shifts', S.empty, (ctx) => fiscalOf(ctx).zReport()),
+  'fiscal:zOpen': need('shifts', S.empty, (ctx) => fiscalOf(ctx).zOpen()),
+  'fiscal:zClose': need('shifts', S.empty, (ctx) => fiscalOf(ctx).zClose()),
+  'fiscal:retry': need('checks', S.fiscalOrderInput, async (ctx, { orderId }) => {
+    await fiscalOf(ctx).retry(orderId);
+    return getOrder(ctx.db, orderId);
+  }),
+  'fiscal:retryAll': need('checks', S.empty, (ctx) => fiscalOf(ctx).retryAll()),
+  'fiscal:duplicate': need('checks', S.fiscalOrderInput, async (ctx, { orderId }) => {
+    await fiscalOf(ctx).duplicate(orderId);
+    return null;
+  }),
 
   // ── debt (nasiya) ────────────────────────────────────────────────────────────────────────
   // Debtors who owe nothing now (a directory of past customers) only for admins.
@@ -561,13 +630,23 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   'debts:get': need('debt', S.debtorInput, (ctx, { customerId }) =>
     getDebtor(ctx.db, customerId, { full: hasPermission(ctx.actor, 'debtsAdmin') }),
   ),
-  'debts:repay': need('debt', S.repayInput, (ctx, input) => repayDebt(ctx.db, ctx.actor, input)),
-  'debts:writeOff': need('debtsAdmin', S.writeOffInput, (ctx, input) =>
-    writeOffDebt(ctx.db, ctx.actor, input),
-  ),
-  'debts:void': need('debtsAdmin', S.voidRepaymentInput, (ctx, input) =>
-    voidRepayment(ctx.db, ctx.actor, input),
-  ),
+  'debts:repay': need('debt', S.repayInput, async (ctx, input) => {
+    const debtor = await repayDebt(ctx.db, ctx.actor, input);
+    // F18: a check whose debt is now repaid gets its fiscal receipt.
+    ctx.services.fiscal?.kick();
+    return debtor;
+  }),
+  // F18: either may change which checks wait for their debt (a voided write-off).
+  'debts:writeOff': need('debtsAdmin', S.writeOffInput, async (ctx, input) => {
+    const debtor = await writeOffDebt(ctx.db, ctx.actor, input);
+    ctx.services.fiscal?.kick();
+    return debtor;
+  }),
+  'debts:void': need('debtsAdmin', S.voidRepaymentInput, async (ctx, input) => {
+    const debtor = await voidRepayment(ctx.db, ctx.actor, input);
+    ctx.services.fiscal?.kick();
+    return debtor;
+  }),
   'debts:assign': need('debtsAdmin', S.assignDebtInput, (ctx, input) => assignDebt(ctx.db, input)),
   'customers:update': need('debtsAdmin', S.updateCustomerInput, (ctx, input) =>
     updateCustomer(ctx.db, input),

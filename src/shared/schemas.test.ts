@@ -1,4 +1,7 @@
 import {
+  deleteCheckInput,
+  fiscalConfigInput,
+  isAllowedVcrHost,
   createUserInput,
   pinCode,
   menuItemInput,
@@ -109,5 +112,63 @@ describe('PIN code', () => {
       updateUserInput.parse({ id: 1, permissions: ['payments', 'orders', 'payments'] }).permissions,
     ).toEqual(['orders', 'payments']);
     expect(updateUserInput.safeParse({ id: 1, permissions: ['root'] }).success).toBe(false);
+  });
+});
+
+describe('fiscal settings (F18)', () => {
+  const base = {
+    enabled: true,
+    host: '127.0.0.1',
+    port: 22298,
+    login: 'cassir',
+    vatMode: 'nonPayer',
+    defaultMxik: '',
+    defaultPackage: '',
+    serviceMxik: '',
+    servicePackage: '',
+    deliveryMxik: '',
+    deliveryPackage: '',
+  };
+
+  it('VCR answers on this PC or the shop network only, by address, never a URL', () => {
+    for (const ok of ['127.0.0.1', 'localhost', '192.168.1.20', '10.0.0.5', '172.16.0.9'])
+      expect(isAllowedVcrHost(ok)).toBe(true);
+    for (const bad of [
+      'vcr-test.regos.uz',
+      '8.8.8.8',
+      '172.32.0.1',
+      '192.168.1.300',
+      'http://127.0.0.1',
+      '127.0.0.1/x',
+      '',
+      // Octal and hex forms the URL parser reads differently (010 = 8, 0172 = 122, 0x7f = 127).
+      '010.8.8.8',
+      '0172.16.0.1',
+      '0x7f.0.0.1',
+      '127.1',
+      '192.168.01.1',
+    ])
+      expect(isAllowedVcrHost(bad)).toBe(false);
+    expect(fiscalConfigInput.safeParse({ ...base, host: 'evil.example' }).success).toBe(false);
+  });
+
+  it('MXIK codes are 17 digits or empty; dish codes empty become null', () => {
+    expect(fiscalConfigInput.safeParse({ ...base, defaultMxik: '123' }).success).toBe(false);
+    expect(
+      fiscalConfigInput.parse({ ...base, defaultMxik: ' 10202001001000000 ' }).defaultMxik,
+    ).toBe('10202001001000000');
+    const dish = { nameUz: 'Osh', price: '1', categoryId: 1 };
+    expect(menuItemInput.parse({ ...dish, mxik: '' }).mxik).toBeNull();
+    expect(menuItemInput.safeParse({ ...dish, mxik: '1020' }).success).toBe(false);
+    expect(menuItemInput.parse({ ...dish, packageCode: '1500' }).packageCode).toBe('1500');
+  });
+
+  it('a check delete may carry the scanned receipt QR', () => {
+    expect(
+      deleteCheckInput.parse({
+        orderNumber: '2026-00001',
+        scannedQr: ' https://ofd.soliq.uz/check?t=1 ',
+      }).scannedQr,
+    ).toBe('https://ofd.soliq.uz/check?t=1');
   });
 });

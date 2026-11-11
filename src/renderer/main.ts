@@ -137,9 +137,23 @@ async function boot(): Promise<void> {
   await refreshLicense();
   window.setInterval(() => void refreshLicense(), 10 * 60_000);
 
+  // Feature F18: fiscal receipts on, and the checks still waiting for VCR (top bar, payment).
+  const refreshFiscal = async () => {
+    appStore.set({
+      fiscal: appStore.get().user
+        ? await api.fiscal.status().catch(() => appStore.get().fiscal)
+        : null,
+    });
+  };
+  void refreshFiscal();
+  appStore.subscribe((s, prev) => {
+    if (s.user !== prev.user) void refreshFiscal();
+  });
+
   // Keep shared state fresh when anything changes (in this window or another).
   api.events.subscribe(async (e) => {
     if (e.type === 'update-changed') void refreshUpdate();
+    if (e.type === 'orders-changed' || e.type === 'settings-changed') void refreshFiscal();
     if (e.type === 'license-changed') void refreshLicense();
     const { user: me } = appStore.get();
     if (e.type === 'settings-changed') {

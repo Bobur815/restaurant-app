@@ -18,10 +18,12 @@ import {
   broadcastWindows,
   registerIpcHandlers,
   servicesFor,
+  setFiscalService,
   tableLocks,
 } from './ipc/register';
 import { plainCipher, type Cipher } from './lan/config';
 import { LanService } from './lan/lan-service';
+import { FiscalService } from './fiscal/fiscal-service';
 import { initLogger, logger } from './logger';
 import { installSecurityHandlers } from './security';
 import { createUpdater, UPDATE_FEED_URL, type UpdaterEngine } from './updater/updater';
@@ -58,6 +60,16 @@ function machineCipher(): Cipher {
     encrypt: (s) => safeStorage.encryptString(s).toString('base64'),
     decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64')),
   };
+}
+
+/**
+ * Feature F18: a development run may talk to REGOS's test stand (SAVDOCHEF_VCR_URL, http or
+ * https); an installed till only to host and port from its settings (a private address).
+ */
+function vcrUrlOverride(): string | null {
+  const url = process.env['SAVDOCHEF_VCR_URL'];
+  if (app.isPackaged || !url) return null;
+  return /^https?:\/\/[^\s]+$/.test(url) ? url : null;
 }
 
 /**
@@ -200,6 +212,17 @@ if (!app.requestSingleInstanceLock()) {
       handleImageScheme(imageDir);
       void removeOrphanImages(imageDir);
       license.start();
+      // Feature F18: REGOS:VCR runs on the main till's PC; satellites forward every call here.
+      const fiscal = new FiscalService({
+        getDb: getPrisma,
+        cipher: machineCipher(),
+        urlOverride: vcrUrlOverride(),
+        posId: os.hostname().slice(0, 40),
+        onChange: broadcast,
+        log: logger,
+      });
+      setFiscalService(fiscal);
+      fiscal.start();
     }
     registerIpcHandlers(getPrisma, imageDir, updater, license, lanService);
     // F13: leases of tills that went quiet run out and the grids see the table free.
