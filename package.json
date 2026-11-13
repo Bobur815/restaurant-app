@@ -8,6 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:staging": "node scripts/dev-staging.mjs",
     "build": "prisma generate && electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "prisma generate",

@@ -9,6 +9,7 @@ Architecture follows posgro (`C:\Users\user\posgro`) without React. The old Expr
 ```bash
 npm install            # also runs prisma generate (src/generated/ is gitignored)
 npm run dev            # electron-vite dev (HMR renderer, restarts main)
+npm run dev:staging -- <profile>   # dev against posgro staging, one linked restaurant per profile (.dev-profiles/, --list, --copy-data)
 npm run check          # typecheck (node + web) + eslint + jest. Run before saying "done".
 npm run format         # prettier on src/**/*.{ts,css,html,json}; format:check in CI style
 npm test -- <pattern>  # one suite, e.g. npm test -- printing

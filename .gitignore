@@ -75,3 +75,6 @@ electron-builder.yml
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Development profiles (npm run dev:staging): databases of test restaurants
+.dev-profiles/

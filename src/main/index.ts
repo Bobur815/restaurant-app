@@ -102,6 +102,19 @@ async function removeOrphanImages(imageDir: string): Promise<void> {
   }
 }
 
+/**
+ * A development run may keep its data elsewhere (SAVDOCHEF_USER_DATA, an absolute path): one
+ * folder per test restaurant (`npm run dev:staging -- <profile>`). Never for an installed till.
+ * Before the logger and the single-instance lock, which both follow userData.
+ */
+function useDevUserData(): void {
+  const dir = process.env['SAVDOCHEF_USER_DATA']?.trim();
+  if (!dir || app.isPackaged || !path.isAbsolute(dir)) return;
+  app.setPath('userData', dir);
+  app.setAppLogsPath(path.join(dir, 'logs'));
+}
+useDevUserData();
+
 // No GPU acceleration (as posgro): tills are often reached over AnyDesk/RDP or have weak GPUs.
 // Measured on the dev machine: first paint ~19 s with the GPU, ~1 s without.
 app.disableHardwareAcceleration();
