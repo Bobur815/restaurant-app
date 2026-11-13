@@ -1257,3 +1257,70 @@ Settings section (title, every field, VAT modes, test result, password saved / n
 - Real app (harness `f18.cjs` with a bundled fake VCR, fresh scratch copy of the v18 cafe data -> v19, backup `savdochef-v18-*` written): 10 old checks, none with a fiscal status; settings form saved + "Ulanishni tekshirish"; bad host refused; dish form MXIK fields; pay through the screen: print box unticked, FISCALIZED (positions: dish 000006 + service fee line, own MXIK, vat -1, code SC-...); card + cash split -> type 1 + type 2; 704002 -> PENDING, 705511 -> FAILED, top bar "Fiskal emas: 2", filter, failed detail, "Hammasini yuborish" -> both FISCALIZED; duplicate; edit refused; masked link -> delete asks for the paper QR -> refunded + cancelled. Screenshots looked at (uz light, ru dark). Shift close not run in the app: the copy has 4 older unpaid orders (close + Z-report covered by tests).
 - Not verified: a real REGOS:VCR / fiscal module, and the shared test stand `vcr-test.regos.uz` (needs your OK; posgro's test credentials).
 - Version: 0.11.0 (minor) at release; repeat the install-over-0.10.1 upgrade test then.
+- Test stand run (2026-11-11, `vcr-test.regos.uz`, terminal UZ210317185575, Z-report 75, harness `f18-stand.cjs` on a scratch copy): connection test ok (applet 0401, 693 free Z-reports). 12 % VAT mode with MXIK 02004001004002007 at 90 so'm: refused "Ставка НДС" -> FAILED with the Uzbek hint, nothing registered. Non-payer mode: Receipt.Sale registered (order 2026-00023, Z sales 2 -> 3, cash +90 so'm), VCR answered `***` for link, number and sign (terminal id given). Delete then asked for the paper QR (RECEIPT_QR_NEEDED), as designed; that test receipt is not refunded.
+- Refunded the same test check through the delete (2026-11-11), link rebuilt from the paper receipt (FM UZ210317185575, chek 387, FB 203691522844): VCR answers `invalid RefundInfo` (704000) unless the link is exact; it took `c=20261111115212` (our answer stamp was :14) in the order t, r, c, s. Check -> REFUNDED + cancelled, real link stored; Z-report 76: refund 1, 90 so'm.
+
+## F19 six SavdoChef plans: Start / Standard / Pro monthly + Start VIP / Standard VIP / Pro VIP (answers 2026-11-13: Q1 rename PRO -> STANDARD with prod backfill; Q2 VIPs no price; Q3 Pro flags now; Q4 Pro sold normally; Q5 multiHall + receiptLogos in Pro / Pro VIP only; Q6 VIP terminals = its monthly plan; Q7 prices entered in the dashboard after deploy)
+
+Source: `Desktop/SavdoChef-tariflar.pdf` (Start 100 000/oy core only; Standard 150 000/oy = old "Pro", same features and price, renamed; Pro 250 000/oy = Standard + ombor, inventarizatsiya, spisaniye, retsept/texnologik karta, Telegram bot; VIP = never expires). Each VIP = the matching plan's features and terminals, no price: the super admin assigns it.
+
+Copies: the existing plan machinery end to end: posgro `savdochef-config.ts` (`planFeatures`, `planTerminals`, `prices`, `featuresFor`), `savdochef.service.ts` (`plans()` list, licence grant), `billing.service.ts` (`termsFor` SAVDOCHEF branch), web `SavdochefPage.tsx` PlansEditor + `SavdochefStorePage.tsx` plan select + `savdochef-ui.tsx` PlanCell + `StoreList.tsx` badge; till `shared/license.ts`, `license-core.ts` `tillState`, `license-service.ts` `plansAnswer`, `subscription-section.ts`, `link-restaurant.ts` plan cards, `license.planNames` in uz/ru.
+
+Constraint: plan ids are POSGRO's shared `PLANS = TRIAL|STARTER|PRO|VIP` (`posgro/src/shared/utils/subscription.ts`, also compiled into POSGRO's POS; `PERPETUAL_PLAN`, `BILLED_PLANS`, `monthlyFee`, `terminalAllowance`; `update-store.dto.ts` `@IsIn`). POSGRO stores keep those ids and meanings: everything below is for `product = SAVDOCHEF` stores only, `src/shared` untouched. Installed tills (0.10.x / 0.11) parse the plans list with `z.enum(['STARTER','PRO','VIP'])` (one unknown id rejects the whole list) and map an unknown licence plan to `null` (features still apply: they are in the signed licence).
+
+### Plan ids
+
+| Shown | id | billed | expires | default features | default tills |
+|---|---|---|---|---|---|
+| Start | `STARTER` | monthly (`prices.starter`) | yes | `[]` | 1 |
+| Standard | `STANDARD` (was `PRO`) | monthly (`prices.standard` <- saved `prices.pro`) | yes | takeaway, delivery, debt, reports (= saved PRO list) | saved PRO value (3) |
+| Pro | `PRO` (new meaning) | monthly (`prices.pro`, 0 until you enter it) | yes | Standard + multiHall, receiptLogos, warehouse, inventory, writeOff, recipes, telegramBot | 3 |
+| Start VIP | `STARTER_VIP` | never | never | = Start | = Start |
+| Standard VIP | `STANDARD_VIP` | never | never | = Standard | = Standard |
+| Pro VIP | `PRO_VIP` (was `VIP`) | never | never | = Pro | = Pro |
+
+VIPs have no features/terminals of their own: they follow their monthly plan (Q6).
+
+### Prod backfill (posgro, prepared, not run)
+
+- [ ] Data-only Prisma migration `prisma/migrations/2026111300000x_savdochef_plan_rename/migration.sql` (no DDL). The container applies pending migrations at start, so it runs before the new server code serves anything:
+  `UPDATE stores SET subscription_plan = 'STANDARD' WHERE product = 'SAVDOCHEF' AND subscription_plan = 'PRO';`
+  `UPDATE stores SET subscription_plan = 'PRO_VIP' WHERE product = 'SAVDOCHEF' AND subscription_plan = 'VIP';`
+  (table/column/product names checked against `schema.prisma` when written; posgro skill `prisma-migration`). Down = the two inverse updates, kept in the PR description.
+- [ ] Saved site config `savdochef_config`: no SQL. It gets `version: 2`; `normalizeSavdochefConfig` reads a v1 value as `STANDARD <- PRO` (features, terminals, price), `PRO` <- new defaults, drops `VIP` / `prices.vip`; the dashboard's next save writes v2. Tested with today's prod shape.
+- [ ] Read-only pre-check `scripts/savdochef-plan-precheck.sql`: SAVDOCHEF stores per plan, and VIP stores with more active tills than Pro's terminal count (VIP goes from unlimited to Pro's count by Q6; such a store's extra tills would get `no-seat` until you give it extraTerminals). I run it on staging; on prod only with your OK.
+- [ ] Before promote: `/pg-backup` with a verified restore (posgro hard rule 3), then skill `promote-to-prod`.
+- Deploy window: during the container swap an old process could meet `STANDARD`: old `featuresFor` gives an unknown plan every feature and old billing skips it, so at worst a few minutes of extra features and no charge. Nothing is lost.
+
+### posgro (server + web dashboard; branch `feat/savdochef-plans` -> dev -> staging, wait for your OK -> main)
+
+- [ ] `src/server/modules/savdochef/savdochef-plans.ts` (new): `SAVDOCHEF_PLANS = TRIAL|STARTER|STANDARD|PRO|STARTER_VIP|STANDARD_VIP|PRO_VIP`, billed / perpetual sets, `baseOf(VIP) -> monthly plan`, labels; SavdoChef `status / monthlyFee / terminalAllowance` wrappers (VIPs -> `unlimited`, terminals of the base plan).
+- [ ] `savdochef-config.ts`: config v2 (above), `SAVDOCHEF_FEATURES` += `warehouse, inventory, writeOff, recipes, telegramBot`, `prices = { starter, standard, pro, extraTerminal }`, `planFeatures` / `planTerminals` for STARTER / STANDARD / PRO (+ TRIAL terminals); `featuresFor` resolves VIPs through `baseOf`.
+- [ ] `savdochef.service.ts`: licence grant (plan, features, status, seats) through the wrappers; `GET /savdochef/plans?v=2` gives the new till 6 plans (VIPs `period: 'once'`, `price: 0`, `assignedOnly: true`); without `v=2` (old tills) only `STARTER` + `PRO`, ids they parse.
+- [ ] `billing.service.ts`: SAVDOCHEF stores charged for STARTER / STANDARD / PRO by the new prices; VIPs never. POSGRO path unchanged (tests prove it).
+- [ ] Stores: `update-store.dto.ts` `@IsIn` += `STANDARD|STARTER_VIP|STANDARD_VIP|PRO_VIP`; service refuses them for a POSGRO store and refuses `VIP` for a SAVDOCHEF store; expiry cleared for every VIP.
+- [ ] Web: `client.ts` `SavdochefPlan`; `SavdochefPage` PlansEditor rows Start / Standard / Pro (price + tills + features) with the note "VIP: same features and tills, no price, never expires"; `SavdochefStorePage` select of 7, expiry disabled for VIPs; `savdochef-ui` PlanCell + `StoreList` badge labels. POSGRO pages (`StoreDetailPage`, `SubscriptionPlansPage`, `SystemSettings`) untouched.
+- [ ] Tests: migration SQL on a staging-shaped DB (POSGRO PRO/VIP stores untouched), config v1 -> v2, features/terminals for all 7, billing, plans v1/v2, grant per plan, DTO refusals. `/check` in posgro.
+
+### SavdoChef till (this repo, `rewrite/ts-ipc`)
+
+- shared: [ ] `license.ts` `LicensePlan = TRIAL|STARTER|STANDARD|PRO|STARTER_VIP|STANDARD_VIP|PRO_VIP` (`VIP` read as `PRO_VIP` for a licence signed before the backfill); `LicensePlanDto` id widened + `assignedOnly`; `LICENSE_FEATURES` += 5 Pro flags (nothing gated by them yet; the modules come later).
+- main: [ ] `license-core.ts` plan list; `license-service.ts` `plansAnswer`: ids widened, an unknown id skipped instead of failing the list; plans request `?v=2`. No new IPC channel, no access change.
+- renderer: [ ] `subscription-section.ts` + `link-restaurant.ts`: plan names from `planNames`; VIP cards "muddatsiz, administrator beradi" without price; Pro sold normally.
+- [ ] uz + ru: `license.planNames` (STANDARD "Standard", PRO "Pro", 3 VIPs), `license.feature.*` for the 5 flags, VIP card text.
+- Schema: none on the till. No money/stock logic: before/after the till charges nothing; billing is server-side.
+- [ ] Tests: `license.test.ts` (each plan id -> name/state, `VIP` alias, unknown id in list skipped, VIP unlimited).
+- [ ] Verify: `/check`; harness on scratch userData with a fake licence server answering each plan -> Settings -> Obuna + link-wizard plan cards, screenshots uz light / ru dark; the current 0.10.1 build against staging after the backfill (Standard store: features right, plan name blank, list shows Start + Pro).
+- [ ] Version: minor (0.12.0, separate from F18's 0.11.0 unless you say otherwise).
+
+### Rollout
+
+1. posgro branch -> dev -> staging (migration runs there; I run the pre-check and click through the dashboard). 2. You confirm staging. 3. `/pg-backup` + prod pre-check with your OK -> main -> prod (migration runs at start). 4. You enter the prices (Start 100 000, Standard 150 000, Pro 250 000) in the dashboard. 5. Till 0.12.0 release.
+
+### Status (2026-11-13): built, nothing committed, pushed or deployed
+
+- posgro branch `feat/savdochef-plans` (from `origin/dev`): migration `20261113000001_savdochef_plan_rename` (data only), `scripts/savdochef-plan-precheck.sql`, new `savdochef-plans.ts`, config v2, plans `?v=2`, licence/seats through the SavdoChef helpers, billing per product, stores per-product plan check + VIP date cleared, dashboard (Plans editor Start/Standard/Pro with the VIP note, 7-plan picker, labels/colours). Typecheck web + server clean, eslint no new warnings, jest 2026/2026. Prettier only on the new file (the touched posgro files were not Prettier-clean before; left as they were).
+- Till: `LICENSE_PLANS` + `knownPlan` (VIP -> PRO_VIP), 5 Pro feature flags shown "tez orada", plans list `?v=2` with unknown/duplicate ids skipped, VIP cards "Muddatsiz, administrator beradi", refusal texts and hints renamed (Pro -> Standard va Pro, VIP -> Pro). `npm run check` 741/741. Security review: no issues; its two cosmetic notes applied (dedupe, label fallback).
+- Real app (harness `f19.cjs`, scratch copy of the cafe data with PIN set by `prep.cjs`; `license:status`/`license:plans` answered in the harness because a licence needs the server's key, parsing covered by tests): Settings -> Obuna for Start / Standard / Pro / Standard VIP / Pro VIP (VIP "Faol (muddatsiz)", no paid-until row), link-wizard cards with 6 plans; uz light + ru dark screenshots looked at.
+- Not verified: the posgro dashboard in a browser (no local Postgres run), the migration on a real Postgres (staging), an old 0.10.1 till against the new server.
+- Next: your OK to commit + push posgro to `dev` (staging migrates), pre-check on staging, then the prod steps above.

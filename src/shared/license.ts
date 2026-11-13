@@ -11,11 +11,46 @@ export const LICENSE_FEATURES = [
   'reports',
   'multiHall',
   'receiptLogos',
+  // Pro's modules: the server already sells them, nothing on this till uses them yet.
+  'warehouse',
+  'inventory',
+  'writeOff',
+  'recipes',
+  'telegramBot',
 ] as const;
 export type LicenseFeature = (typeof LICENSE_FEATURES)[number];
 
-/** Plan ids as the server names them; SavdoChef shows STARTER as "Start". */
-export type LicensePlan = 'TRIAL' | 'STARTER' | 'PRO' | 'VIP';
+/** In a plan already, not built on the till yet: shown as "coming soon". */
+export const UPCOMING_FEATURES: readonly LicenseFeature[] = [
+  'warehouse',
+  'inventory',
+  'writeOff',
+  'recipes',
+  'telegramBot',
+];
+
+/**
+ * Plan ids as the server names them (F19): Start, Standard, Pro monthly and a VIP of each (its
+ * plan's features and tills, never expires). Before F19 the server's PRO was today's Standard and
+ * VIP today's Pro VIP; posgro renamed them on its side, so a licence never says PRO meaning
+ * Standard after that. A licence signed before the rename may still say VIP: read as PRO_VIP.
+ */
+export const LICENSE_PLANS = [
+  'TRIAL',
+  'STARTER',
+  'STANDARD',
+  'PRO',
+  'STARTER_VIP',
+  'STANDARD_VIP',
+  'PRO_VIP',
+] as const;
+export type LicensePlan = (typeof LICENSE_PLANS)[number];
+
+/** A plan id from the server as this build knows it, or null. */
+export function knownPlan(raw: unknown): LicensePlan | null {
+  if (raw === 'VIP') return 'PRO_VIP';
+  return (LICENSE_PLANS as readonly unknown[]).includes(raw) ? (raw as LicensePlan) : null;
+}
 
 /**
  * How the till may work right now:
@@ -104,10 +139,12 @@ export interface LicenseAccountDto {
 }
 
 export interface LicensePlanDto {
-  id: 'STARTER' | 'PRO' | 'VIP';
+  id: Exclude<LicensePlan, 'TRIAL'>;
   label: string;
   price: number;
   period: 'month' | 'once';
+  /** A VIP: no price, the super admin gives it. */
+  assignedOnly: boolean;
   /** Null = unlimited tills. */
   terminals: number | null;
   features: LicenseFeature[];

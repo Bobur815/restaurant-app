@@ -445,7 +445,7 @@
     "debtEnabled": "Nasiya (qarzga sotish)",
     "sectionUpdate": "Dastur yangilanishi",
     "sectionSubscription": "Obuna",
-    "ordersNotInPlan": "Olib ketish va yetkazib berish joriy tarifda yo'q (Pro tarifida bor), shuning uchun kassada ko'rinmaydi.",
+    "ordersNotInPlan": "Olib ketish va yetkazib berish joriy tarifda yo'q (Standard va Pro tariflarida bor), shuning uchun kassada ko'rinmaydi.",
     "sectionLan": "Kassalar tarmog'i",
     "serviceFeeTitle": "Xizmat haqi",
     "serviceFeeHint": "Faqat stol buyurtmalariga qo'shiladi (olib ketish va yetkazib berishga emas). Buyurtma saqlanganda hisoblanadi va chek, hisob va hisobotlarda alohida ko'rinadi.",
@@ -455,7 +455,7 @@
     "serviceFee_perGuest": "Har bir mehmon uchun",
     "serviceFeePercent": "Foiz, %",
     "serviceFeePerGuest": "Bir mehmon uchun, so'm",
-    "debtNotInPlan": "Nasiya va Qarzdorlar sahifasi tarifingizda yo'q (Pro tarifida bor).",
+    "debtNotInPlan": "Nasiya va Qarzdorlar sahifasi tarifingizda yo'q (Standard va Pro tariflarida bor).",
     "sectionFiscal": "Fiskal chek"
   },
   "reports": {
@@ -551,7 +551,7 @@
   "halls": {
     "hint": "Stol raqami butun restoran bo'yicha bitta: buyurtmalar tarixi raqam bilan saqlanadi. Buyurtma bo'lgan stolni o'chirib bo'lmaydi, uni yashirish mumkin.",
     "addHall": "Zal qo'shish",
-    "oneHallOnly": "Joriy tarifda bitta faol zal. Bir nechta zal VIP tarifida (Sozlamalar → Obuna).",
+    "oneHallOnly": "Joriy tarifda bitta faol zal. Bir nechta zal Pro tarifida (Sozlamalar → Obuna).",
     "editHall": "Zalni tahrirlash",
     "hallName": "Zal nomi",
     "addTable": "Stol qo'shish",
@@ -684,7 +684,7 @@
   },
   "receiptLayout": {
     "general": "Umumiy (zal)",
-    "noPicturesInPlan": "Chekdagi rasmlar joriy tarifda yo'q (VIP tarifida bor). Saqlanganda avvalgi rasmlar olib tashlanadi.",
+    "noPicturesInPlan": "Chekdagi rasmlar joriy tarifda yo'q (Pro tarifida bor). Saqlanganda avvalgi rasmlar olib tashlanadi.",
     "typeLabel": "Buyurtma turi",
     "title": "Chek ko'rinishi: {{type}}",
     "sharedHint": "Bu ma'lumotlar barcha cheklarda bir xil. Har bir buyurtma turining ko'rinishi pastda.",
@@ -780,8 +780,11 @@
     "planNames": {
       "TRIAL": "Sinov",
       "STARTER": "Start",
+      "STANDARD": "Standard",
       "PRO": "Pro",
-      "VIP": "VIP"
+      "STARTER_VIP": "Start VIP",
+      "STANDARD_VIP": "Standard VIP",
+      "PRO_VIP": "Pro VIP"
     },
     "feature": {
       "takeaway": "Olib ketish",
@@ -789,7 +792,12 @@
       "debt": "Nasiya",
       "reports": "To'liq hisobotlar",
       "multiHall": "Bir nechta zal",
-      "receiptLogos": "Chekdagi rasmlar"
+      "receiptLogos": "Chekdagi rasmlar",
+      "warehouse": "Ombor",
+      "inventory": "Inventarizatsiya",
+      "writeOff": "Hisobdan chiqarish",
+      "recipes": "Retseptlar (texnologik karta)",
+      "telegramBot": "Telegram bot"
     },
     "reason": {
       "active": "Faol",
@@ -816,7 +824,9 @@
       "unlinked": "Faqat ko'rish rejimi: restoran ulanmagan.",
       "open": "Obuna",
       "askAdmin": "Administratorga murojaat qiling."
-    }
+    },
+    "comingSoon": "tez orada",
+    "vipAssigned": "Muddatsiz, administrator beradi"
   },
   "cash": {
     "title": "Kassa",

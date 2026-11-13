@@ -1,4 +1,4 @@
-import type { LicensePlansDto, LicenseStatusDto } from '@shared/license';
+import { UPCOMING_FEATURES, type LicensePlansDto, type LicenseStatusDto } from '@shared/license';
 import { formatMoney } from '@shared/utils/format';
 import { api } from '../api';
 import { appStore } from '../store/app';
@@ -50,16 +50,24 @@ export function linkRestaurant(options: {
     const wrap = document.createElement('div');
     wrap.className = 'plan-cards';
     for (const p of plans.plans) {
-      const price =
-        p.price > 0
+      // A VIP has no price: the super admin gives it, and it never expires.
+      const price = p.assignedOnly
+        ? t('license.vipAssigned')
+        : p.price > 0
           ? `${formatMoney(p.price, appStore.get().language, false)} ${t(p.period === 'once' ? 'license.once' : 'license.perMonth')}`
           : t('license.priceLater');
       const features = p.features.length
-        ? p.features.map((f) => t(`license.feature.${f}`)).join(', ')
+        ? p.features
+            .map((f) =>
+              UPCOMING_FEATURES.includes(f)
+                ? `${t(`license.feature.${f}`)} (${t('license.comingSoon')})`
+                : t(`license.feature.${f}`),
+            )
+            .join(', ')
         : '—';
       wrap.append(
         html`<div class="plan-card">
-          <strong>${p.label}</strong>
+          <strong>${p.label || t(`license.planNames.${p.id}`)}</strong>
           <span class="plan-price">${price}</span>
           <span class="muted small"
             >${p.terminals === null

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { z } from 'zod';
 import type { IpcChannel } from '@shared/ipc';
 import {
+  knownPlan,
   LICENSE_FEATURES,
   type LicenseFeature,
   type LicensePlansDto,
@@ -65,15 +66,26 @@ const plansAnswer = z.object({
   plans: z
     .array(
       z.object({
-        id: z.enum(['STARTER', 'PRO', 'VIP']),
+        id: z.string().max(40),
         label: shortText(40),
         price: z.number().min(0).max(1e10),
         period: z.enum(['month', 'once']),
+        assignedOnly: z.boolean().optional(),
         terminals: z.number().int().min(0).max(9999).nullable(),
         features: featureList,
       }),
     )
-    .max(10),
+    .max(20)
+    // A plan this build does not know is left out, not a reason to drop the whole list.
+    .transform((list) => {
+      const seen = new Set<string>();
+      return list.flatMap((p) => {
+        const id = knownPlan(p.id);
+        if (!id || id === 'TRIAL' || seen.has(id)) return [];
+        seen.add(id);
+        return [{ ...p, id, assignedOnly: p.assignedOnly ?? false }];
+      });
+    }),
   extraTerminalPrice: z.number().min(0).max(1e10),
   supportPhone: shortText(32),
 });
@@ -449,7 +461,8 @@ export class LicenseService {
   }
 
   async plans(): Promise<LicensePlansDto> {
-    return parseAnswer(plansAnswer, await this.o.http.get('/savdochef/plans'));
+    // v=2: the six plans of F19 (an older server ignores it and sends its own list).
+    return parseAnswer(plansAnswer, await this.o.http.get('/savdochef/plans?v=2'));
   }
 
   async signupStart(phone: string): Promise<SignupStartDto> {

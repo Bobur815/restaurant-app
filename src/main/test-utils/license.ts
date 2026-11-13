@@ -8,7 +8,7 @@ export function allowAllLicense(): HandlerServices['license'] {
     linked: true,
     storeId: '1000',
     storeName: 'Test',
-    plan: 'VIP' as const,
+    plan: 'PRO_VIP' as const,
     features: [],
     daysLeft: null,
     expiresAt: null,

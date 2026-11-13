@@ -1,4 +1,4 @@
-import { LICENSE_FEATURES, type LicenseStatusDto } from '@shared/license';
+import { LICENSE_FEATURES, UPCOMING_FEATURES, type LicenseStatusDto } from '@shared/license';
 import { formatDate, formatDateTime } from '@shared/utils/format';
 import { formatPhone } from '@shared/utils/phone';
 import { api } from '../../api';
@@ -51,7 +51,9 @@ export const subscriptionSection: View = () => {
       const on = s.features.includes(f);
       features.append(
         html`<li class="badge ${on ? 'badge-success' : 'badge-muted'}">
-          ${icon(on ? 'check' : 'close', 14)}${t(`license.feature.${f}`)}
+          ${icon(on ? 'check' : 'close', 14)}${t(
+            `license.feature.${f}`,
+          )}${UPCOMING_FEATURES.includes(f) ? ` (${t('license.comingSoon')})` : ''}
         </li>`,
       );
     }

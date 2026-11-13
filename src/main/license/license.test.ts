@@ -98,6 +98,30 @@ describe('licence', () => {
     });
   });
 
+  it('knows the six plans of F19 and reads a licence from before the rename', () => {
+    const undated = { expiresAt: null, warnFrom: null, blockAt: null };
+    for (const plan of ['STARTER', 'STANDARD', 'PRO'] as const) {
+      expect(state(read(signed({ plan }))!).plan).toBe(plan);
+    }
+    for (const plan of ['STARTER_VIP', 'STANDARD_VIP', 'PRO_VIP'] as const) {
+      expect(state(read(signed({ plan, ...undated }))!)).toMatchObject({
+        plan,
+        mode: 'full',
+        reason: 'unlimited',
+      });
+    }
+    // Signed before posgro renamed its plans: VIP is today's Pro VIP.
+    expect(state(read(signed({ plan: 'VIP' as never, ...undated }))!).plan).toBe('PRO_VIP');
+    // An id this build does not know: no name, the signed features still apply.
+    const future = state(read(signed({ plan: 'ULTRA' as never, features: ['debt'] }))!);
+    expect(future).toMatchObject({ plan: null, features: ['debt'] });
+    // Pro's new modules are known names now (nothing uses them yet).
+    expect(read(signed({ features: ['warehouse', 'telegramBot'] }))?.features).toEqual([
+      'warehouse',
+      'telegramBot',
+    ]);
+  });
+
   it('puts a till without a slot in read-only', () => {
     expect(state(read(signed({}))!, NOW, { terminalId: 'till-b' })).toMatchObject({
       mode: 'readonly',
@@ -316,6 +340,53 @@ describe('LicenseService', () => {
       paymentUrl: 'https://pay.example/1000',
       supportPhone: '998901112233',
     },
+  });
+
+  it('asks for the six plans and skips an id it does not know instead of dropping the list', async () => {
+    const plan = (id: string, over: Record<string, unknown> = {}) => ({
+      id,
+      label: id,
+      price: 100000,
+      period: 'month',
+      terminals: 1,
+      features: ['debt', 'teleport'],
+      ...over,
+    });
+    const get = jest.fn().mockResolvedValue({
+      trial: { enabled: true, days: 14 },
+      checkinDays: 14,
+      plans: [
+        plan('STARTER'),
+        plan('STANDARD'),
+        plan('PRO'),
+        plan('PRO_VIP', { price: 0, period: 'once', assignedOnly: true, terminals: 3 }),
+        plan('ULTRA'),
+        // An older server's list: VIP is Pro VIP.
+        plan('VIP', { period: 'once' }),
+      ],
+      extraTerminalPrice: 0,
+      supportPhone: '998901112233',
+    });
+    const s = new LicenseService({
+      db: t.db,
+      publicKey: SERVER.publicKey,
+      clock: new TrustedClock([], { now: () => NOW, monotonic: () => 0 }),
+      http: { get, post: jest.fn() },
+      appVersion: '0.12.0',
+      machineName: 'KASSA-1',
+      onChange: () => undefined,
+      log: { info: () => undefined, warn: () => undefined },
+      minCheckIntervalMs: 0,
+    });
+    const list = await s.plans();
+    expect(get).toHaveBeenCalledWith('/savdochef/plans?v=2');
+    expect(list.plans.map((p) => [p.id, p.assignedOnly, p.features])).toEqual([
+      ['STARTER', false, ['debt']],
+      ['STANDARD', false, ['debt']],
+      ['PRO', false, ['debt']],
+      // The older server's VIP is the same id again: shown once.
+      ['PRO_VIP', true, ['debt']],
+    ]);
   });
 
   it('links on sign-up, checks in, and keeps working offline when a check-in fails', async () => {
