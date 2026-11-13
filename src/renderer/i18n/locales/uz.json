@@ -445,7 +445,7 @@
     "debtEnabled": "Nasiya (qarzga sotish)",
     "sectionUpdate": "Dastur yangilanishi",
     "sectionSubscription": "Obuna",
-    "ordersNotInPlan": "Olib ketish va yetkazib berish joriy tarifda yo'q (Standard va Pro tariflarida bor), shuning uchun kassada ko'rinmaydi.",
+    "ordersNotInPlan": "Olib ketish va yetkazib berish joriy tarifda yo'q (Sozlamalar → Obuna), shuning uchun kassada ko'rinmaydi.",
     "sectionLan": "Kassalar tarmog'i",
     "serviceFeeTitle": "Xizmat haqi",
     "serviceFeeHint": "Faqat stol buyurtmalariga qo'shiladi (olib ketish va yetkazib berishga emas). Buyurtma saqlanganda hisoblanadi va chek, hisob va hisobotlarda alohida ko'rinadi.",
@@ -684,7 +684,7 @@
   },
   "receiptLayout": {
     "general": "Umumiy (zal)",
-    "noPicturesInPlan": "Chekdagi rasmlar joriy tarifda yo'q (Pro tarifida bor). Saqlanganda avvalgi rasmlar olib tashlanadi.",
+    "noPicturesInPlan": "Chekdagi rasmlar joriy tarifda yo'q (Standard va Pro tariflarida bor). Saqlanganda avvalgi rasmlar olib tashlanadi.",
     "typeLabel": "Buyurtma turi",
     "title": "Chek ko'rinishi: {{type}}",
     "sharedHint": "Bu ma'lumotlar barcha cheklarda bir xil. Har bir buyurtma turining ko'rinishi pastda.",

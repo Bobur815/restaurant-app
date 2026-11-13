@@ -171,12 +171,12 @@ const READONLY_MESSAGE: Record<string, string> = {
 };
 
 const FEATURE_MESSAGE: Record<LicenseFeature, string> = {
-  takeaway: "«Olib ketish» buyurtmalari tarifingizda yo'q (Standard va Pro tariflarida bor)",
-  delivery: "«Yetkazib berish» buyurtmalari tarifingizda yo'q (Standard va Pro tariflarida bor)",
+  takeaway: "«Olib ketish» buyurtmalari tarifingizda yo'q (Sozlamalar → Obuna)",
+  delivery: "«Yetkazib berish» buyurtmalari tarifingizda yo'q (Sozlamalar → Obuna)",
   debt: "Nasiya (qarzdorlar) tarifingizda yo'q (Standard va Pro tariflarida bor)",
   reports: "Bir kundan uzun hisobotlar tarifingizda yo'q (Standard va Pro tariflarida bor)",
   multiHall: "Bir nechta zal tarifingizda yo'q (Pro tarifida bor)",
-  receiptLogos: "Chekdagi rasmlar tarifingizda yo'q (Pro tarifida bor)",
+  receiptLogos: "Chekdagi rasmlar tarifingizda yo'q (Standard va Pro tariflarida bor)",
   // Pro's modules: nothing refuses these yet; the messages wait for the modules.
   warehouse: "Ombor tarifingizda yo'q (Pro tarifida bor)",
   inventory: "Inventarizatsiya tarifingizda yo'q (Pro tarifida bor)",
