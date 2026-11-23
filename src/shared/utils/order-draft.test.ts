@@ -12,7 +12,7 @@ import {
   setPortion,
   setQuantity,
   toSaveInput,
-} from './draft';
+} from './order-draft';
 
 const dish = (over: Partial<MenuItemDto>): MenuItemDto => ({
   id: 1,
@@ -27,6 +27,9 @@ const dish = (over: Partial<MenuItemDto>): MenuItemDto => ({
   hasPortions: false,
   soldByWeight: false,
   isActive: true,
+  printerId: null,
+  mxik: null,
+  packageCode: null,
   ...over,
 });
 const non = dish({});

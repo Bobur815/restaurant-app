@@ -72,6 +72,7 @@ const plansAnswer = z.object({
         period: z.enum(['month', 'once']),
         assignedOnly: z.boolean().optional(),
         terminals: z.number().int().min(0).max(9999).nullable(),
+        waiterDevices: z.number().int().min(0).max(999).default(0),
         features: featureList,
       }),
     )
@@ -87,6 +88,7 @@ const plansAnswer = z.object({
       });
     }),
   extraTerminalPrice: z.number().min(0).max(1e10),
+  extraWaiterDevicePrice: z.number().min(0).max(1e10).default(0),
   supportPhone: shortText(32),
 });
 
@@ -398,12 +400,21 @@ export class LicenseService {
     return this.last;
   }
 
-  /** As of the last `state()`: for checks that cannot wait (printing pictures). */
   /** Feature F12: tills the licence allows (main + satellites); null = not limited. */
   terminalLimit(): number | null {
     return this.payload?.terminals ?? null;
   }
 
+  /**
+   * Feature F20: waiter phones the licence allows. 0 without a licence, without the waiter app, or
+   * from a licence signed before F20 (the next check-in brings the number).
+   */
+  waiterDeviceLimit(): number {
+    if (!this.payload || !this.hasFeature('waiterApp')) return 0;
+    return this.payload.waiterDevices ?? 0;
+  }
+
+  /** As of the last `state()`: for checks that cannot wait (printing pictures). */
   hasFeature(feature: LicenseFeature): boolean {
     return this.last ? this.last.features.includes(feature) : true;
   }

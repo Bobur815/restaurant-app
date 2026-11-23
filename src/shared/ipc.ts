@@ -72,7 +72,7 @@ export interface IpcChannels {
   // LAN: satellite tills (feature F12). Main till side (settings permission):
   'lan:status': Channel<undefined, T.LanStatusDto>;
   'lan:update': Channel<In<typeof S.lanUpdateInput>, T.LanStatusDto>;
-  'lan:pairingCode': Channel<undefined, T.LanStatusDto>;
+  'lan:pairingCode': Channel<In<typeof S.lanPairingCodeInput>, T.LanStatusDto>;
   'lan:cancelPairing': Channel<undefined, T.LanStatusDto>;
   'lan:revoke': Channel<In<typeof S.lanDeviceInput>, T.LanStatusDto>;
   /** This till's role and, on a satellite, the line to its main till (public: the login screen). */

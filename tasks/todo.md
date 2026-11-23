@@ -1324,3 +1324,243 @@ VIPs have no features/terminals of their own: they follow their monthly plan (Q6
 - Real app (harness `f19.cjs`, scratch copy of the cafe data with PIN set by `prep.cjs`; `license:status`/`license:plans` answered in the harness because a licence needs the server's key, parsing covered by tests): Settings -> Obuna for Start / Standard / Pro / Standard VIP / Pro VIP (VIP "Faol (muddatsiz)", no paid-until row), link-wizard cards with 6 plans; uz light + ru dark screenshots looked at.
 - Not verified: the posgro dashboard in a browser (no local Postgres run), the migration on a real Postgres (staging), an old 0.10.1 till against the new server.
 - Next: your OK to commit + push posgro to `dev` (staging migrates), pre-check on staging, then the prod steps above.
+
+## F20 waiter Android app "SavdoChef Ofitsiant" (planned 2026-11-21, awaiting approval)
+
+Decided with the owner: sales only on the phone (tables, order, save -> kitchen tickets, pre-bill, move table; **no payments**); available on Standard, Pro, Standard VIP, Pro VIP (not Start / Start VIP); pairing by a QR code on the till; Uzbek + Russian; at most 5 phones, an extra phone costs 50 000 so'm per device. APK sideloaded, updates from panel.posgro.uz. Designs: `tasks/waiter-design-prompts.md` (Claude Design); the phone screens are built only after the designs are approved.
+
+Copied from: F12 satellite (`main/lan/server.ts` /pair /rpc /events /img, `pairing.ts`, `devices.ts`, `main-link.ts` client and its states), F13 table locks (`orders:lockTable` lease), F19 plans/billing in posgro (`extraTerminals` + `prices.extraTerminal` -> the same for phones), F4 update feed (`scripts/upload-release.mjs`), the till's order screen (`views/order/draft.ts`, `menu-browser.ts`, `move-table-modal.ts`, `weight-modal.ts`) for behaviour, `views/login.ts` for the PIN screen.
+
+### Questions (R = my recommendation)
+
+1. "Max 5, 50 000 per extra": R = each of the 4 plans includes 5 phones; the super admin can add phones beyond 5 at 50 000 so'm each **per month**, billed like extra tills. (Or: 5 is a hard cap and every phone is paid?)
+2. VIPs have no monthly bill: R = Standard VIP / Pro VIP also include 5; extra phones on a VIP are still 50 000 per month (a monthly bill for the extras only). Or free there?
+3. Trial: R = phones allowed during the trial (5), like every other feature.
+4. Takeaway / delivery from the phone: R = no, tables only for now.
+5. An admin or cashier signing in on a phone: R = allowed, but the phone still reaches only the sale channels (the allowlist is per device type, not per user).
+6. Phones vs satellite tills: R = separate limits; a phone never takes a till slot and the reverse.
+7. App name and id: R = "SavdoChef Ofitsiant", `uz.savdochef.waiter`, its own version line from 1.0.0.
+
+### posgro server (`C:\Users\user\posgro`, branch from `dev`)
+
+- [ ] Migration (additive): `stores.extraWaiterDevices INT NOT NULL DEFAULT 0`.
+- [ ] `savdochef-config.ts`: feature `waiterApp` (STANDARD + PRO, so their VIPs; not STARTER); `planWaiterDevices` (TRIAL 5, STANDARD 5, PRO 5, STARTER 0); `prices.extraWaiterDevice` = 50 000 (editable in the dashboard). Old saved config reads with these defaults.
+- [ ] `savdochef-plans.ts`: `savdochefMonthlyFee` += `extraWaiterDevices * prices.extraWaiterDevice`; VIPs per answer 2.
+- [ ] `savdochef-license.ts` / `savdochef.service.ts`: licence payload += `waiterDevices` (plan allowance + extras; 0 without `waiterApp`); `/savdochef/plans` gives phones per plan and the extra-phone price.
+- [ ] Dashboard: store page "Qo'shimcha telefonlar" next to extra tills; plans editor: phones per plan + price.
+- [ ] Tests: fee with extras per plan (monthly, VIP), licence payload, config defaults, old config. `/check` in posgro.
+
+### Till: shared
+
+- [ ] `shared/license.ts`: `LICENSE_FEATURES` += `waiterApp`; `LicensePlanDto.waiterDevices`.
+- [ ] `shared/lan-waiter.ts` (new, zod only): `WAITER_CHANNELS` allowlist = `auth:pinLogin`, `auth:logout`, `auth:me`, `settings:get`, `halls:list`, `categories:list`, `menu:list`, `sessions:getOpen`, `orders:busyTables`, `orders:getTable`, `orders:save`, `orders:cancel`, `orders:moveTable`, `orders:lockTable`, `orders:unlockTable`, `orders:tableLocks`, `printing:printPreBill`, `license:status`; `WAITER_PROTOCOL = 1`; QR payload schema `{ v: 1, host, port, code }`.
+- [ ] Before building: check that `sessions:getOpen`, `settings:get` and `license:status` answers carry nothing a waiter should not see (cash drawer, account balance). If they do, add small read-only `waiter:*` channels instead of allowing them (then `prisma-reviewer` too).
+- [ ] `shared/types.ts`: `LanDeviceDto.kind: 'till' | 'waiter'`; `LanStatusDto.waiterLimit`, pairing code kind.
+- [ ] `shared/schemas.ts`: `lan:pairingCode` takes optional `{ kind }` (missing = till, so nothing else changes).
+
+### Till: main
+
+- [ ] Migration `0020_lan_device_kind.ts` (additive): `lan_devices.kind TEXT NOT NULL DEFAULT 'till'`. Installed databases: every paired satellite becomes `till`, nothing else changes. Skill `prisma-migration`, then agent `migration-reviewer`.
+- [ ] `lan/pairing.ts`: a code remembers its kind (one open code at a time, as today).
+- [ ] `lan/devices.ts`: `createDevice(kind)`, limits counted per kind; phone limit error "Tarifingiz bo'yicha telefonlar soni to'lgan".
+- [ ] `lan/server.ts`:
+  - `/pair` takes the kind from the code, never from the caller; refuses a phone when the licence lacks `waiterApp`.
+  - `/rpc` from a phone: every channel outside `WAITER_CHANNELS` is `FORBIDDEN` before `invokeHandler`, whoever is signed in. Same session, PIN throttling and table-lock terminal (`lan:<id>`) as satellites.
+  - `/hello` += `protocol` and the restaurant name; the phone checks the protocol, not the till version (its own version line).
+  - `/events` for a phone: only the event types its screens use. `/img` unchanged.
+- [ ] `lan/lan-service.ts` + `main/index.ts`: `waiterLimit()` from the licence (dev override `SAVDOCHEF_LAN_WAITERS`, unpackaged only, like `SAVDOCHEF_LAN_DEVICES`); `issueCode({ kind })`; status gives both limits.
+- [ ] `license/license-core.ts` + `license-service.ts`: optional `waiterDevices` (absent in an older licence -> 0 until the next check-in).
+- [ ] `ipc/handlers.ts`: `lan:pairingCode` input only (access stays `settings`). No new channel.
+- Money/stock: **no change in logic.** The phone calls the same `orders:save` / `orders:moveTable` / `orders:cancel` as a till: same Decimal math, stock checks, one-order-per-table trigger, kitchen tickets, `expectedVersion` conflict, F13 "others' orders" permission. Before: only tills call them. After: phones too, with the same rules. Payments stay on tills (not in the allowlist).
+
+### Till: renderer
+
+- [ ] `views/settings/lan-section.ts`: "Telefon qo'shish (ofitsiant)" -> modal with the QR, the 6-digit code, address:port, countdown, cancel. QR drawn in the renderer from `{host, port, code}`: reuse the encoder the licence payment QR uses (F7). Devices list: type icon Kassa / Telefon, "Telefonlar: 2 / 5". Explained and disabled when the plan lacks `waiterApp`.
+- [ ] Subscription plan cards: "N ta telefon".
+- [ ] uz + ru: `lan.addPhone`, `lan.phoneHint`, `lan.kindTill`, `lan.kindPhone`, `lan.phoneLimit`, `lan.phonePlanMissing`, `license.feature.waiterApp`, `license.phones`.
+
+### Waiter app (`waiter/`, own package.json, not an npm workspace)
+
+- [ ] Expo (latest SDK released 2+ weeks ago), TypeScript strict, exact versions; `expo prebuild` + local Gradle `assembleRelease` (no EAS cloud, no Play Store). Metro `watchFolders` + alias `@shared` -> `../src/shared` (checked: zod/decimal.js only, no Node/Electron imports outside a test).
+- [ ] Android: `uz.savdochef.waiter`, portrait, cleartext HTTP allowed (shop LAN; same exposure as satellites today), permissions CAMERA + REQUEST_INSTALL_PACKAGES only, `allowBackup=false`.
+- [ ] `src/api/`: `rpc(channel, input)` typed by `IpcChannels`; `Authorization: SavdoChef <id>.<secret>` + `X-Session`; 30 s timeout; `redirect: 'error'`; SSE client; states connecting / online / unreachable / unpaired / protocol, as `main-link.ts`.
+- [ ] Device secret in the Android Keystore (`expo-secure-store`); session token in memory only.
+- [ ] Screens per the approved designs: PIN, Connect (QR + manual fallback + paired card), Tables, Order (categories, stock, portions, weight, cart sheet, save, pre-bill, move, cancel, read-only, unsaved guard, stock shortage, version conflict), Update.
+- [ ] Money and quantities through `shared/utils/order-line.ts`, `decimal.ts`, `format.ts` (no floats, no `Intl` for uz).
+- [ ] i18n `waiter/src/i18n/{uz,ru}.json` + a test that both have the same keys.
+- [ ] Self-update: `version.json` `{ version, url, sha256, notes }` at `https://panel.posgro.uz/releases/savdochef-waiter/`; download, check sha256, open Android's installer. Only from the Update screen.
+- [ ] Signing: one release keystore, made once, kept **outside the repo** with a backup (Android refuses an update signed by another key); paths and passwords from env vars; `.gitignore` covers `*.keystore`, `*.jks`, build output.
+- [ ] Scripts: in `waiter/`: `npm run check`, `npm run apk`. Root: `scripts/upload-waiter.mjs` (same order and refusals as `upload-release.mjs`), `npm run deploy:waiter` (outward-facing: only when asked). Root eslint / jest / prettier ignore `waiter/`. CLAUDE.md: a short "Waiter app" section.
+
+### Tests
+
+- [ ] `lan.test.ts`: codes carry their kind; phone pairing refused without `waiterApp` and above the limit; till and phone limits separate.
+- [ ] `waiter.e2e.test.ts` (like `satellite.e2e.test.ts`): real main + HTTP client as a phone: PIN login, every allowed channel works, **every other channel FORBIDDEN even for an admin** (`payments:pay` included), events filtered, revoke drops session and stream.
+- [ ] `secrets.test.ts` over the waiter allowlist; `database.test.ts` drift for 0020.
+- [ ] posgro tests (above); waiter app: api client states and session renewal, i18n keys.
+- [ ] Agents: `migration-reviewer` (0020), `electron-security-reviewer` (allowlist, pairing, QR modal).
+
+### Verification
+
+- [ ] `npm run check` (till), `/check` (posgro), `npm run check` (waiter).
+- [ ] Till harness on a scratch userData copy (`SAVDOCHEF_LAN_WAITERS=5`, licence answered in the harness as in F19): Telefon qo'shish modal with QR, device kinds, limit and plan-missing states; screenshots uz light / ru dark.
+- [ ] Real phone (or emulator) on the same Wi-Fi against that till: scan, PIN, tables, order with a portion dish and a weight dish, save (kitchen ticket on a faked printer), pre-bill, move, the same table open on the till (lock), till closed (offline), revoke. Screenshots of each.
+- [ ] Needed on this PC first: JDK 17 + Android SDK (not installed now).
+
+### Versions and rollout
+
+- Till: **minor** (migration 0020) -> the minor after F19's 0.12.0, i.e. 0.13.0. Waiter app 1.0.0. A till without F20 knows no phone codes, so the phone says "Kassani yangilang".
+- Order: posgro -> staging -> prod (`/pg-backup`, your OK) -> till release -> APK upload. Nothing is committed, pushed or deployed without your word.
+
+### Status (2026-11-21): posgro + till built, nothing committed, pushed or deployed; phone app not started
+
+- Approved: all R. Extra question during the build (posgro VIPs have no billing period): extra phones on a VIP are **free, like extra tills** (owner, 2026-11-21).
+- posgro branch `feat/savdochef-waiter-phones` (from `dev`): migration `20261121000001_savdochef_waiter_devices` (`stores.extra_waiter_devices INT NOT NULL DEFAULT 0`); config v3 (`waiterApp` feature, Standard and Pro gain it when a v1/v2 config is read; `planWaiterDevices` TRIAL/STANDARD/PRO 5, STARTER 0; `prices.extraWaiterDevice` default 50 000); `savdochefMonthlyFee` + extra phones (monthly plans only); `savdochefWaiterAllowance`; licence `waiterDevices`; plans `waiterDevices` + `extraWaiterDevicePrice`; billing note; store DTO/service `extraWaiterDevices` (SavdoChef only, 0..50); dashboard: phones per plan, extra phone price, extra phones per restaurant. Typecheck clean, eslint no new warnings, jest 2255/2255.
+- Till: migration 0020 (`lan_devices.kind`, default `till`); `shared/lan-waiter.ts` (allowlist, events, protocol, QR schema); pairing codes carry their kind, the caller's `expect` only narrows (a till code on a phone, or a phone code on a satellite, is refused and stays open); phones and tills limited apart; server: allowlist before everything, no `force` table takeover from a phone, phone pre-bill only for open table orders, filtered events, earliest-N phones work, streams of phones beyond a lowered limit end on `license-changed`, device name sanitised; licence `waiterDevices` (bad value -> none); Settings -> Kassalar tarmog'i: "Telefon qo'shish (ofitsiant)", QR + code + address, Turi column, "Ofitsiant telefonlari: n / limit", plan-missing state; plan cards "N ta telefon". `npm run check` 758/758, format clean, build ok.
+- Reviews: `migration-reviewer` safe (0020 + posgro). `electron-security-reviewer`: 1 medium (till code typed on a phone made it a till) + 5 low (stream outlived a lowered limit, unbounded name in log, admin PIN on a phone could force-take a table, phone pre-bill for any order, misplaced doc comment): all fixed, each pinned in `waiter.e2e.test.ts`.
+- Real app: harness on a scratch copy of the cafe data (migrated 19 -> 20; its paired satellite stayed `till`), PIN set on the copy: Settings -> Kassalar tarmog'i idle / phone QR / device list, uz light + ru dark, and a plan without phones (button disabled, explained). A phone played over HTTP from the harness: paired as `waiter`, protocol 1, restaurant name, PIN login, `halls:list` ok, `payments:pay` and `users:list` refused. Screenshots looked at.
+- Not done yet: `waiter/` Expo app (waits for the Claude Design screens and JDK 17 + Android SDK on this PC), `scripts/upload-waiter.mjs`, CLAUDE.md section, version bump, the install-over-0.10/0.12 upgrade test with a paired satellite, posgro on staging.
+
+### F20-T: till "Yo'ldosh kassalar" page from the frames (approved 2026-11-22: all R)
+
+Source: `docs/designs/till/*.png` (list, phone pairing modal, plan-limit banner; light + dark). Today's page (`views/settings/lan-section.ts`, uncommitted F20 work) has the same data in three stacked cards; this rebuilds the layout and adds two live fields. Copied from: the current `lan-section.ts` (all actions), `components/modal.ts` `openModal` (pairing dialogs), `ui/qr.ts` `qrSvg`, `printer-section.ts` (list + row actions), the `#/settings/subscription` link in `layout/shell.ts`. Lessons applied: quote every `html``` attribute, look at the screenshots, harness on a scratch copy with the licence answered in the harness (F19).
+
+#### Questions (R = my recommendation)
+
+1. Section name: rename "Kassalar tarmog'i" to **"Yo'ldosh kassalar"** / "Дополнительные кассы" (matches the frames and the phone's scan hint "Sozlamalar → Yo'ldosh kassalar → Telefon qo'shish") (R), and update `lan.joinHint`'s path too?
+2. Server settings (on/off, port, address, firewall) are not in the frames: R = a collapsed "Tarmoq sozlamalari" card under the list (open by default while the switch is off); or a gear button that opens them in a modal?
+3. "Kassa qo'shish": R = a modal in the phone modal's style (6 code boxes, address:port, countdown, no QR, steps for the new till); or keep the inline card?
+4. "Onlayn" and "Ofitsiant · Dilshod": R = main reports them live from what the LAN server already holds in memory (an open event stream = online; the phone's signed-in user's name), emits `lan-changed` when a stream opens/closes or a phone signs in/out; no schema change. Fallback otherwise: online = seen in the last 2 min, no user name.
+5. Unpaired (revoked) devices are not in the frames: R = hide them; or keep greyed at the bottom?
+6. Row action: R = "Uzish" (unlink icon, red text) replaces "Ajratish", same confirm dialog with the text adjusted.
+7. "Bu kassa: Asosiy kassa · 192.168.1.10:5180": there is no till name; R = fixed label "Asosiy kassa" + first address:port, and the counter "4 ta qurilma · 2 kassa, 2 telefon" beside it.
+
+#### Shared
+- [x] `shared/types.ts` `LanDeviceDto` += `online: boolean`, `userName: string | null` (phones only; never a role, PIN or token).
+- [x] `shared/utils/format.ts` += `formatAgo(date, now, lang)` ("hozir", "5 daqiqa oldin", "2 soat oldin", then the date; ru "только что", "5 мин назад", "2 ч назад"). No `Intl` (CLAUDE.md).
+- No new IPC channel, no access change: `lan:status`, `lan:pairingCode`, `lan:cancelPairing`, `lan:revoke`, `lan:update` stay `settings` permission.
+
+#### Main
+- [x] `lan/server.ts`: `presence(): Map<deviceId, { userName: string | null }>` from `streams` + `sessions` (latest session per device, `actor.fullName`); calls an `onPresence()` hook when a stream opens/closes and when a phone's session is created or dropped (pinLogin, logout, revoke).
+- [x] `lan/lan-service.ts`: `status()` merges it into `devices`; `onPresence` -> emit `lan-changed` (debounced 1 s so a reconnecting phone does not flood the till).
+- [x] `lan/devices.ts`: `listDevices` unchanged (DB only); merge lives in the service.
+
+#### Database
+- None. Presence is in memory; nothing stored, nothing migrated. Installed tills unaffected.
+
+#### Money / stock
+- None. Display only; pairing, limits and revoke behave exactly as now.
+
+#### Renderer
+- [x] `views/settings/lan-section.ts` main view rebuilt per the frames: header (title + subtitle, buttons "Kassa qo'shish" secondary + "Telefon qo'shish (ofitsiant)" primary with phone icon); meta line (Q7); plan banner when `!waiterApp` (lock icon, title, body, "Tariflarni ko'rish" -> `#/settings/subscription`) and the phone button disabled with a lock icon; also disabled with a hint when the switch is off or the phone limit is reached ("Telefonlar: 5 / 5").
+- [x] Device table: Turi (icon tile + Kassa/Telefon), Nomi (name, second line IP for a till, "Ofitsiant · <name>" for a signed-in phone), Oxirgi aloqa ("● Onlayn" in success colour, else `formatAgo`, "—" never seen), action "Uzish". Empty state when no devices.
+- [x] `views/settings/lan-pair-modal.ts` (new): `openPairModal(kind)` on `openModal` size `lg`: phone = QR left (white tile in both themes) + right column "Telefonda: ⚙ → Kassaga ulash → QR kodni skanerlang", divider "yoki qo'lda kiriting", 6 code boxes, "Kassa manzili", clock "9:41 qoldi · kod bir marta ishlaydi"; till = same without QR (Q3). Footer "Bekor qilish" cancels the code (`lan:cancelPairing`). Closes itself when the code is used (device count grows on `lan-changed`) with a toast "Ulandi: <name>", or when it runs out. Closing by Escape/X also cancels the code.
+- [x] Server settings card (Q2) keeps today's form, firewall `<details>` and save.
+- [x] Satellite view unchanged.
+- [x] `styles/views.css`: `.lan-meta`, `.lan-device-kind` tile, `.status-online`, `.pair-modal` grid (stacks under 720 px), `.code-boxes`; tokens only, light + dark; no inline `style=` (CSP). `ui/icons.ts` += `unlink` (lucide `Unlink`), `clock`.
+- [x] `settings-view.ts`: section icon stays; label key unchanged, value per Q1.
+
+#### Strings (uz + ru, both files)
+- [x] `settings.sectionLan` (Q1); `lan.pageSubtitle`, `lan.thisTill`, `lan.deviceCount` (`{{total}} ta qurilma · {{tills}} kassa, {{phones}} telefon`), `lan.addTill`, `lan.tillModalTitle`, `lan.tillSteps`, `lan.phoneOnPhone`, `lan.phoneStepsShort`, `lan.orManual`, `lan.codeLeft` (`{{time}} qoldi · kod bir marta ishlaydi`), `lan.online`, `lan.phoneUser` (`Ofitsiant · {{name}}`), `lan.unlink`, `lan.unlinkConfirm`, `lan.planBannerTitle`, `lan.planBannerBody`, `lan.seePlans`, `lan.netSettings`, `lan.paired` (toast), `lan.phonesFull`; `format.ago.*` for `formatAgo`. Remove keys no longer used.
+
+#### Tests
+- [x] `lan.test.ts`: status gives `online` true while a stream is open and false after it closes; `userName` after a phone PIN login, null after logout/revoke; a till never has `userName`; `lan-changed` emitted once per burst.
+- [x] ~~`waiter.e2e.test.ts`~~: covered in `lan.test.ts` instead, through the real `LanService` over HTTP (the merge is the service's).
+- [x] `format.test.ts`: `formatAgo` boundaries (59 s, 1 min, 59 min, 1 h, 24 h -> date) uz + ru.
+- [x] `secrets.test.ts`: `lan:status` still carries no hash/secret (new fields included).
+- [x] Agents: `electron-security-reviewer` (server presence, modal, renderer).
+
+#### Verification
+- [x] `npm run check`, `npm run build`.
+- [x] Harness on a scratch copy of the cafe data (licence answered in the harness; `SAVDOCHEF_LAN_WAITERS=5`): list with the paired satellite + a phone played over HTTP (paired, PIN login -> "Onlayn", "Ofitsiant · <name>"; stream closed -> "hozir"/"N daqiqa oldin"), phone modal (QR, code boxes, countdown), till modal, code used -> modal closes + toast, Uzish confirm, plan without phones (banner + locked button), switch off; uz light + ru dark, 1366×768 and a narrow window. Screenshots compared side by side with the frames.
+
+#### Version
+- Part of F20, which already ships as the **minor** 0.13.0 (migration 0020). No bump of its own.
+
+#### Status (2026-11-22): built and checked, not committed
+
+- Main: `LanServer.presence()` + `onPresence` (stream open/close, session made/dropped in /rpc, `dropDevice`); `LanService` merges it into `status().devices` (`online` for non-revoked devices, `userName` only for an online phone) and sends one local `lan-changed` per second at most. Nothing stored.
+- Shared: `LanDeviceDto.online` / `userName`; `formatAgo` keeps its uz/ru words in `format.ts` like `formatLongDate` (no `format.ago.*` keys; deviation from the plan).
+- Renderer: page rebuilt per the frames; `lan-pair-modal.ts` (phone: QR + steps + code boxes + address + countdown; till: same without QR); the dialog follows the till (closes quietly when the code is used, toast "Ulandi: <name>"; Escape / X / Bekor qilish cancel the code); network card folded and rebuilt only when its own data changes (a reconnecting phone does not wipe a port being typed); "N daqiqa oldin" refreshes every 30 s. Token `--color-warning-text` (light #8a5300, dark #f0a83c) for the banner title; icons Clock, Unlink. Removed unused keys `lan.getCode`, `pairHint`, `pairSteps`, `codeExpires`, `cancelCode`, `devicesTitle`, `deviceIp`, `revoke`, `revokeConfirm`, `revoked`, `phoneSteps`, `phonePlanMissing`, `mainTitle`, and the `.pair-code`, `.pair-qr`, `.device-kind` CSS.
+- `npm run check`: typecheck, lint, 55 suites / 764 tests. `npm run build` ok.
+- Harness (`scratchpad/f20t/harness.cjs`, copies of the F20 scratch userData = cafe data migrated to v20): uz light 1366x768 (list, phone dialog with QR, phone played over HTTP -> dialog closes + toast + "Onlayn" + "Ofitsiant · Bobur", stream closed -> "hozir", till dialog, Bekor qilish -> code gone, Uzish confirm, network card open); ru dark 1280x720 (same); plan without phones uz light + ru dark (banner, locked button). Screenshots looked at next to the frames. The window minimum is 1280x720, so the dialog's stacked layout under 720 px is never reached.
+- `electron-security-reviewer`: no high; nothing new leaks (names only, presence event stays on this till). 1 medium + 5 low, all fixed: leaving the page (lock, logout, another section) with the dialog open now cancels the code (harness: code open -> section left -> code null); crossed `lan:status` replies dropped and a just-cancelled code never reopens; one LAN session per device (no stale user after a phone restart; test); device names lose bidi overrides and zero-width marks (test); header and table rebuilt only when changed, the 30 s timer only rewrites the "oldin" cells, and a main till ignores `lan-changed` in `lan-link.ts`; no presence event after `stop()`.
+- After the fixes: `npm run check` 55 suites / 766 tests, format clean, build ok; harness uz light 1366x768 + ru dark 1280x720 again, same results.
+- Not done: a real phone (the Expo app does not exist yet).
+
+### F20-W: the waiter app `waiter/` (approved 2026-11-22: all R)
+
+Builds the "Waiter app" items above. Designs: `docs/designs/waiter` v2 (`handoff.md`: 12 components, 6 screens; `tokens.ts`; `strings.ts`; frames; export HTML). Server: `main/lan/server.ts` (`/pair`, `/hello`, `/rpc`, `/events`, `/img`), allowlist `shared/lan-waiter.ts`. Copied from: `main/lan/main-link.ts` (client: credential + session headers, states connecting / online / unreachable / unpaired / version, SSE reconnect), `views/order/draft.ts` (lines, stock `available`, `toSaveInput`), `views/order/order-view.ts` (table lease renewal, version conflict, unsaved guard), `move-table-modal.ts`, `weight-modal.ts`, `views/login.ts` (PIN). Lessons: real screenshots before "done"; exact versions 2+ weeks old.
+
+Facts found: `orders:save` / `cancel` / `moveTable` carry `expectedVersion` (conflict -> CONFLICT); stock shortage = CONFLICT with `details.shortages[{ nameUz, requested, remaining, reason }]`; lowering a saved line is allowed for the order's owner and prints the kitchen change/cancel ticket (F11); `menu:list` (any user) returns `costPrice`, `printerId`, `mxik`; `TableSummaryDto` has `updatedAt` but no opening time; the service fee is percent **or per guest** (`settings:get`); remaining stock = `sessions:getOpen` items.
+
+#### Questions (R = my recommendation)
+
+1. Sent lines on the phone: R = a waiter may lower or remove them like on the till (the kitchen gets the change/cancel ticket); or only lines added since the last save?
+2. `menu:list` gives a phone the cost price, printer and MXIK: R = main strips `costPrice`, `printerId`, `mxik`, `packageCode` from it for phones (server.ts, by device kind).
+3. "45 daq" on a table card: R = time since the order was opened (add `openedAt` to `TableSummaryDto`, DTO only); or since its last change (`updatedAt`, no change)?
+4. Shared order logic: R = move the pure `views/order/draft.ts` to `src/shared/utils/order-draft.ts` (till and phone import the same code, its tests move with it); or copy it into `waiter/`?
+5. Per-guest service fee (the designs show only percent): R = the cart sheet shows "Xizmat haqi (4 × 5 000)" with the same `shared/utils/service-fee.ts`.
+6. Cancel dialog: R = the red button says "Buyurtmani bekor qilish" (not "Bekor qilish", the dismiss label everywhere else); ru stays "Отменить заказ".
+7. Updates come from panel.posgro.uz, so the phone needs internet only on the Update screen: R = keep "Internet bormi?"; until the first upload, the Update screen is tested against a local feed (dev build only).
+
+#### Project (`waiter/`, own package.json, not a workspace)
+- [x] Expo SDK: the newest released 2+ weeks ago (checked with `npm view` at start), TypeScript strict, exact versions; React Navigation native stack (5 screens, no file routing); state in React context + reducers (no extra state library).
+- [x] `app.config.ts`: "SavdoChef Ofitsiant", `uz.savdochef.waiter`, 1.0.0 / versionCode 1, portrait, light + dark (`userInterfaceStyle: automatic`), icon from `src/shared/branding/brand.ts`, permissions CAMERA + REQUEST_INSTALL_PACKAGES only, `allowBackup: false`, cleartext HTTP allowed (config plugin), no Expo Updates, no EAS.
+- [x] `metro.config.js`: `watchFolders` + alias `@shared` -> `../src/shared` (zod, decimal.js only); `tsconfig` paths the same.
+- [x] Libraries (via `npx expo install`): expo-camera (QR), expo-secure-store, expo-file-system + expo-intent-launcher (APK install), expo-crypto (sha256), expo-localization (first language), react-native-svg + lucide-react-native, react-native-safe-area-context, react-native-screens, @react-navigation/native-stack, an SSE client (RN fetch does not stream: `react-native-sse` or XHR `onprogress`, picked at start).
+- [x] Scripts: `npm run check` (tsc + eslint + jest), `npm run android` (dev build in the emulator), `npm run apk` (prebuild + `gradlew assembleRelease`). Root eslint / jest / prettier / tsconfig ignore `waiter/`. `.gitignore`: `android/`, `ios/`, `*.keystore`, `*.jks`, `*.apk`, `.expo/`.
+- [x] Release signing: one keystore made **outside the repo** (`%USERPROFILE%\.savdochef\waiter-release.keystore`) plus a backup you keep; passwords from env vars; dev builds use the debug key.
+
+#### Till side (small, part of F20 / 0.13.0)
+- [x] Q2: `server.ts` strips cost/printer/fiscal fields from `menu:list` answers to phones.
+- [x] Q3: `TableSummaryDto.openedAt` (from the order's `createdAt`).
+- [x] Q4: `views/order/draft.ts` -> `shared/utils/order-draft.ts` (+ its test); the till's order view imports it from there; behaviour unchanged.
+- No schema change, no new IPC channel, no access change.
+
+#### Phone code (`waiter/src/`)
+- [x] `theme/tokens.ts` (handoff file as is) + `useTheme()`; `i18n/strings.ts` (handoff file + Q5/Q6 keys) + `t()` with `{n}` and ru plurals; language kept on the phone (RU/UZ chip), first value from `expo-localization`.
+- [x] `api/client.ts`: `rpc<C extends WaiterChannel>(channel, input)` typed by `IpcChannels`; headers `Authorization: SavdoChef <id>.<secret>` + `X-Session`; 15 s timeout; new session taken from the answer; 401 -> unpaired; FORBIDDEN / CONFLICT / VALIDATION -> typed errors with main's Uzbek message.
+- [x] `api/link.ts`: states as `main-link.ts` (connecting, online, unreachable, unpaired, version via `/hello` + `WAITER_PROTOCOL`), SSE `/events` with backoff; events -> refetch (orders, session, menu, settings, halls).
+- [x] `api/pairing.ts`: QR text -> `waiterPairingQr` (zod) -> try each host -> `/pair` with `expect: 'waiter'` and the phone's name; manual entry (address, optional `:port`, default 5180); credential in SecureStore; errors -> the 5 cards (wrong code, expired, not found, plan, version).
+- [x] Components (handoff list): Button, PinDots, PinKeypad, TableCard, CategoryChip, DishRow, QtyStepper, CartBar, BottomSheet, Banner, Toast, Dialog; plus TopBar, Screen, EmptyState, Spinner, Segmented, SearchField.
+- [x] Screens:
+  - PIN: restaurant name from `/hello`, 4 dots, wrong / checking / locked countdown, offline banner + Qayta urinish, unpaired state -> Connect; gear -> Connect.
+  - Connect: camera scanner, permission denied, manual entry, pairing, success, the 5 error cards, already-paired card (address, last contact, phone name, app version, "Ilova yangilanishi", "Boshqa kassaga ulash" = forget the credential).
+  - Tables: hall pills, Hammasi / Mening stollarim, cards free / busy / mine / locked (`orders:tableLocks`), no shift and offline dimmed, loading skeleton, empty hall, update banner; lock icon -> PIN (logout).
+  - Order: lease via `orders:lockTable` renewed like the till (held elsewhere -> read-only); search + categories (pictures per `showCategoryImages` / `showMenuImages`), dish rows with Qoldi / Tugadi from `available()`, portion sheet, weight sheet (comma decimal, 3 places), guests sheet, cart sheet ("Yangi" = not in the last saved order), save -> toast; read-only for another waiter's order (pre-bill only); move sheet (free tables by hall); cancel dialog; unsaved-changes dialog on back; stock shortage sheet with "Tuzatish" (sets the line to what is left); conflict dialog -> reload.
+  - Update: `version.json` from panel.posgro.uz, download with progress, sha256 check, Android installer; up to date / available / downloading / ready / error.
+- [x] Money and quantities only through `@shared/utils/decimal`, `order-line`, `service-fee`, `format` (no floats, no `Intl`).
+
+#### Money / stock effects
+- Nothing new on the till: the phone calls the same `orders:save` / `cancel` / `moveTable` as the till, and main checks stock, prices, version and ownership as today. The phone's totals use the same `priceLine` and service-fee code, so it shows what main will save.
+
+#### Strings
+- [x] Phone: `waiter/src/i18n/strings.ts` (uz + ru from the handoff, plus the per-guest fee row and the Q6 label); test that every key has both languages with the same `{placeholders}`.
+- [x] Till: none.
+
+#### Tests
+- [x] `waiter/` (jest-expo): `api/client` (headers, session renewal, 401 -> unpaired, error mapping; fetch mocked), `api/link` state machine, `api/pairing` (QR parse, host fallback, manual address), strings, cart helpers ("Yangi", totals with the per-guest fee).
+- [x] Till: `waiter.e2e.test.ts` (menu fields stripped for a phone, kept for a till), `orders.test.ts` (`openedAt`), the moved `order-draft.test.ts`; `npm run check`.
+- [x] Agents: `electron-security-reviewer` on the till changes and on `waiter/src/api` + storage (credential, cleartext, update download).
+
+#### Verification (no phone yet)
+- [x] First: `ANDROID_HOME` + PATH (asked before changing), an emulator (Pixel, newest API), `npx expo run:android` builds.
+- [x] Till with `npm run dev` on a **scratch copy** of the cafe data (`SAVDOCHEF_USER_DATA`, `SAVDOCHEF_LAN_WAITERS=5`, PIN set by the prep script); the emulator reaches it at `10.0.2.2:5180` (manual entry; the emulator camera cannot read a real QR).
+- [x] In the emulator, uz + ru, light + dark: pair, PIN (wrong, locked), tables (busy, mine, locked by the till), an order with a portion dish and a weight dish, save (kitchen ticket on a faked printer), pre-bill, move, cancel, stock shortage, the same table open on the till (read-only / conflict), till closed (offline), unpaired from Settings -> Yo'ldosh kassalar ("Onlayn" there). Screenshots with `adb exec-out screencap`, compared with the frames.
+- [ ] Update screen against a local `version.json` + APK (dev build only).
+- [ ] `npm run apk` gives a signed release APK that installs on the emulator.
+- [ ] Later, with your phone: QR scan, Wi-Fi drop, install over an older version.
+
+#### Versions
+- Waiter app 1.0.0 (versionCode 1). The till changes (Q2-Q4) ride in F20's minor 0.13.0. Nothing committed, uploaded or deployed without your word.
+
+#### Status (2026-11-22): built and run in the emulator against a real till; not committed
+
+- Till: `TableSummaryDto.openedAt`; `views/order/draft.ts` moved to `shared/utils/order-draft.ts` (till imports it from there, tests moved, unchanged); `server.ts` `forPhone()` strips cost/printer/fiscal fields from `menu:list` and the cash drawer from `sessions:getOpen` for phones (the drawer was not in the plan: an admin PIN on a phone would have received it); `/pair` refusals carry a `reason` (`PairRefusal` in `shared/lan-waiter.ts`) so the phone picks its card without parsing Uzbek. Tests: `waiter.e2e.test.ts` (stripped fields, refusal reasons), `orders.test.ts` (`openedAt`). `npm run check` 55 suites / 768 tests, format clean, build ok.
+- Phone (`waiter/`): Expo SDK 58.0.23, RN 0.88.1, React 19.3, TypeScript 6.0.3, every direct dependency exact and published before 2026-11-08; transitive `babel-preset-expo` and `@react-navigation/elements` pinned back by `overrides` (npm had picked releases from after the cut-off). Own SSE reader on XHR (the only SSE package is from 2024). Brand mark drawn from `shared/branding/brand.ts`. Config plugins: `with-release-signing` (keystore from env vars), `with-cmake-version` (CMake 3.31.6 for Windows long paths). `npm run check`: tsc, eslint (React Compiler rules), jest 5 suites / 23 tests.
+- Emulator (Pixel-size, Android 37, x86_64 release build, debug-signed) against the till on a scratch copy of the cafe data (`till-host.cjs`, LAN on 5180, phones limit 5): unpaired screen; manual pairing at 10.0.2.2 with the till's code -> "Ulandi · Mock cafe"; wrong PIN (refused on the till) and PIN 1111 -> Tables (busy "Siz" card with total, waiter and time); Order: stock tags (Tugadi), weight dish 0,450 kg, steppers, trash at 1, cart sheet with "Yangi", 5 % service fee computed on the phone = the till's saved total (143 588); save -> toast + kitchen ticket created on the till; unsaved-changes dialog -> Saqlash; move 3 -> 5 (kitchen "table changed" ticket); the till opening table 5 -> phone shows it locked, opening it gives the read-only view; pre-bill from the phone printed on the till (PNG looked at: Stol 5, 143 588); ru + dark: tables, guests 4 (saved: the till shows guestCount 4), cart, cancel (table free, cancel ticket created); till quit -> offline banner, dimmed cards; till back -> reconnects by itself, back to the PIN (the till forgot the sign-in); unpaired from the till -> unpaired screen; wrong code -> "Неверный код" card. Settings -> Yo'ldosh kassalar showed the phone online as "Bobur" (F20-T, through the till API). Screenshots looked at next to the frames.
+- Fixed during the run: Metro `disableHierarchicalLookup` broke nested packages; Jest resolved shared imports from the till's node_modules; equal-width table cards; cart bar and grid under the gesture bar; broken pictures fall back to the "no picture" icon; cart list height 45 % of the screen; read-only fee label and 3-place weights; Connect after the till unpaired the phone now starts at pairing.
+- Not done yet: the Update screen against a local feed; stock-shortage sheet, version-conflict dialog and portion sheet in the app (logic unit-tested, not driven: the scratch menu has no portion dish and no low stock); the QR scanner (the emulator camera cannot read it: needs your phone); a signed release APK (needs the release keystore, made with you); ARM builds (the emulator run built x86_64 only); a release-hash check of the ~1 280 transitive npm packages against the cut-off; posgro deploy and upload of the APK (only when asked).
+- `electron-security-reviewer` (till side + `waiter/`): no leak of cash, cost, PINs, hashes or other users' data through the waiter channels; the `reason` field gives an attacker nothing new; the update path is sound (dev feed out of release builds, APK URL pinned, sha256 before install, private cache). Fixed: M1 `forPhone()` is now an allowlist (key snapshot in `waiter.e2e.test.ts`); M2 app version and versionCode (major*10000+minor*100+patch) come from `waiter/package.json`; L1 a till must be on a private IPv4 network (`isPrivateIPv4` in the QR schema, the phone's address parser and its stored credential; the till's QR lists only private addresses); L2 an error answer on the event stream is cut at 64 KB; L3 the pairing answer is validated (a malformed one is a card, not a stuck screen); L4 the update's size is checked before it is hashed; L5 device names lose every control/format/separator character, cut by code points; L6 the plan and the device count are checked before the pairing code is used up. Re-run: till 769 tests, phone 24; emulator re-pair with versionCode 10000.
+- Open, for the owner: H1 the phone talks plain HTTP (device secret and the waiter's PIN in cleartext on the shop Wi-Fi; same as satellite tills today, accepted in the F20 plan). Options: TLS with the certificate fingerprint in the QR (best), signed requests (partial), or a staff-only Wi-Fi in the setup notes. L7 (from before F20): anyone on the network can burn a pairing code with 10 wrong guesses. Product question: `sessions:getOpen` shows the shift's per-dish sold quantities to phones (roughly the takings); zero them for phones?

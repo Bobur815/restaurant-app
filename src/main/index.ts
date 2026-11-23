@@ -205,6 +205,12 @@ if (!app.requestSingleInstanceLock()) {
         const tills = license?.terminalLimit() ?? null;
         return tills === null ? null : Math.max(0, tills - 1);
       },
+      // F20: waiter phones; the dev override works only in an unpackaged build, like the one above.
+      waiterLimit: () => {
+        const override = process.env['SAVDOCHEF_LAN_WAITERS'];
+        if (!app.isPackaged && override && /^\d+$/.test(override)) return Number(override);
+        return license?.waiterDeviceLimit() ?? 0;
+      },
       broadcastLocal: broadcastWindows,
       allowLoopback: !app.isPackaged,
       restart: () => {

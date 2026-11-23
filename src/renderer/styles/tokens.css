@@ -48,6 +48,8 @@
   --color-danger-soft: #fdecec;
   --color-warning: #b26a00;
   --color-warning-soft: #fff4e0;
+  /* Small warning text on warning-soft or surface (4.5:1); --color-warning is for icons and borders. */
+  --color-warning-text: #8a5300;
   --color-info-soft: #e8f0fb;
   --color-backdrop: rgb(15 18 22 / 0.45);
 
@@ -83,6 +85,7 @@
     --color-danger-soft: #3a1c1c;
     --color-warning: #f0a83c;
     --color-warning-soft: #3a2c14;
+    --color-warning-text: #f0a83c;
     --color-info-soft: #1c2a3d;
     --color-backdrop: rgb(0 0 0 / 0.6);
     --series-1: #3987e5;
@@ -114,6 +117,7 @@
   --color-danger-soft: #3a1c1c;
   --color-warning: #f0a83c;
   --color-warning-soft: #3a2c14;
+  --color-warning-text: #f0a83c;
   --color-info-soft: #1c2a3d;
   --color-backdrop: rgb(0 0 0 / 0.6);
   --series-1: #3987e5;

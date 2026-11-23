@@ -8,6 +8,7 @@ import type { FiscalVatMode } from './utils/fiscal-receipt';
  */
 
 import type { Permission, Role } from './permissions';
+import type { LanDeviceKind } from './lan-waiter';
 export type { Permission, Role } from './permissions';
 export type OrderStatus = 'pending' | 'completed' | 'cancelled';
 export type OrderType = 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
@@ -183,11 +184,17 @@ export interface PrinterDto {
 
 export interface LanDeviceDto {
   id: number;
+  /** F20: a satellite till or a waiter phone. */
+  kind: LanDeviceKind;
   name: string;
   pairedAt: string;
   lastSeenAt: string | null;
   lastIp: string | null;
   revoked: boolean;
+  /** F20-T: its line to this till is open now (in memory, not stored). */
+  online: boolean;
+  /** F20-T: a phone's signed-in user while it is online (name only); null for tills. */
+  userName: string | null;
 }
 
 /** The main till's view of its satellites (Settings -> Satellitlar). */
@@ -201,10 +208,15 @@ export interface LanStatusDto {
   error: string | null;
   /** This computer's IPv4 addresses on the shop's network, for the satellite's form. */
   addresses: string[];
-  pairing: { code: string; expiresAt: string } | null;
+  /** The open pairing code; `kind` = what pairs with it (F20: a till or a phone). */
+  pairing: { code: string; expiresAt: string; kind: LanDeviceKind } | null;
   devices: LanDeviceDto[];
   /** Satellites the plan allows (terminals - 1); null = no limit. */
   deviceLimit: number | null;
+  /** F20: waiter phones the plan allows (0 = the plan has no waiter app). */
+  waiterLimit: number;
+  /** F20: the plan includes the waiter app. */
+  waiterApp: boolean;
 }
 
 /**
@@ -557,6 +569,8 @@ export interface TableSummaryDto {
   orderNumber: string;
   totalAmount: DecimalString;
   lineCount: number;
+  /** F20-W: when the order was opened (a waiter phone shows how long the table has been busy). */
+  openedAt: string;
   updatedAt: string;
 }
 

@@ -46,6 +46,7 @@ export function allowAllLicense(): HandlerServices['license'] {
       checkinDays: 14,
       plans: [],
       extraTerminalPrice: 0,
+      extraWaiterDevicePrice: 0,
       supportPhone: '',
     }),
     signupStart: async () => ({

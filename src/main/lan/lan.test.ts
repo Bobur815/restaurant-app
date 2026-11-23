@@ -1,9 +1,18 @@
-import { createTestDb, type TestDb } from '../test-utils/db';
+import http from 'node:http';
+import type { AppEvent } from '@shared/ipc';
+import { createTestDb, createUser, type TestDb } from '../test-utils/db';
 import { allowAllLicense } from '../test-utils/license';
 import { unsupportedUpdater } from '../test-utils/updater';
 import type { HandlerServices } from '../ipc/ipc-safe';
+import {
+  countActiveDevices,
+  createDevice,
+  kindOf,
+  listDevices,
+  waiterWithinLimit,
+} from './devices';
 import { getLink, getRole, plainCipher } from './config';
-import { LanService } from './lan-service';
+import { LanService, PRESENCE_DEBOUNCE_MS } from './lan-service';
 import { CODE_TTL_MS, hashSecret, PairingStore, secretMatches } from './pairing';
 import {
   isLocalAddress,
@@ -21,7 +30,7 @@ describe('pairing codes (F12)', () => {
     const store = new PairingStore(() => now);
     const { code } = store.issue();
     expect(code).toMatch(/^\d{6}$/);
-    expect(store.redeem(code, '192.168.1.5')).toBe('ok');
+    expect(store.redeem(code, '192.168.1.5')).toEqual({ kind: 'till' });
     expect(store.redeem(code, '192.168.1.5')).toBe('closed');
     store.issue();
     now += CODE_TTL_MS + 1;
@@ -35,7 +44,7 @@ describe('pairing codes (F12)', () => {
     for (let i = 0; i < 5; i++) expect(store.redeem(wrong, '10.0.0.9')).toBe('wrong');
     expect(store.redeem(code, '10.0.0.9')).toBe('throttled');
     // Another address is not punished for it.
-    expect(store.redeem(code, '10.0.0.10')).toBe('ok');
+    expect(store.redeem(code, '10.0.0.10')).toEqual({ kind: 'till' });
   });
 
   it('ten wrong codes in all, from any addresses, cancel the code', () => {
@@ -125,6 +134,7 @@ describe('LanService (F12)', () => {
       cipher: plainCipher,
       services: () => services,
       deviceLimit: () => null,
+      waiterLimit: () => 0,
       broadcastLocal: () => undefined,
       restart: () => restarts.push('restart'),
       log: () => undefined,
@@ -339,5 +349,230 @@ describe('LanService (F12)', () => {
     await expect(m.leave()).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(m.linkStatus()).toMatchObject({ role: 'main', state: null });
     await m.stop();
+  });
+});
+
+describe('waiter phones and tills apart (F20)', () => {
+  let t: TestDb;
+  beforeAll(async () => {
+    t = await createTestDb();
+  });
+  afterAll(async () => {
+    await t.close();
+  });
+
+  it('a code remembers what it pairs', () => {
+    const store = new PairingStore();
+    const { code } = store.issue('waiter');
+    expect(store.current()?.kind).toBe('waiter');
+    expect(store.redeem(code, '10.0.0.1')).toEqual({ kind: 'waiter' });
+  });
+
+  it('counts phones and tills against their own limits', async () => {
+    await createDevice(t.db, 'Kassa-2', null, 1, 'till');
+    await createDevice(t.db, 'Tel-1', null, 2, 'waiter');
+    await createDevice(t.db, 'Tel-2', null, 2, 'waiter');
+    await expect(createDevice(t.db, 'Tel-3', null, 2, 'waiter')).rejects.toMatchObject({
+      message: "Tarifingiz bo'yicha telefonlar soni to'lgan",
+    });
+    await expect(createDevice(t.db, 'Kassa-3', null, 1, 'till')).rejects.toMatchObject({
+      message: "Tarifingiz bo'yicha qo'shimcha kassalar soni to'lgan",
+    });
+    expect(await countActiveDevices(t.db, 'waiter')).toBe(2);
+    expect(await countActiveDevices(t.db, 'till')).toBe(1);
+    expect(await countActiveDevices(t.db)).toBe(3);
+    expect((await listDevices(t.db)).map((d) => [d.name, d.kind])).toEqual([
+      ['Kassa-2', 'till'],
+      ['Tel-1', 'waiter'],
+      ['Tel-2', 'waiter'],
+    ]);
+  });
+
+  it('an unknown stored kind is read as the narrower one (a phone)', () => {
+    expect(kindOf('till')).toBe('till');
+    expect(kindOf('waiter')).toBe('waiter');
+    expect(kindOf('tablet')).toBe('waiter');
+  });
+
+  it('the earliest phones within the limit work; none on a plan without the app', async () => {
+    const phones = await t.db.lanDevice.findMany({
+      where: { kind: 'waiter' },
+      orderBy: { id: 'asc' },
+    });
+    expect(await waiterWithinLimit(t.db, phones[0]!.id, 1)).toBe(true);
+    expect(await waiterWithinLimit(t.db, phones[1]!.id, 1)).toBe(false);
+    expect(await waiterWithinLimit(t.db, phones[1]!.id, 2)).toBe(true);
+    expect(await waiterWithinLimit(t.db, phones[0]!.id, 0)).toBe(false);
+  });
+});
+
+describe('who is online, for the settings page (F20-T)', () => {
+  let t: TestDb;
+  let svc: LanService;
+  let base: string;
+  const local: AppEvent[] = [];
+  const services: HandlerServices = {
+    appInfo: () => ({ name: 'savdochef', version: '0.13.0', isPackaged: false }),
+    printer: {
+      list: async () => [],
+      print: async () => ({ printer: 'x' }),
+      preview: async () => '',
+    },
+    pickImage: async () => null,
+    receiptImage: () => null,
+    tableLocks: new TableLocks(),
+    updater: unsupportedUpdater(),
+    license: allowAllLicense(),
+  };
+
+  beforeAll(async () => {
+    t = await createTestDb();
+    await createUser(t.db, { username: 'Dilshod', role: 'STAFF', pin: '2222' });
+    svc = new LanService({
+      getDb: () => t.db,
+      version: '0.13.0',
+      imageDir: '',
+      machineName: 'KASSA-1',
+      cipher: plainCipher,
+      services: () => services,
+      deviceLimit: () => null,
+      waiterLimit: () => 5,
+      broadcastLocal: (events) => local.push(...events),
+      restart: () => undefined,
+      log: () => undefined,
+    });
+    await svc.init();
+    const port = 20_000 + Math.floor(Math.random() * 20_000);
+    await svc.update({ port, enabled: true });
+    base = `http://127.0.0.1:${port}`;
+  });
+  afterAll(async () => {
+    await svc.stop();
+    await t.close();
+  });
+
+  const pair = async (kind: 'till' | 'waiter', name: string) => {
+    const code = (await svc.issueCode(kind)).pairing!.code;
+    const res = await fetch(`${base}/pair`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ code, name, expect: kind }),
+    });
+    const body = (await res.json()) as { deviceId: number; secret: string };
+    return { ...body, session: null as string | null };
+  };
+  const headers = (d: { deviceId: number; secret: string; session: string | null }) => ({
+    authorization: `SavdoChef ${d.deviceId}.${d.secret}`,
+    'content-type': 'application/json',
+    ...(d.session ? { 'x-session': d.session } : {}),
+  });
+  const rpc = async (d: Awaited<ReturnType<typeof pair>>, channel: string, input?: unknown) => {
+    const res = await fetch(`${base}/rpc`, {
+      method: 'POST',
+      headers: headers(d),
+      body: JSON.stringify({ channel, input }),
+    });
+    const body = (await res.json()) as { session?: string | null };
+    if (body.session !== undefined) d.session = body.session;
+  };
+  const stream = (d: Awaited<ReturnType<typeof pair>>) => {
+    const req = http.get(`${base}/events`, { headers: headers(d) });
+    req.on('error', () => undefined);
+    return () => req.destroy();
+  };
+  const device = async (id: number) => (await svc.status()).devices.find((x) => x.id === id)!;
+  const until = async (check: () => Promise<boolean>) => {
+    for (let i = 0; i < 200 && !(await check()); i++) await new Promise((r) => setTimeout(r, 25));
+    expect(await check()).toBe(true);
+  };
+
+  it('a phone is online while its stream is open, with the name of who signed in on it', async () => {
+    const phone = await pair('waiter', 'Samsung Galaxy A15');
+    expect(await device(phone.deviceId)).toMatchObject({ online: false, userName: null });
+
+    const close = stream(phone);
+    await until(async () => (await device(phone.deviceId)).online);
+    expect((await device(phone.deviceId)).userName).toBeNull();
+
+    await rpc(phone, 'auth:pinLogin', { pin: '2222' });
+    expect((await device(phone.deviceId)).userName).toBe('Dilshod');
+    await rpc(phone, 'auth:logout');
+    expect((await device(phone.deviceId)).userName).toBeNull();
+
+    await rpc(phone, 'auth:pinLogin', { pin: '2222' });
+    close();
+    await until(async () => !(await device(phone.deviceId)).online);
+    // Offline: no name, even though the session is still remembered.
+    expect((await device(phone.deviceId)).userName).toBeNull();
+  });
+
+  it('a till shows online but never a user name; unpairing takes it offline', async () => {
+    const till = await pair('till', 'Bar kassasi');
+    const close = stream(till);
+    await rpc(till, 'auth:pinLogin', { pin: '2222' });
+    await until(async () => (await device(till.deviceId)).online);
+    expect((await device(till.deviceId)).userName).toBeNull();
+
+    await svc.revoke(till.deviceId);
+    expect(await device(till.deviceId)).toMatchObject({ revoked: true, online: false });
+    close();
+  });
+
+  it('a device name loses bidi overrides and zero-width marks', async () => {
+    const d = await pair('waiter', '\u202eKassa\u200b-2\u2066');
+    expect((await device(d.deviceId)).name).toBe('Kassa-2');
+  });
+
+  it('a new sign-in replaces the older session of that device (no stale user after a restart)', async () => {
+    await createUser(t.db, { username: 'Malika', role: 'STAFF', pin: '3333' });
+    const phone = await pair('waiter', 'Tel');
+    const close = stream(phone);
+    await rpc(phone, 'auth:pinLogin', { pin: '2222' });
+    const old = phone.session;
+    // The app restarted: no token, Malika signs in.
+    phone.session = null;
+    await rpc(phone, 'auth:pinLogin', { pin: '3333' });
+    await until(async () => (await device(phone.deviceId)).userName === 'Malika');
+    // Dilshod's old token is gone.
+    const res = await fetch(`${base}/rpc`, {
+      method: 'POST',
+      headers: headers({ ...phone, session: old }),
+      body: JSON.stringify({ channel: 'auth:me' }),
+    });
+    expect(((await res.json()) as { session?: string | null }).session).toBeNull();
+    close();
+  });
+
+  it('a burst of presence changes reaches the page as one lan-changed', async () => {
+    const phone = await pair('waiter', 'Redmi Note 12');
+    await new Promise((r) => setTimeout(r, PRESENCE_DEBOUNCE_MS + 200));
+    local.length = 0;
+    const close = stream(phone);
+    await rpc(phone, 'auth:pinLogin', { pin: '2222' });
+    await rpc(phone, 'auth:logout');
+    await new Promise((r) => setTimeout(r, PRESENCE_DEBOUNCE_MS + 300));
+    expect(local.filter((e) => e.type === 'lan-changed')).toHaveLength(1);
+    close();
+  });
+});
+
+describe('a till is on the shop network (F20-W review)', () => {
+  it('accepts private IPv4 only, in the QR as well', async () => {
+    const { isPrivateIPv4, waiterPairingQr } = await import('@shared/lan-waiter');
+    expect(
+      ['10.0.0.5', '172.16.1.2', '172.31.255.1', '192.168.1.10', '169.254.3.4'].every(
+        isPrivateIPv4,
+      ),
+    ).toBe(true);
+    expect(
+      ['8.8.8.8', '172.32.0.1', '100.64.0.1', '127.0.0.1', '192.168.1.300', 'kassa'].some(
+        isPrivateIPv4,
+      ),
+    ).toBe(false);
+    const qr = { app: 'savdochef-waiter', v: 1, port: 5180, code: '123456' };
+    expect(waiterPairingQr.safeParse({ ...qr, hosts: ['192.168.1.10'] }).success).toBe(true);
+    expect(
+      waiterPairingQr.safeParse({ ...qr, hosts: ['192.168.1.10', '203.0.113.7'] }).success,
+    ).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Clock,
   CreditCard,
   DoorOpen,
   Download,
@@ -20,6 +21,7 @@ import {
   LogOut,
   Menu,
   Minus,
+  Monitor,
   PanelLeft,
   PanelTop,
   Pencil,
@@ -41,6 +43,7 @@ import {
   Trash2,
   Truck,
   TriangleAlert,
+  Unlink,
   UtensilsCrossed,
   Users,
   Wallet,
@@ -89,6 +92,8 @@ const ICONS = {
   settings: Settings,
   fiscal: ShieldCheck,
   click: Smartphone,
+  phone: Smartphone,
+  till: Monitor,
   light: Sun,
   timer: Timer,
   trash: Trash2,
@@ -97,6 +102,8 @@ const ICONS = {
   users: Users,
   debt: Wallet,
   close: X,
+  clock: Clock,
+  unlink: Unlink,
 } satisfies Record<string, IconNode>;
 
 export type IconName = keyof typeof ICONS;

@@ -114,6 +114,8 @@ beforeAll(async () => {
     lineage: async () => 'lineage-A',
     pairing,
     deviceLimit: () => limit,
+    waiterLimit: () => 0,
+    restaurantName: async () => '',
     broadcastLocal: (events) => mainWindowEvents.push(...events),
     onPaired: () => undefined,
     log: () => undefined,

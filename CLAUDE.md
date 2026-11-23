@@ -49,6 +49,8 @@ scripts/        build-icons.mjs, import-legacy.ts, release.mjs
 
 **Updates:** electron-updater (generic feed `https://panel.posgro.uz/releases/savdochef/`, served from `/home/bobur/releases/savdochef/` on `posgro-vps`). `main/updater/updater.ts` is the only owner: one quiet check after start, download and install only from Settings → Dastur yangilanishi (`settings` permission). `npm run deploy:pos` publishes; a version already on the server is refused. Only the packaged Windows build updates (dev = `unsupported`).
 
+**Waiter app** (`waiter/`, F20): "SavdoChef Ofitsiant", Expo SDK 58 / React Native, Android only, sideloaded. Own `package.json` (not a workspace; root lint/jest/prettier ignore it); `cd waiter && npm run check` (tsc + eslint + jest), `npm run android` (dev build), `npm run apk` (release APK into `waiter/dist/`, needs `WAITER_KEYSTORE*` env vars; `-- --debug-signed` for the emulator). `@shared/*` is the till's `src/shared` (Metro and Jest resolve its imports from `waiter/node_modules` only): prices, stock (`utils/order-draft.ts`), service fee and the QR schema are the till's own code. The phone is a LAN device (`main/lan/server.ts`): only `WAITER_CHANNELS`, answers stripped by `forPhone()`. The release keystore lives outside the repo with a backup; losing it means every phone re-pairs. Designs and handoff: `docs/designs/waiter/`.
+
 ## Hard rules
 
 - **Money and quantities are `Decimal`** end to end (`decimal.js` / `Prisma.Decimal`), strings across IPC (`shared/utils/decimal.ts`). No float math, no `Number()` on money except for display/charts.

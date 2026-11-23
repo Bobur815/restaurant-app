@@ -313,7 +313,8 @@ export function watchLink(): void {
     if (s.lan !== prev.lan || s.language !== prev.language) render();
   });
   api.events.subscribe((e) => {
-    if (e.type === 'lan-changed') void refreshLink();
+    // A main till's own presence events (F20-T, up to one a second) change nothing here.
+    if (e.type === 'lan-changed' && appStore.get().lan?.role === 'satellite') void refreshLink();
   });
   render();
 }

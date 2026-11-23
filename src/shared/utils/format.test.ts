@@ -1,4 +1,5 @@
 import {
+  formatAgo,
   formatDateTime,
   formatLongDate,
   formatMoney,
@@ -45,5 +46,31 @@ describe('format', () => {
     expect(localName({ nameUz: 'Osh', nameRu: 'Плов' }, 'ru')).toBe('Плов');
     expect(localName({ nameUz: 'Osh', nameRu: null }, 'ru')).toBe('Osh');
     expect(localName({ nameUz: 'Osh', nameRu: 'Плов' }, 'uz')).toBe('Osh');
+  });
+});
+
+describe('formatAgo', () => {
+  const now = new Date(2026, 10, 22, 12, 0, 0);
+  const back = (ms: number) => new Date(now.getTime() - ms);
+  const MIN = 60_000;
+
+  it('says now under a minute, and for a time ahead of this clock', () => {
+    expect(formatAgo(back(59_000), now, 'uz')).toBe('hozir');
+    expect(formatAgo(back(-5 * MIN), now, 'uz')).toBe('hozir');
+    expect(formatAgo(back(0), now, 'ru')).toBe('только что');
+  });
+
+  it('counts minutes, then hours', () => {
+    expect(formatAgo(back(MIN), now, 'uz')).toBe('1 daqiqa oldin');
+    expect(formatAgo(back(59 * MIN), now, 'uz')).toBe('59 daqiqa oldin');
+    expect(formatAgo(back(60 * MIN), now, 'uz')).toBe('1 soat oldin');
+    expect(formatAgo(back(23 * 60 * MIN + 59 * MIN), now, 'ru')).toBe('23 ч назад');
+    expect(formatAgo(back(5 * MIN), now, 'ru')).toBe('5 мин назад');
+  });
+
+  it('gives the date and time from a day back', () => {
+    const d = back(24 * 60 * MIN);
+    expect(formatAgo(d, now, 'uz')).toBe(formatDateTime(d));
+    expect(formatAgo(d.toISOString(), now, 'ru')).toBe(formatDateTime(d));
   });
 });

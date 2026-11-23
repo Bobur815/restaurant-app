@@ -6,6 +6,7 @@ import { priceLine, type PortionFactor } from '@shared/utils/order-line';
 /**
  * The order screen's unsaved state: pure functions over an immutable list of lines. Prices come
  * from the same `priceLine` the server uses, so the total shown is the total that will be saved.
+ * Shared by the till's order view and the waiter phone app (`waiter/`, F20-W): no DOM, no Node.
  */
 
 export interface DraftLine {

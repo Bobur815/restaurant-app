@@ -72,7 +72,9 @@ export function linkRestaurant(options: {
           <span class="muted small"
             >${p.terminals === null
               ? t('license.tillsUnlimited')
-              : t('license.tills', { n: p.terminals })}</span
+              : t('license.tills', { n: p.terminals })}${p.waiterDevices > 0
+              ? ` · ${t('license.phones', { n: p.waiterDevices })}`
+              : ''}</span
           >
           <span class="small">${features}</span>
         </div>`,

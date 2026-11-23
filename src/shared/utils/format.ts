@@ -105,6 +105,21 @@ export function formatLongDate(date: string | Date, lang: Language): string {
   return `${day}, ${WEEKDAYS[lang][d.getDay()]}`;
 }
 
+/**
+ * How long ago, for "last contact": "hozir" under a minute, "5 daqiqa oldin", "2 soat oldin",
+ * then the date and time (a day or more). Russian uses the short units, so no plural forms.
+ * A time in the future (clocks apart) counts as now.
+ */
+export function formatAgo(date: string | Date, now: Date, lang: Language): string {
+  const ms = now.getTime() - toDate(date).getTime();
+  const min = Math.floor(ms / 60_000);
+  if (min < 1) return lang === 'uz' ? 'hozir' : 'только что';
+  if (min < 60) return lang === 'uz' ? `${min} daqiqa oldin` : `${min} мин назад`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return lang === 'uz' ? `${h} soat oldin` : `${h} ч назад`;
+  return formatDateTime(date);
+}
+
 /** Uzbek in Latin script with a Russian fallback name: the name to show for a dish or category. */
 export function localName(
   item: { nameUz: string; nameRu?: string | null },

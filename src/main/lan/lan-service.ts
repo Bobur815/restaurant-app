@@ -2,7 +2,7 @@ import os from 'node:os';
 import type { z } from 'zod';
 import type { AppEvent } from '@shared/ipc';
 import type { lanJoinInput, lanUpdateInput } from '@shared/schemas';
-import type { LanLinkDto, LanStatusDto } from '@shared/types';
+import type { LanDeviceDto, LanLinkDto, LanStatusDto } from '@shared/types';
 import type { Db } from '../domain/db';
 import { conflict, invalid } from '../domain/errors';
 import type { HandlerServices } from '../ipc/ipc-safe';
@@ -20,7 +20,9 @@ import {
   type Cipher,
   type LanRole,
 } from './config';
-import { countActiveDevices, listDevices, revokeDevice } from './devices';
+import { countActiveDevices, LIMIT_MESSAGE, listDevices, revokeDevice } from './devices';
+import type { LanDeviceKind } from '@shared/lan-waiter';
+import { getReceiptSettings } from '../settings/settings';
 import { MainLink, PairError, pairWithMain } from './main-link';
 import { PairingStore } from './pairing';
 import { LanServer } from './server';
@@ -44,6 +46,8 @@ export interface LanServiceOptions {
   services: () => HandlerServices;
   /** Satellites the licence allows (terminals - 1); null = no limit. */
   deviceLimit(): number | null;
+  /** F20: waiter phones the licence allows (0 = no waiter app). */
+  waiterLimit(): number;
   /** This till's own windows. */
   broadcastLocal(events: AppEvent[]): void;
   /** Restart the app (a role change). */
@@ -55,6 +59,8 @@ export interface LanServiceOptions {
 }
 
 const LAN: AppEvent = { type: 'lan-changed' };
+/** F20-T: presence changes within this window reach the settings page as one event. */
+export const PRESENCE_DEBOUNCE_MS = 1000;
 
 export class LanService {
   private role: LanRole = 'main';
@@ -66,6 +72,8 @@ export class LanService {
   private brokenLink: string | null | undefined;
   private policyRun: Promise<void> = Promise.resolve();
   private expiry: NodeJS.Timeout | null = null;
+  private presenceTimer: NodeJS.Timeout | null = null;
+  private stopped = false;
 
   constructor(private readonly o: LanServiceOptions) {}
 
@@ -103,11 +111,28 @@ export class LanService {
     await this.applyPolicy();
   }
 
+  /**
+   * F20-T: a device came online, went away, or signed someone in or out: the settings page
+   * re-reads once per burst (a phone reconnecting would otherwise send several in a row).
+   */
+  private presenceChanged(): void {
+    if (this.presenceTimer || this.stopped) return;
+    this.presenceTimer = setTimeout(() => {
+      this.presenceTimer = null;
+      this.o.broadcastLocal([LAN]);
+    }, PRESENCE_DEBOUNCE_MS);
+    this.presenceTimer.unref();
+  }
+
   async stop(): Promise<void> {
     this.link?.stop();
     if (this.expiry) clearTimeout(this.expiry);
+    // Streams closing in server.stop() report presence once more: nothing is sent after stop.
+    this.stopped = true;
     await this.server?.stop();
     this.server = null;
+    if (this.presenceTimer) clearTimeout(this.presenceTimer);
+    this.presenceTimer = null;
   }
 
   /** Every event the main till broadcasts reaches its satellites. */
@@ -148,11 +173,15 @@ export class LanService {
         lineage: () => ensureLineage(this.o.getDb()),
         pairing: this.pairing,
         deviceLimit: this.o.deviceLimit,
+        waiterLimit: this.o.waiterLimit,
+        restaurantName: async () =>
+          (await getReceiptSettings(this.o.getDb()))?.restaurantName ?? '',
         broadcastLocal: this.o.broadcastLocal,
         onPaired: () => {
           this.o.broadcastLocal([LAN]);
           void this.applyPolicy();
         },
+        onPresence: () => this.presenceChanged(),
         log: this.o.log,
       });
       try {
@@ -182,6 +211,7 @@ export class LanService {
     const db = this.o.getDb();
     const pairing = this.pairing.current();
     const limit = this.o.deviceLimit();
+    const waiterLimit = this.o.waiterLimit();
     return {
       enabled: await isEnabled(db),
       port: await getPort(db),
@@ -189,11 +219,30 @@ export class LanService {
       error: this.error,
       addresses: localAddresses(),
       pairing: pairing
-        ? { code: pairing.code, expiresAt: new Date(pairing.expiresAt).toISOString() }
+        ? {
+            code: pairing.code,
+            expiresAt: new Date(pairing.expiresAt).toISOString(),
+            kind: pairing.kind,
+          }
         : null,
-      devices: await listDevices(db),
+      devices: this.withPresence(await listDevices(db)),
       deviceLimit: limit,
+      waiterLimit,
+      waiterApp: waiterLimit > 0,
     };
+  }
+
+  /** F20-T: online from the open event streams; a user name for online phones only. */
+  private withPresence(devices: LanDeviceDto[]): LanDeviceDto[] {
+    const live = this.server?.presence() ?? new Map<number, { userName: string | null }>();
+    return devices.map((d) => {
+      const p = d.revoked ? undefined : live.get(d.id);
+      return {
+        ...d,
+        online: p !== undefined,
+        userName: p && d.kind === 'waiter' ? p.userName : null,
+      };
+    });
   }
 
   async update(input: z.infer<typeof lanUpdateInput>): Promise<LanStatusDto> {
@@ -208,19 +257,22 @@ export class LanService {
     return this.status();
   }
 
-  async issueCode(): Promise<LanStatusDto> {
+  /** A pairing code for a satellite till or (F20) a waiter phone, within the plan's limit. */
+  async issueCode(kind: LanDeviceKind = 'till'): Promise<LanStatusDto> {
     this.assertMain();
     const db = this.o.getDb();
     if (!(await isEnabled(db))) throw conflict("Avval yo'ldosh kassalarni yoqing");
-    const limit = this.o.deviceLimit();
-    if (limit !== null && (await countActiveDevices(db)) >= limit) {
-      throw conflict("Tarifingiz bo'yicha qo'shimcha kassalar soni to'lgan", {
-        reason: 'DEVICE_LIMIT',
-        limit,
+    const limit = kind === 'waiter' ? this.o.waiterLimit() : this.o.deviceLimit();
+    if (kind === 'waiter' && limit === 0) {
+      throw conflict("Tarifingizda ofitsiant ilovasi yo'q (Standard va Pro tariflarida bor)", {
+        reason: 'NO_WAITER_APP',
       });
     }
+    if (limit !== null && (await countActiveDevices(db, kind)) >= limit) {
+      throw conflict(LIMIT_MESSAGE[kind], { reason: 'DEVICE_LIMIT', limit, kind });
+    }
     await ensureLineage(db);
-    const code = this.pairing.issue();
+    const code = this.pairing.issue(kind);
     // The door closes again with the code when no satellite is paired yet.
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = setTimeout(

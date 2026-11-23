@@ -349,7 +349,8 @@ export async function pairWithMain(
     res = await f(`${mainUrl}/pair`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ code, name }),
+      // F20: a satellite is a till; a phone's code is refused instead of making it a phone.
+      body: JSON.stringify({ code, name, expect: 'till' }),
       signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS * 2),
     });
   } catch {

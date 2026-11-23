@@ -40,7 +40,7 @@ import {
   setWeight,
   toSaveInput,
   type DraftLine,
-} from './draft';
+} from '@shared/utils/order-draft';
 import { createCustomerPanel, type OpenType } from './customer-panel';
 import { payOrderModal } from './payment-modal';
 import { moveTableModal } from './move-table-modal';

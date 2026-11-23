@@ -31,6 +31,8 @@ export interface LicensePayload {
   issuedAt: string;
   checkinBy: string;
   terminals?: number;
+  /** F20: waiter phones (absent before F20). */
+  waiterDevices?: number;
   seats?: string[];
   features: LicenseFeature[];
   trialEndsAt?: string;
@@ -72,6 +74,11 @@ export function readLicense(token: unknown, key: KeyObject): LicensePayload | nu
       ...(p as unknown as LicensePayload),
       // Only names this build knows; an unknown one switches nothing on.
       features: LICENSE_FEATURES.filter((f) => (p['features'] as unknown[]).includes(f)),
+      // F20: a count that is not one allows no phones (the rest of the licence still counts).
+      waiterDevices:
+        Number.isInteger(p['waiterDevices']) && (p['waiterDevices'] as number) >= 0
+          ? Math.min(p['waiterDevices'] as number, 999)
+          : undefined,
     };
   } catch {
     return null;
@@ -183,6 +190,7 @@ const FEATURE_MESSAGE: Record<LicenseFeature, string> = {
   writeOff: "Hisobdan chiqarish tarifingizda yo'q (Pro tarifida bor)",
   recipes: "Retseptlar tarifingizda yo'q (Pro tarifida bor)",
   telegramBot: "Telegram bot tarifingizda yo'q (Pro tarifida bor)",
+  waiterApp: "Ofitsiant ilovasi tarifingizda yo'q (Standard va Pro tariflarida bor)",
 };
 
 type AnyInput = Record<string, unknown> | undefined;

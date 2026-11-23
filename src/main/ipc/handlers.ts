@@ -356,7 +356,9 @@ export const HANDLERS: { [C in IpcChannel]: AnyHandlerDef<C> } = {
   // and the main-till-only ones, which refuse (register.ts routes the rest to the main till).
   'lan:status': need('settings', S.empty, (ctx) => lanOf(ctx).status()),
   'lan:update': need('settings', S.lanUpdateInput, (ctx, input) => lanOf(ctx).update(input)),
-  'lan:pairingCode': need('settings', S.empty, (ctx) => lanOf(ctx).issueCode()),
+  'lan:pairingCode': need('settings', S.lanPairingCodeInput, (ctx, { kind }) =>
+    lanOf(ctx).issueCode(kind),
+  ),
   'lan:cancelPairing': need('settings', S.empty, (ctx) => lanOf(ctx).cancelCode()),
   'lan:revoke': need('settings', S.lanDeviceInput, (ctx, { deviceId }) =>
     lanOf(ctx).revoke(deviceId),

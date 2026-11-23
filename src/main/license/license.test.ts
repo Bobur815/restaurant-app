@@ -59,6 +59,15 @@ const state = (
 const read = (token: string) => readLicense(token, SERVER.publicKey);
 
 describe('licence', () => {
+  it('reads the waiter phones it allows (F20); a bad or missing count allows none', () => {
+    expect(read(signed({ waiterDevices: 7 }))?.waiterDevices).toBe(7);
+    expect(read(signed({}))?.waiterDevices).toBeUndefined();
+    expect(read(signed({ waiterDevices: -1 }))?.waiterDevices).toBeUndefined();
+    expect(read(signed({ waiterDevices: 2.5 }))?.waiterDevices).toBeUndefined();
+    expect(read(signed({ waiterDevices: 'x' as never }))?.storeId).toBe('1000');
+    expect(read(signed({ waiterDevices: 1e9 }))?.waiterDevices).toBe(999);
+  });
+
   it('accepts only a SavdoChef licence signed with the compiled-in key', () => {
     expect(read(signed({}))?.storeId).toBe('1000');
     expect(read(signed({}, OTHER.privateKey))).toBeNull();

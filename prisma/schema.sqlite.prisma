@@ -424,24 +424,24 @@ model KitchenTicket {
 // ==================== SESSIONS (trading day) ====================
 
 model Session {
-  id           Int           @id @default(autoincrement())
-  status       SessionStatus @default(open)
+  id              Int           @id @default(autoincrement())
+  status          SessionStatus @default(open)
   // 1 while open, NULL once closed. UNIQUE, so the database itself allows only one open
   // session (SQLite treats NULLs as distinct). Prisma cannot express a partial unique index.
   // Maintained by triggers from `status` (migration 0002): code never writes it. Create
   // sessions as open; inserting a closed one while another is open would hit the guard.
-  openGuard    Int?          @unique @default(1)
-  openedAt     DateTime      @default(now())
-  closedAt     DateTime?
-  openedById   Int?
-  closedById   Int?
-  updatedAt    DateTime      @updatedAt
+  openGuard       Int?          @unique @default(1)
+  openedAt        DateTime      @default(now())
+  closedAt        DateTime?
+  openedById      Int?
+  closedById      Int?
+  updatedAt       DateTime      @updatedAt
   // The drawer (feature F6): counted at open; counted again at close, with the expected amount
   // frozen at that moment so a later check correction does not change a closed shift's figures.
   // Shifts closed before F6 have 0 / null / null.
-  openingCash  Decimal       @default(0)
-  countedCash  Decimal?
-  expectedCash Decimal?
+  openingCash     Decimal       @default(0)
+  countedCash     Decimal?
+  expectedCash    Decimal?
   // Feature F18: the REGOS:VCR Z-report opened for this shift, and when VCR closed it.
   fiscalZReportId Int?
   fiscalZClosedAt DateTime?
@@ -552,51 +552,51 @@ model Expense {
 // ==================== ORDERS & PAYMENTS ====================
 
 model Order {
-  id              Int             @id @default(autoincrement())
+  id               Int             @id @default(autoincrement())
   // YYYY-NNNNN from Counter("orders"), assigned inside the create transaction.
-  orderNumber     String          @unique
-  tableNumber     Int
+  orderNumber      String          @unique
+  tableNumber      Int
   // = tableNumber while pending, NULL otherwise. UNIQUE, so the database allows at most one
   // pending order per table even with several devices (Phase 8.5). Same trick as Session.openGuard.
   // Maintained by triggers from status/tableNumber (migration 0003): code never writes it.
-  pendingTable    Int?            @unique
-  status          OrderStatus     @default(pending)
-  sessionId       Int
-  totalAmount     Decimal         @default(0)
+  pendingTable     Int?            @unique
+  status           OrderStatus     @default(pending)
+  sessionId        Int
+  totalAmount      Decimal         @default(0)
   // Final method, copied from the payment when the order completes.
-  paymentMethod   PaymentMethod?
+  paymentMethod    PaymentMethod?
   // Optimistic concurrency: every write checks and bumps it (Phase 8.5).
-  version         Int             @default(0)
-  orderType       OrderType       @default(DINE_IN)
+  version          Int             @default(0)
+  orderType        OrderType       @default(DINE_IN)
   // Takeaway/delivery customer. The fields below are copies taken when the order was saved, so
   // the receipt and history show what was true then, whatever the customer record says later.
-  customerId      Int?
-  customerName    String?
-  customerPhone   String?
-  deliveryAddress String?
+  customerId       Int?
+  customerName     String?
+  customerPhone    String?
+  deliveryAddress  String?
   // Landmark or courier note ("mo'ljal").
-  deliveryNote    String?
+  deliveryNote     String?
   // Part of totalAmount; 0 unless DELIVERY.
-  deliveryFee     Decimal         @default(0)
-  deliveryStatus  DeliveryStatus?
-  courierName     String?
-  createdById     Int?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  completedAt     DateTime?
+  deliveryFee      Decimal         @default(0)
+  deliveryStatus   DeliveryStatus?
+  courierName      String?
+  createdById      Int?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  completedAt      DateTime?
   // Feature F17: service fee (xizmat haqi), part of totalAmount; worked out by main on every save
   // from the settings then (percent of the dishes or per guest). 0 when off and on older orders.
-  serviceFee      Decimal         @default(0)
+  serviceFee       Decimal         @default(0)
   // Guests at the table, entered by the waiter (per-guest service fee, reports). Null = not asked.
-  guestCount      Int?
+  guestCount       Int?
   // The opener's earningsPercent when the order was paid (staff report). Null = unpaid or older.
-  waiterPercent   Decimal?
+  waiterPercent    Decimal?
   // Feature F18: the fiscal receipt (REGOS:VCR). Null = fiscal receipts were off when it was
   // paid (never sent). PENDING | FISCALIZED | FAILED | DEFERRED_DEBT | REFUNDED (FiscalStatus).
   fiscalStatus     String?
   fiscalError      String?
   // Data errors only (MXIK, VAT); VCR being off or busy never counts.
-  fiscalAttempts   Int       @default(0)
+  fiscalAttempts   Int             @default(0)
   // What VCR answered (since VCR 2026-10-30 the number, sign and link may come back as "***").
   fiscalReceiptId  String?
   fiscalReceiptNo  String?
@@ -720,6 +720,9 @@ model LanDevice {
   lastSeenAt DateTime?
   lastIp     String?
   revokedAt  DateTime?
+  /// F20: 'till' (a satellite till) or 'waiter' (a waiter phone, fewer channels). Taken from the
+  /// pairing code, never from the device.
+  kind       String    @default("till")
 
   @@map("lan_devices")
 }

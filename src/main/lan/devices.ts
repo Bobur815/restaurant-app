@@ -1,3 +1,4 @@
+import type { LanDeviceKind } from '@shared/lan-waiter';
 import type { LanDeviceDto } from '@shared/types';
 import type { Db } from '../domain/db';
 import { conflict, notFound } from '../domain/errors';
@@ -5,8 +6,14 @@ import { hashSecret, newDeviceSecret, secretMatches } from './pairing';
 
 /** Feature F12: the satellites paired with this main till (lan_devices). */
 
+/** A stored kind this build does not know is treated as the narrower one (a phone). */
+export function kindOf(stored: string): LanDeviceKind {
+  return stored === 'till' ? 'till' : 'waiter';
+}
+
 function toDto(d: {
   id: number;
+  kind: string;
   name: string;
   pairedAt: Date;
   lastSeenAt: Date | null;
@@ -15,11 +22,15 @@ function toDto(d: {
 }): LanDeviceDto {
   return {
     id: d.id,
+    kind: kindOf(d.kind),
     name: d.name,
     pairedAt: d.pairedAt.toISOString(),
     lastSeenAt: d.lastSeenAt?.toISOString() ?? null,
     lastIp: d.lastIp,
     revoked: d.revokedAt !== null,
+    // Presence is the LAN server's (in memory); LanService.status() fills it in.
+    online: false,
+    userName: null,
   };
 }
 
@@ -28,31 +39,40 @@ export async function listDevices(db: Db): Promise<LanDeviceDto[]> {
   return rows.map(toDto);
 }
 
-export function countActiveDevices(db: Db): Promise<number> {
-  return db.lanDevice.count({ where: { revokedAt: null } });
+/** Paired, not revoked devices; of one kind when `kind` is given (F20: tills and phones apart). */
+export function countActiveDevices(db: Db, kind?: LanDeviceKind): Promise<number> {
+  return db.lanDevice.count({ where: { revokedAt: null, ...(kind ? { kind } : {}) } });
 }
 
+/** Messages when the plan has no room for another device of that kind. */
+export const LIMIT_MESSAGE: Record<LanDeviceKind, string> = {
+  till: "Tarifingiz bo'yicha qo'shimcha kassalar soni to'lgan",
+  waiter: "Tarifingiz bo'yicha telefonlar soni to'lgan",
+};
+
 /**
- * Pairs a new satellite. `limit` = satellites the plan allows (null = no limit). Returns the id
- * and the secret, which is never stored and never shown again.
+ * Pairs a new satellite till or waiter phone. `limit` = devices of that kind the plan allows
+ * (null = no limit). Returns the id and the secret, which is never stored and never shown again.
  */
 export async function createDevice(
   db: Db,
   name: string,
   ip: string | null,
   limit: number | null,
+  kind: LanDeviceKind = 'till',
 ): Promise<{ id: number; secret: string }> {
   return db.$transaction(async (tx) => {
-    if (limit !== null && (await tx.lanDevice.count({ where: { revokedAt: null } })) >= limit) {
-      throw conflict("Tarifingiz bo'yicha qo'shimcha kassalar soni to'lgan", {
-        reason: 'DEVICE_LIMIT',
-        limit,
-      });
+    if (
+      limit !== null &&
+      (await tx.lanDevice.count({ where: { revokedAt: null, kind } })) >= limit
+    ) {
+      throw conflict(LIMIT_MESSAGE[kind], { reason: 'DEVICE_LIMIT', limit, kind });
     }
     const secret = newDeviceSecret();
     const row = await tx.lanDevice.create({
       data: {
-        name: name.slice(0, 60) || "Yo'ldosh kassa",
+        kind,
+        name: name.slice(0, 60) || (kind === 'waiter' ? 'Telefon' : "Yo'ldosh kassa"),
         secretHash: hashSecret(secret),
         lastIp: ip,
       },
@@ -78,7 +98,7 @@ export async function authenticateDevice(
   db: Db,
   credential: string,
   ip: string | null,
-): Promise<{ id: number; name: string } | null> {
+): Promise<{ id: number; name: string; kind: LanDeviceKind } | null> {
   const m = /^(\d{1,9})\.([0-9a-f]{64})$/.exec(credential);
   if (!m) return null;
   const row = await db.lanDevice.findUnique({ where: { id: Number(m[1]) } });
@@ -89,5 +109,18 @@ export async function authenticateDevice(
       .update({ where: { id: row.id }, data: { lastSeenAt: new Date(now), lastIp: ip } })
       .catch(() => undefined);
   }
-  return { id: row.id, name: row.name };
+  return { id: row.id, name: row.name, kind: kindOf(row.kind) };
+}
+
+/**
+ * F20: whether a phone is within the plan's phones now: the earliest `limit` active phones work,
+ * the rest are refused until the plan allows more or another phone is unpaired (the same rule as
+ * tills and their seats). A plan lowered to Start (no waiter app, limit 0) stops every phone.
+ */
+export async function waiterWithinLimit(db: Db, deviceId: number, limit: number): Promise<boolean> {
+  if (limit <= 0) return false;
+  const before = await db.lanDevice.count({
+    where: { revokedAt: null, kind: 'waiter', id: { lt: deviceId } },
+  });
+  return before < limit;
 }

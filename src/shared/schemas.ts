@@ -309,6 +309,10 @@ export const lanUpdateInput = z
   .object({ enabled: z.boolean(), port: z.number().int().min(1024).max(65535) })
   .partial();
 export const lanDeviceInput = z.object({ deviceId: id });
+/** F20: a code for a satellite till (as before: no input) or a waiter phone. */
+export const lanPairingCodeInput = z
+  .object({ kind: z.enum(['till', 'waiter']).default('till') })
+  .default({ kind: 'till' });
 /** The main till's address as typed (`192.168.1.10` or with `:port`) and its pairing code. */
 export const lanJoinInput = z.object({
   mainAddress: z.string().trim().min(7, { message: 'Manzilni kiriting' }).max(60),

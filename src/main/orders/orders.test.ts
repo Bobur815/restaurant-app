@@ -176,6 +176,8 @@ describe('a trading day', () => {
     const a = await save(1, [{ menuItemId: non, quantity: 3 }]);
     const b = await save(2, [{ menuItemId: osh, quantity: 2 }]);
     expect((await listBusyTables(t.db)).map((x) => x.tableNumber)).toEqual([1, 2]);
+    // F20-W: the opening time, for the phone's "45 daq".
+    expect((await listBusyTables(t.db))[0]!.openedAt).toBe(a.createdAt);
 
     const paidA = await payOrder(t.db, cashier, {
       orderId: a.id,

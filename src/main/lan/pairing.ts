@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import type { LanDeviceKind } from '@shared/lan-waiter';
 
 /**
  * Pairing a satellite till with this main till (feature F12; posgro local-server/pairing.ts).
@@ -23,6 +24,8 @@ const MAX_TOTAL_FAILURES = 10;
 export interface PairingCode {
   code: string;
   expiresAt: number;
+  /** F20: what pairs with this code: a satellite till or a waiter phone. */
+  kind: LanDeviceKind;
 }
 
 export class PairingStore {
@@ -34,10 +37,10 @@ export class PairingStore {
 
   constructor(private readonly clock: () => number = Date.now) {}
 
-  issue(): PairingCode {
+  issue(kind: LanDeviceKind = 'till'): PairingCode {
     // The CSPRNG: this code is briefly the only thing between the shop's data and its Wi-Fi.
     const code = String(randomInt(0, 10 ** CODE_DIGITS)).padStart(CODE_DIGITS, '0');
-    this.active = { code, expiresAt: this.clock() + CODE_TTL_MS };
+    this.active = { code, expiresAt: this.clock() + CODE_TTL_MS, kind };
     this.totalFailures = 0;
     this.burned = false;
     return this.active;
@@ -59,8 +62,16 @@ export class PairingStore {
   /**
    * Checks and consumes the code. Single-use. `from` (the caller's address) is throttled after
    * repeated wrong codes, so the 10^6 codes cannot be walked during the 10 minutes.
+   *
+   * F20: `expect` is what the caller is (a phone says 'waiter'). It can only narrow: the right
+   * code of the other kind answers 'kind' and stays open, so the owner's slip (a till code typed
+   * on a phone) neither makes the phone a till nor costs the code.
    */
-  redeem(candidate: string, from: string): 'ok' | 'wrong' | 'throttled' | 'closed' {
+  redeem(
+    candidate: string,
+    from: string,
+    expect?: LanDeviceKind,
+  ): { kind: LanDeviceKind } | 'wrong' | 'throttled' | 'closed' | 'kind' {
     const now = this.clock();
     for (const [addr, f] of this.failures)
       if (now - f.since > FAILURE_WINDOW_MS) this.failures.delete(addr);
@@ -79,9 +90,11 @@ export class PairingStore {
       }
       return 'wrong';
     }
+    const kind = entry.kind;
+    if (expect && expect !== kind) return 'kind';
     this.active = null;
     this.failures.delete(from);
-    return 'ok';
+    return { kind };
   }
 }
 

@@ -176,6 +176,7 @@ export async function listBusyTables(db: DbOrTx): Promise<TableSummaryDto[]> {
     orderNumber: o.orderNumber,
     totalAmount: decStr(o.totalAmount),
     lineCount: o._count.items,
+    openedAt: iso(o.createdAt),
     updatedAt: iso(o.updatedAt),
   }));
 }

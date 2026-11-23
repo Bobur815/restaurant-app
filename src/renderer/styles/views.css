@@ -2340,12 +2340,275 @@
   text-align: center;
 }
 
-.pair-code {
-  margin: var(--space-3) 0 var(--space-1);
+/* ── Settings -> Yo'ldosh kassalar (F12 + F20, docs/designs/till) ──────────────────────────── */
+.lan-header {
+  align-items: flex-start;
+}
+
+.lan-subtitle {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
+.lan-header .page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.lan-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--color-warning);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-soft);
+}
+
+.lan-banner > .icon {
+  flex: none;
+  color: var(--color-warning);
+}
+
+.lan-banner > div {
+  flex: 1;
+}
+
+.lan-banner p {
+  margin: 0;
+}
+
+.lan-banner-title {
+  color: var(--color-warning-text);
+  font-weight: 700;
+}
+
+.lan-banner-action {
+  flex: none;
+  border-color: var(--color-warning);
+  color: var(--color-warning-text);
+  text-decoration: none;
+}
+
+.lan-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-6);
+  margin: 0 0 var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.lan-meta strong {
+  color: var(--color-text);
+}
+
+.lan-devices {
+  padding: 0;
+  overflow: hidden;
+}
+
+.lan-table th,
+.lan-table td {
+  padding: var(--space-3) var(--space-4);
+}
+
+.lan-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.lan-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  white-space: nowrap;
+}
+
+.lan-kind-tile {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  color: var(--color-text-muted);
+}
+
+.lan-name {
+  display: block;
+  font-weight: 600;
+}
+
+.lan-sub {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.lan-seen {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.lan-online {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-success);
+  font-weight: 600;
+}
+
+.lan-online::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+}
+
+.lan-unlink {
+  color: var(--color-danger);
+}
+
+.lan-unlink:hover:not(:disabled) {
+  background: var(--color-danger-soft);
+}
+
+.lan-net {
+  padding: 0;
+}
+
+.lan-net-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.lan-net > .form-card {
+  padding: 0 var(--space-5) var(--space-4);
+}
+
+/* The pairing dialog: QR on the left (white in both themes, so phones read it), code on the right. */
+.pair-modal {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.pair-modal-till {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pair-qr-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+}
+
+.pair-qr-tile svg {
+  display: block;
+}
+
+.pair-info p {
+  margin: 0;
+}
+
+.pair-steps-label,
+.pair-info .pair-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.pair-info .pair-label {
+  margin-top: var(--space-4);
+  font-weight: 600;
+}
+
+.pair-info .pair-steps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-weight: 600;
+}
+
+.pair-gear {
+  display: inline-flex;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+}
+
+.pair-info .pair-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.pair-divider::before,
+.pair-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--color-border);
+}
+
+.code-boxes {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.code-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 56px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
   font-size: var(--font-size-2xl);
   font-weight: 700;
-  letter-spacing: 0.3em;
   font-variant-numeric: tabular-nums;
+}
+
+.pair-info .pair-address {
+  margin-top: var(--space-1);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.pair-info .pair-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+@media (max-width: 720px) {
+  .pair-modal {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+
+  .lan-banner {
+    flex-wrap: wrap;
+  }
 }
 
 .code-block {

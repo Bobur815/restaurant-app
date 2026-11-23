@@ -17,6 +17,8 @@ export const LICENSE_FEATURES = [
   'writeOff',
   'recipes',
   'telegramBot',
+  // F20: the waiter phone app (Standard and Pro); how many phones: the licence's waiterDevices.
+  'waiterApp',
 ] as const;
 export type LicenseFeature = (typeof LICENSE_FEATURES)[number];
 
@@ -147,6 +149,8 @@ export interface LicensePlanDto {
   assignedOnly: boolean;
   /** Null = unlimited tills. */
   terminals: number | null;
+  /** F20: waiter phones included (0 = no waiter app; 0 from a server before F20). */
+  waiterDevices: number;
   features: LicenseFeature[];
 }
 
@@ -155,6 +159,8 @@ export interface LicensePlansDto {
   checkinDays: number;
   plans: LicensePlanDto[];
   extraTerminalPrice: number;
+  /** F20: a month of one extra waiter phone (0 from a server before F20). */
+  extraWaiterDevicePrice: number;
   supportPhone: string;
 }
 

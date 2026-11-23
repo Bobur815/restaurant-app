@@ -231,6 +231,7 @@ function ctx(actor: Actor | null): HandlerContext {
     cipher: plainCipher,
     services: () => ctx(null).services,
     deviceLimit: () => null,
+    waiterLimit: () => 5,
     broadcastLocal: () => undefined,
     restart: () => undefined,
     log: () => undefined,
